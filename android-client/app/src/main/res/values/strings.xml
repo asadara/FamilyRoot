@@ -9,6 +9,11 @@
     <string name="please_wait">Please wait…</string>
     <string name="register">Register</string>
     <string name="already_have_account">Already have an account</string>
+    <string name="demo_accounts">Demo accounts</string>
+    <string name="demo_father">Father</string>
+    <string name="demo_mother">Mother</string>
+    <string name="demo_child">Child</string>
+    <string name="demo_grandfather">Grandfather</string>
     <string name="choose_family_space">Choose Family Space</string>
     <string name="new_family_space">New Family Space</string>
     <string name="create_space">Create space</string>

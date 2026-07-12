@@ -361,7 +361,7 @@ Baseline ini bukan progres penyelesaian Fase 1–4; ia adalah titik awal migrasi
 |---|---|---:|---|
 | Fase 1 — Fondasi Aman | `DONE` | 100% | JWT auth, role authorization, endpoint protection, integrity, transaction, audit, API contract, Android auth/space flow, test, dan CI terverifikasi |
 | Fase 2 — Android Modern | `DONE` | 100% | Android modern ditutup: feature/screen ViewModel, Navigation Compose, Room offline read, adaptive layout, accessibility semantics, localization-ready resources, lint, unit test, dan instrumented test lulus |
-| Fase 3 — Produk Inti Matang | `IN PROGRESS` | 20% | Undangan anggota berjalan dua arah dan Android mulai mendukung claim profil diri dari Person Detail |
+| Fase 3 — Produk Inti Matang | `IN PROGRESS` | 20% | Undangan anggota berjalan dua arah, Android mulai mendukung claim profil diri, dan seed data dev mempercepat test manual keluarga inti |
 | Fase 4 — Keberlanjutan Data | `NOT STARTED` | 0% | Menunggu produk inti stabil |
 
 ### Development log
@@ -381,6 +381,7 @@ Baseline ini bukan progres penyelesaian Fase 1–4; ia adalah titik awal migrasi
 | 2026-07-13 | Fase 3 | Implementasi Produk Inti Matang dimulai dari onboarding/undangan: backend membuat invitation token single-use, preview dan accept invitation, membership via invite diaudit, Android dapat join dengan invitation code | Backend lint/build/e2e lulus; Android `testDebugUnitTest`, `assembleDebug`, `lintDebug`, dan `connectedDebugAndroidTest` lulus di SM-T225 | Pembuatan undangan via Android UI ditempatkan untuk slice Space Settings berikutnya; backend/API sudah siap dipakai |
 | 2026-07-13 | Fase 3 | Space Settings Android ditambahkan untuk membuat invitation code, memilih role undangan, mengatur expiry 1-30 hari, menampilkan token, dan menyalin token ke clipboard | Android `testDebugUnitTest`, `assembleDebug`, dan `lintDebug` lulus | Role tetap ditegakkan backend; VIEWER/EDITOR yang membuka layar akan menerima error authorization saat mencoba membuat undangan |
 | 2026-07-13 | Fase 3 | Person Detail Android menambahkan aksi `Claim as me` untuk mengirim klaim profil diri melalui endpoint claim backend yang sudah terlindungi role/membership | Android `testDebugUnitTest`, `assembleDebug`, dan `lintDebug` lulus | Approval klaim oleh OWNER/ADMIN dari Android masih menjadi slice berikutnya |
+| 2026-07-13 | Fase 3 | Seed data development ditambahkan untuk membuat 4 akun demo keluarga (ayah, ibu, anak pertama, kakek), Family Space, profil, relasi dasar, dan verified claim; Android debug build mendapat tombol quick-login demo | Backend seed script, lint/build, Android build/lint/test perlu dijalankan setiap perubahan seed | Shortcut login hanya muncul pada `BuildConfig.DEBUG`; password demo bukan secret produksi |
 
 ## 11. Aturan Pemeliharaan Blueprint
 
