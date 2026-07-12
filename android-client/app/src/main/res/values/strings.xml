@@ -12,6 +12,13 @@
     <string name="choose_family_space">Choose Family Space</string>
     <string name="new_family_space">New Family Space</string>
     <string name="create_space">Create space</string>
+    <string name="space_item_format">%1$s - %2$s</string>
+    <string name="join_with_invitation">Join with invitation</string>
+    <string name="invitation_code">Invitation code</string>
+    <string name="preview_invitation">Preview invitation</string>
+    <string name="invitation_preview_format">%1$s - role %2$s</string>
+    <string name="join_family_space">Join Family Space</string>
+    <string name="create_new_family_space">Create new Family Space</string>
     <string name="sign_out">Sign out</string>
     <string name="add_person">Add person</string>
     <string name="first_name">First name</string>

@@ -15,7 +15,13 @@ export class ChangeLogEntity {
   actorUserId!: string;
 
   @Column({ type: 'text' })
-  entityType!: 'SPACE' | 'MEMBERSHIP' | 'PERSON' | 'RELATIONSHIP' | 'CLAIM';
+  entityType!:
+    | 'SPACE'
+    | 'MEMBERSHIP'
+    | 'INVITATION'
+    | 'PERSON'
+    | 'RELATIONSHIP'
+    | 'CLAIM';
 
   @Column({ type: 'uuid' })
   entityId!: string;

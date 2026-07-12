@@ -361,7 +361,7 @@ Baseline ini bukan progres penyelesaian Fase 1–4; ia adalah titik awal migrasi
 |---|---|---:|---|
 | Fase 1 — Fondasi Aman | `DONE` | 100% | JWT auth, role authorization, endpoint protection, integrity, transaction, audit, API contract, Android auth/space flow, test, dan CI terverifikasi |
 | Fase 2 — Android Modern | `DONE` | 100% | Android modern ditutup: feature/screen ViewModel, Navigation Compose, Room offline read, adaptive layout, accessibility semantics, localization-ready resources, lint, unit test, dan instrumented test lulus |
-| Fase 3 — Produk Inti Matang | `NOT STARTED` | 0% | Menunggu fondasi Android dan backend |
+| Fase 3 — Produk Inti Matang | `IN PROGRESS` | 10% | Slice awal onboarding/undangan anggota dimulai: invitation token backend, accept/join API, audit membership, kontrak API, dan Android join-by-code |
 | Fase 4 — Keberlanjutan Data | `NOT STARTED` | 0% | Menunggu produk inti stabil |
 
 ### Development log
@@ -378,6 +378,7 @@ Baseline ini bukan progres penyelesaian Fase 1–4; ia adalah titik awal migrasi
 | 2026-07-13 | Fase 2 | Fondasi navigasi dan feature boundary pertama diterapkan | `assembleDebug` lulus; APK terpasang di Samsung SM-T225; MainActivity foreground tanpa AndroidRuntime crash | Manual application container dipakai sebagai constructor DI awal; Room dependency dipasang dan cache diimplementasikan pada slice berikutnya |
 | 2026-07-13 | Fase 2 | Screen legacy monolitik diganti feature people, person-detail, dan activity; Room menjadi sumber baca daftar person | Unit test 2/2 dan Compose instrumented test 2/2 lulus di SM-T225; lint/build lulus; dark mode, font 1.3, dan phone-like width smoke test tanpa crash | Offline read aktif setelah sinkronisasi pertama; foldable/TalkBack checklist dan test repository/Room masih diperlukan sebelum fase ditutup |
 | 2026-07-13 | Fase 2 | Fase 2 ditutup: Activity dan Person Detail dipindah ke ViewModel, People memakai adaptive container layout, semantics aksesibilitas ditambahkan, Room cache diuji in-memory, dan Android build target memakai Java 17 | `testDebugUnitTest`, `assembleDebug`, `lintDebug`, dan `connectedDebugAndroidTest` lulus; 3 instrumented tests berjalan di Samsung SM-T225 Android 14 | Connected test sempat gagal saat install karena duplicate ADB/mDNS dan timeout transfer Wi-Fi; diselesaikan dengan menargetkan serial IP tunggal `192.168.100.48:36375` |
+| 2026-07-13 | Fase 3 | Implementasi Produk Inti Matang dimulai dari onboarding/undangan: backend membuat invitation token single-use, preview dan accept invitation, membership via invite diaudit, Android dapat join dengan invitation code | Backend lint/build/e2e lulus; Android `testDebugUnitTest`, `assembleDebug`, `lintDebug`, dan `connectedDebugAndroidTest` lulus di SM-T225 | Pembuatan undangan via Android UI ditempatkan untuk slice Space Settings berikutnya; backend/API sudah siap dipakai |
 
 ## 11. Aturan Pemeliharaan Blueprint
 

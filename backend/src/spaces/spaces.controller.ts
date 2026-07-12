@@ -1,7 +1,9 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { ActorUserId } from '../common/actor-user-id.decorator';
 import { SpaceRoles } from '../common/space-roles.decorator';
+import { AcceptInvitationDto } from './dto/accept-invitation.dto';
 import { AddMemberDto } from './dto/add-member.dto';
+import { CreateInvitationDto } from './dto/create-invitation.dto';
 import { CreateSpaceDto } from './dto/create-space.dto';
 import { SpacesService } from './spaces.service';
 
@@ -28,5 +30,32 @@ export class SpacesController {
       dto.role,
       actorUserId,
     );
+  }
+
+  @Post('invitations')
+  @SpaceRoles('OWNER', 'ADMIN')
+  createInvitation(
+    @ActorUserId() actorUserId: string,
+    @Body() dto: CreateInvitationDto,
+  ) {
+    return this.spacesService.createInvitation(
+      dto.spaceId,
+      dto.role,
+      actorUserId,
+      dto.expiresInDays,
+    );
+  }
+
+  @Get('invitations/:token')
+  previewInvitation(@Param('token') token: string) {
+    return this.spacesService.previewInvitation(token);
+  }
+
+  @Post('invitations/accept')
+  acceptInvitation(
+    @ActorUserId() actorUserId: string,
+    @Body() dto: AcceptInvitationDto,
+  ) {
+    return this.spacesService.acceptInvitation(dto.token, actorUserId);
   }
 }

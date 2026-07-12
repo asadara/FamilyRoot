@@ -21,9 +21,21 @@
 | Verify claims | Yes | Yes | No | No |
 | Add VIEWER/EDITOR | Yes | Yes | No | No |
 | Add ADMIN | Yes | No | No | No |
+| Create invitations for VIEWER/EDITOR | Yes | Yes | No | No |
+| Create invitations for ADMIN | Yes | No | No | No |
 | Export a Family Space | Yes | Yes | No | No |
 
 `POST /spaces` creates the authenticated creator's OWNER membership in the same transaction. `GET /spaces` lists only spaces belonging to the authenticated user.
+
+## Family Space invitations
+
+Invitation endpoints require authentication. Creating an invitation also requires membership and role authorization on the target `spaceId`; previewing and accepting an invitation only require a valid logged-in account.
+
+- `POST /spaces/invitations` — OWNER or ADMIN creates an invitation. Body: `spaceId`, `role`, optional `expiresInDays` from 1 to 30. ADMIN cannot invite another ADMIN.
+- `GET /spaces/invitations/:token` — preview a usable invitation before accepting. Returns `spaceId`, `spaceName`, `role`, and `expiresAt`.
+- `POST /spaces/invitations/accept` — accepts a token and creates membership for the authenticated user.
+
+Invitation tokens are single-use, expire, and are audited. Accepting an invitation creates a `MEMBERSHIP` audit log entry.
 
 ## Family data
 
@@ -36,7 +48,7 @@ Primary endpoint groups:
 - `/claims`
 - `/changes`
 - `/export/space`
-- `/spaces` and `/spaces/members`
+- `/spaces`, `/spaces/members`, and `/spaces/invitations`
 
 UUID response fields are explicit: `userId`, `spaceId`, `memberId`, `personId`, `relationshipId`, `claimId`, and `changeId`.
 

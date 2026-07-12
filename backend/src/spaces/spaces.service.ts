@@ -1,13 +1,16 @@
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
+import { randomBytes } from 'crypto';
 import { DataSource, Repository } from 'typeorm';
 import { UserEntity } from '../users/user.entity';
 import { FamilySpaceEntity } from './family-space.entity';
+import { SpaceInvitationEntity } from './space-invitation.entity';
 import { SpaceMemberEntity } from './space-member.entity';
 import { ChangeLogEntity } from '../changes/change-log.entity';
 import { databaseErrorMessage } from '../common/database-error';
@@ -19,6 +22,8 @@ export class SpacesService {
     private readonly spacesRepo: Repository<FamilySpaceEntity>,
     @InjectRepository(SpaceMemberEntity)
     private readonly membersRepo: Repository<SpaceMemberEntity>,
+    @InjectRepository(SpaceInvitationEntity)
+    private readonly invitationsRepo: Repository<SpaceInvitationEntity>,
     @InjectRepository(UserEntity)
     private readonly usersRepo: Repository<UserEntity>,
     private readonly dataSource: DataSource,
@@ -110,6 +115,155 @@ export class SpacesService {
         throw new ConflictException('Member already exists in this space');
       }
       throw error;
+    }
+  }
+
+  async createInvitation(
+    spaceId: string,
+    role: 'ADMIN' | 'EDITOR' | 'VIEWER',
+    actorUserId: string,
+    expiresInDays = 7,
+  ) {
+    const [space, actor] = await Promise.all([
+      this.spacesRepo.findOneBy({ spaceId }),
+      this.membersRepo.findOneBy({ spaceId, userId: actorUserId }),
+    ]);
+    if (!space) throw new NotFoundException('Family Space not found');
+    if (!actor)
+      throw new ForbiddenException('Actor is not a member of this space');
+    if (actor.role === 'ADMIN' && role === 'ADMIN') {
+      throw new ForbiddenException('Only OWNER can invite an ADMIN');
+    }
+
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + expiresInDays);
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      try {
+        return await this.invitationsRepo.manager.transaction(
+          async (manager) => {
+            const invite = await manager.save(
+              manager.create(SpaceInvitationEntity, {
+                spaceId,
+                role,
+                createdBy: actorUserId,
+                token: randomBytes(18).toString('base64url'),
+                expiresAt,
+              }),
+            );
+            await manager.save(
+              manager.create(ChangeLogEntity, {
+                spaceId,
+                actorUserId,
+                entityType: 'INVITATION',
+                entityId: invite.inviteId,
+                operation: 'CREATE',
+                note: `Create invitation for role ${role}`,
+                afterJson: JSON.stringify({
+                  inviteId: invite.inviteId,
+                  role: invite.role,
+                  expiresAt: invite.expiresAt,
+                }),
+              }),
+            );
+            return {
+              inviteId: invite.inviteId,
+              token: invite.token,
+              role: invite.role,
+              spaceId: invite.spaceId,
+              spaceName: space.name,
+              expiresAt: invite.expiresAt,
+            };
+          },
+        );
+      } catch (error: unknown) {
+        const message = databaseErrorMessage(error);
+        if (!message.includes('UNIQUE') && !message.includes('constraint')) {
+          throw error;
+        }
+      }
+    }
+    throw new ConflictException('Could not create a unique invitation token');
+  }
+
+  async previewInvitation(token: string) {
+    const invite = await this.invitationsRepo.findOneBy({ token });
+    if (!invite) throw new NotFoundException('Invitation not found');
+    const space = await this.spacesRepo.findOneBy({ spaceId: invite.spaceId });
+    if (!space) throw new NotFoundException('Family Space not found');
+    this.assertInvitationUsable(invite);
+    return {
+      spaceId: invite.spaceId,
+      spaceName: space.name,
+      role: invite.role,
+      expiresAt: invite.expiresAt,
+    };
+  }
+
+  async acceptInvitation(token: string, actorUserId: string) {
+    const invite = await this.invitationsRepo.findOneBy({ token });
+    if (!invite) throw new NotFoundException('Invitation not found');
+    this.assertInvitationUsable(invite);
+
+    const [space, user, existing] = await Promise.all([
+      this.spacesRepo.findOneBy({ spaceId: invite.spaceId }),
+      this.usersRepo.findOneBy({ userId: actorUserId }),
+      this.membersRepo.findOneBy({
+        spaceId: invite.spaceId,
+        userId: actorUserId,
+      }),
+    ]);
+    if (!space) throw new NotFoundException('Family Space not found');
+    if (!user) throw new NotFoundException('User not found');
+    if (existing)
+      throw new ConflictException('User is already a member of this space');
+
+    try {
+      return await this.dataSource.transaction(async (manager) => {
+        const membership = await manager.save(
+          manager.create(SpaceMemberEntity, {
+            spaceId: invite.spaceId,
+            userId: actorUserId,
+            role: invite.role,
+          }),
+        );
+        invite.acceptedBy = actorUserId;
+        invite.acceptedAt = new Date();
+        await manager.save(invite);
+        await manager.save(
+          manager.create(ChangeLogEntity, {
+            spaceId: invite.spaceId,
+            actorUserId,
+            entityType: 'MEMBERSHIP',
+            entityId: membership.memberId,
+            operation: 'CREATE',
+            note: `Accept invitation with role ${invite.role}`,
+            afterJson: JSON.stringify(membership),
+          }),
+        );
+        return {
+          ...space,
+          role: membership.role,
+          memberId: membership.memberId,
+          joinedAt: membership.joinedAt,
+        };
+      });
+    } catch (error: unknown) {
+      const message = databaseErrorMessage(error);
+      if (message.includes('UNIQUE') || message.includes('constraint failed')) {
+        throw new ConflictException('User is already a member of this space');
+      }
+      throw error;
+    }
+  }
+
+  private assertInvitationUsable(invite: SpaceInvitationEntity) {
+    if (invite.revokedAt)
+      throw new BadRequestException('Invitation is revoked');
+    if (invite.acceptedAt)
+      throw new ConflictException('Invitation has already been accepted');
+    if (invite.expiresAt.getTime() <= Date.now()) {
+      throw new BadRequestException('Invitation has expired');
     }
   }
 }

@@ -14,6 +14,7 @@ describe('Phase 1 security contract (e2e)', () => {
   let editorId: string;
   let adminToken: string;
   let adminId: string;
+  let inviteeToken: string;
   let spaceId: string;
 
   beforeAll(async () => {
@@ -84,6 +85,16 @@ describe('Phase 1 security contract (e2e)', () => {
       .expect(201);
     adminToken = admin.body.accessToken;
     adminId = admin.body.user.userId;
+
+    const invitee = await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({
+        email: 'invitee@example.test',
+        displayName: 'Invitee',
+        password: 'very-secure-invitee-password',
+      })
+      .expect(201);
+    inviteeToken = invitee.body.accessToken;
     expect(owner.body.user).not.toHaveProperty('passwordHash');
 
     await request(app.getHttpServer())
@@ -181,6 +192,66 @@ describe('Phase 1 security contract (e2e)', () => {
       .set('Authorization', `Bearer ${adminToken}`)
       .send({ spaceId, userId: viewerId, role: 'ADMIN' })
       .expect(403);
+  });
+
+  it('lets a logged-in user join a Family Space by invitation token', async () => {
+    const createdInvite = await request(app.getHttpServer())
+      .post('/spaces/invitations')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ spaceId, role: 'VIEWER', expiresInDays: 3 })
+      .expect(201);
+
+    expect(createdInvite.body).toEqual(
+      expect.objectContaining({
+        token: expect.any(String),
+        role: 'VIEWER',
+        spaceId,
+        spaceName: 'Secure Family',
+      }),
+    );
+
+    await request(app.getHttpServer())
+      .get(`/spaces/invitations/${createdInvite.body.token}`)
+      .set('Authorization', `Bearer ${inviteeToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(
+          expect.objectContaining({
+            role: 'VIEWER',
+            spaceId,
+            spaceName: 'Secure Family',
+          }),
+        );
+      });
+
+    await request(app.getHttpServer())
+      .post('/spaces/invitations/accept')
+      .set('Authorization', `Bearer ${inviteeToken}`)
+      .send({ token: createdInvite.body.token })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body).toEqual(
+          expect.objectContaining({ spaceId, role: 'VIEWER' }),
+        );
+      });
+
+    await request(app.getHttpServer())
+      .get('/spaces')
+      .set('Authorization', `Bearer ${inviteeToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ spaceId, role: 'VIEWER' }),
+          ]),
+        );
+      });
+
+    await request(app.getHttpServer())
+      .post('/spaces/invitations/accept')
+      .set('Authorization', `Bearer ${inviteeToken}`)
+      .send({ token: createdInvite.body.token })
+      .expect(409);
   });
 
   it('audits an authorized person mutation and restricts export', async () => {

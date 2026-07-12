@@ -4,6 +4,7 @@ import { SpacesController } from './spaces.controller';
 import { SpacesService } from './spaces.service';
 import { FamilySpaceEntity } from './family-space.entity';
 import { SpaceMemberEntity } from './space-member.entity';
+import { SpaceInvitationEntity } from './space-invitation.entity';
 import { UserEntity } from '../users/user.entity';
 import { ChangeLogEntity } from '../changes/change-log.entity';
 
@@ -12,6 +13,7 @@ import { ChangeLogEntity } from '../changes/change-log.entity';
     TypeOrmModule.forFeature([
       FamilySpaceEntity,
       SpaceMemberEntity,
+      SpaceInvitationEntity,
       UserEntity,
       ChangeLogEntity,
     ]),

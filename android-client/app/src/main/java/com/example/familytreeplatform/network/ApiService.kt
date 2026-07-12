@@ -27,6 +27,8 @@ import com.example.familytreeplatform.models.RegisterRequest
 import com.example.familytreeplatform.models.AuthResponse
 import com.example.familytreeplatform.models.FamilySpace
 import com.example.familytreeplatform.models.CreateSpaceRequest
+import com.example.familytreeplatform.models.AcceptInvitationRequest
+import com.example.familytreeplatform.models.InvitationPreview
 
 interface ApiService {
     @POST("auth/login")
@@ -40,6 +42,12 @@ interface ApiService {
 
     @POST("spaces")
     suspend fun createSpace(@Body request: CreateSpaceRequest): Response<FamilySpace>
+
+    @GET("spaces/invitations/{token}")
+    suspend fun previewInvitation(@Path("token") token: String): Response<InvitationPreview>
+
+    @POST("spaces/invitations/accept")
+    suspend fun acceptInvitation(@Body request: AcceptInvitationRequest): Response<FamilySpace>
 
     @POST("persons")
     suspend fun createPerson(@Body request: PersonRequest): Response<PersonResponse>
