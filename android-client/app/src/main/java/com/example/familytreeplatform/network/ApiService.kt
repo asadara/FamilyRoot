@@ -5,6 +5,7 @@ import com.example.familytreeplatform.models.PersonResponse
 import com.example.familytreeplatform.models.PersonListItem
 import com.example.familytreeplatform.models.ClaimRequest
 import com.example.familytreeplatform.models.ClaimResponse
+import com.example.familytreeplatform.models.ClaimReviewItem
 import com.example.familytreeplatform.models.VerifyClaimRequest
 import com.example.familytreeplatform.models.ChangeLog
 import com.example.familytreeplatform.models.ParentChildRequest
@@ -62,6 +63,9 @@ interface ApiService {
 
     @POST("claims")
     suspend fun createClaim(@Body request: ClaimRequest): Response<ClaimResponse>
+
+    @GET("claims")
+    suspend fun listClaims(@Query("spaceId") spaceId: String): Response<List<ClaimReviewItem>>
 
     @POST("claims/verify")
     suspend fun verifyClaim(@Body request: VerifyClaimRequest): Response<ClaimResponse>

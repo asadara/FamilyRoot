@@ -35,6 +35,7 @@ fun PeopleScreen(
     viewModel: PeopleViewModel,
     onPersonClick: (String) -> Unit,
     onActivityClick: () -> Unit,
+    onGraphClick: () -> Unit,
     onSpaceSettingsClick: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier
@@ -83,6 +84,7 @@ fun PeopleScreen(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = onActivityClick) { Text(stringResource(R.string.activity)) }
+                    Button(onClick = onGraphClick) { Text(stringResource(R.string.graph)) }
                     Button(onClick = onSpaceSettingsClick) { Text(stringResource(R.string.space_settings)) }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -102,6 +104,14 @@ fun PeopleScreen(
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 singleLine = true
             )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                listOf("ALL", "ALIVE", "DECEASED", "UNKNOWN").forEach { status ->
+                    Button(
+                        enabled = state.lifeStatusFilter != status,
+                        onClick = { viewModel.setLifeStatusFilter(status) }
+                    ) { Text(status) }
+                }
+            }
             if (state.refreshing) {
                 CircularProgressIndicator(modifier = Modifier.padding(top = 8.dp))
             }

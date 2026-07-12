@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Get, Post, Query } from '@nestjs/common';
 import { ClaimsService } from './claims.service';
 import { CreateClaimDto } from './dto/create-claim.dto';
 import { VerifyClaimDto } from './dto/verify-claim.dto';
@@ -18,6 +18,12 @@ export class ClaimsController {
       dto.personId,
       actorUserId,
     );
+  }
+
+  @Get()
+  @SpaceRoles('OWNER', 'ADMIN')
+  list(@Query('spaceId') spaceId: string) {
+    return this.claimsService.list(spaceId);
   }
 
   @Post('verify')

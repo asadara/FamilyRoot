@@ -21,6 +21,8 @@ import com.example.familytreeplatform.feature.people.PeopleScreen
 import com.example.familytreeplatform.feature.people.PeopleViewModel
 import com.example.familytreeplatform.feature.activity.ActivityScreen
 import com.example.familytreeplatform.feature.activity.ActivityViewModel
+import com.example.familytreeplatform.feature.graph.TreeGraphScreen
+import com.example.familytreeplatform.feature.graph.TreeGraphViewModel
 import com.example.familytreeplatform.feature.persondetail.PersonDetailScreen
 import com.example.familytreeplatform.feature.persondetail.PersonDetailViewModel
 import com.example.familytreeplatform.feature.spacesettings.SpaceSettingsScreen
@@ -31,6 +33,7 @@ object Routes {
     const val SPACES = "spaces"
     const val PEOPLE = "people"
     const val ACTIVITY = "activity"
+    const val GRAPH = "graph"
     const val SPACE_SETTINGS = "space-settings"
     const val PERSON_DETAIL = "person/{personId}"
     fun personDetail(personId: String) = "person/$personId"
@@ -70,8 +73,18 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 viewModel = peopleViewModel,
                 onPersonClick = { navController.navigate(Routes.personDetail(it)) },
                 onActivityClick = { navController.navigate(Routes.ACTIVITY) },
+                onGraphClick = { navController.navigate(Routes.GRAPH) },
                 onSpaceSettingsClick = { navController.navigate(Routes.SPACE_SETTINGS) },
                 onSignOut = SessionStore::clear
+            )
+        }
+        composable(Routes.GRAPH) {
+            val graphViewModel: TreeGraphViewModel = viewModel(
+                factory = TreeGraphViewModel.Factory(requireNotNull(spaceId), repository)
+            )
+            TreeGraphScreen(
+                viewModel = graphViewModel,
+                onBack = { navController.popBackStack() }
             )
         }
         composable(Routes.SPACE_SETTINGS) {

@@ -6,8 +6,11 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -32,7 +35,7 @@ fun SpaceSettingsScreen(
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val clipboardManager = LocalClipboardManager.current
 
-    Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
+    Column(modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Button(onClick = onBack) { Text(stringResource(R.string.back)) }
         Text(
             stringResource(R.string.space_settings),
@@ -77,6 +80,43 @@ fun SpaceSettingsScreen(
                 modifier = Modifier.padding(top = 8.dp)
             ) { Text(stringResource(R.string.copy_invitation_code)) }
             Text(stringResource(R.string.invitation_expiry_format, invitation.expiresAt), modifier = Modifier.padding(top = 8.dp))
+        }
+        Text(
+            stringResource(R.string.claim_reviews),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(top = 24.dp).semantics { heading() }
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+            Button(onClick = { viewModel.refreshClaims() }) { Text(stringResource(R.string.refresh)) }
+            if (state.loadingClaims) CircularProgressIndicator()
+        }
+        if (!state.loadingClaims && state.claims.isEmpty()) {
+            Text(stringResource(R.string.no_claims), modifier = Modifier.padding(top = 8.dp))
+        }
+        state.claims.forEach { claim ->
+            Card(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(claim.personName ?: claim.personId, style = MaterialTheme.typography.titleSmall)
+                    Text(stringResource(R.string.claim_status_format, claim.status))
+                    Text(stringResource(R.string.claim_member_role_format, claim.memberRole ?: "UNKNOWN"))
+                    Text(stringResource(R.string.claim_user_format, claim.userId.takeLast(8)))
+                    if (claim.status == "PENDING") {
+                        Button(
+                            enabled = state.verifyingClaimId != claim.claimId,
+                            onClick = { viewModel.verifyClaim(claim.claimId) },
+                            modifier = Modifier.padding(top = 8.dp)
+                        ) {
+                            Text(
+                                if (state.verifyingClaimId == claim.claimId) {
+                                    stringResource(R.string.verifying)
+                                } else {
+                                    stringResource(R.string.verify_claim)
+                                }
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }

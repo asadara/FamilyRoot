@@ -3,7 +3,9 @@ package com.example.familytreeplatform.feature.spacesettings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.familytreeplatform.models.ClaimReviewItem
 import com.example.familytreeplatform.models.CreatedInvitation
+import com.example.familytreeplatform.models.VerifyClaimRequest
 import com.example.familytreeplatform.repository.PersonRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -15,7 +17,10 @@ data class SpaceSettingsUiState(
     val role: String = "VIEWER",
     val expiresInDays: String = "7",
     val creating: Boolean = false,
+    val loadingClaims: Boolean = false,
+    val verifyingClaimId: String? = null,
     val invitation: CreatedInvitation? = null,
+    val claims: List<ClaimReviewItem> = emptyList(),
     val error: String? = null
 )
 
@@ -25,6 +30,10 @@ class SpaceSettingsViewModel(
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SpaceSettingsUiState())
     val uiState: StateFlow<SpaceSettingsUiState> = _uiState.asStateFlow()
+
+    init {
+        refreshClaims()
+    }
 
     fun setRole(value: String) {
         _uiState.update { it.copy(role = value, error = null) }
@@ -52,6 +61,39 @@ class SpaceSettingsViewModel(
                 }
                 .onFailure { error ->
                     _uiState.update { it.copy(creating = false, error = error.message) }
+                }
+        }
+    }
+
+    fun refreshClaims() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(loadingClaims = true, error = null) }
+            repository.listClaims(spaceId)
+                .onSuccess { claims ->
+                    _uiState.update {
+                        it.copy(loadingClaims = false, claims = claims)
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(loadingClaims = false, error = error.message)
+                    }
+                }
+        }
+    }
+
+    fun verifyClaim(claimId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(verifyingClaimId = claimId, error = null) }
+            repository.verifyClaim(VerifyClaimRequest(claimId))
+                .onSuccess {
+                    _uiState.update { state -> state.copy(verifyingClaimId = null) }
+                    refreshClaims()
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(verifyingClaimId = null, error = error.message)
+                    }
                 }
         }
     }

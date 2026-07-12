@@ -291,7 +291,7 @@ Definition of Done:
 
 ### Fase 3 — Produk Inti Matang
 
-**Status:** `NOT STARTED`
+**Status:** `IN PROGRESS`
 
 Scope:
 
@@ -361,13 +361,20 @@ Baseline ini bukan progres penyelesaian Fase 1–4; ia adalah titik awal migrasi
 |---|---|---:|---|
 | Fase 1 — Fondasi Aman | `DONE` | 100% | JWT auth, role authorization, endpoint protection, integrity, transaction, audit, API contract, Android auth/space flow, test, dan CI terverifikasi |
 | Fase 2 — Android Modern | `DONE` | 100% | Android modern ditutup: feature/screen ViewModel, Navigation Compose, Room offline read, adaptive layout, accessibility semantics, localization-ready resources, lint, unit test, dan instrumented test lulus |
-| Fase 3 — Produk Inti Matang | `IN PROGRESS` | 20% | Undangan anggota berjalan dua arah, Android mulai mendukung claim profil diri, dan seed data dev mempercepat test manual keluarga inti |
+| Fase 3 — Produk Inti Matang | `IN PROGRESS` | 70% | Onboarding undangan, dummy seed, quick login debug, claim diri, claim approval, graph route, filter anggota, editor status hidup, dan editor relasi dasar tersedia untuk test manual |
 | Fase 4 — Keberlanjutan Data | `NOT STARTED` | 0% | Menunggu produk inti stabil |
 
 ### Development log
 
+> Catatan status terkini Fase 3: `IN PROGRESS` sekitar 70%. Onboarding undangan,
+> dummy seed, quick login debug, claim diri, claim approval, graph route,
+> filter anggota, editor status hidup, dan editor relasi dasar sudah tersedia
+> untuk test manual. Fitur media/sumber fakta, duplicate merge, relationship
+> path, dan proposal edit detail masih belum memenuhi Definition of Done penuh.
+
 | Tanggal | Fase | Perubahan | Verifikasi | Keputusan/risiko |
 |---|---|---|---|---|
+| 2026-07-13 | Fase 3 | Closure pass slice inti: endpoint daftar klaim ditambahkan, Space Settings dapat review/verify claim, People mendapat filter status dan akses Graph, GraphScreen diaktifkan melalui Navigation Compose, Person Detail mendapat editor status hidup dan relasi parent/child/spouse berbasis daftar anggota | Backend lint/build/e2e lulus; Android `testDebugUnitTest`, `assembleDebug`, `lintDebug`, dan `connectedDebugAndroidTest` lulus; APK debug terpasang dan launch tanpa AndroidRuntime crash di SM-T225; smoke API dummy seed OK | Fase 3 belum ditutup sebagai `DONE` karena media/sumber fakta, duplicate merge, relationship path, dan proposal edit detail masih tersisa |
 | 2026-07-13 | Blueprint | Blueprint v1.0 ditetapkan sebagai sumber kanonik | Kondisi repo dan dokumen awal ditinjau | Fitur prototipe dicatat sebagai baseline, bukan fase yang selesai |
 | 2026-07-13 | Blueprint | Arsitektur Android diselaraskan dengan blueprint v1.0 | Kontrak usang, target layer, offline, security, accessibility, testing, dan DoD ditinjau | Tidak menaikkan progres fase karena perubahan hanya dokumentasi |
 | 2026-07-13 | Fase 1 | Implementasi Fase 1 dimulai | Scope dan Definition of Done dikunci dari blueprint | Status fase menjadi `IN PROGRESS`; hasil akhir tetap bergantung pada test dan verifikasi |

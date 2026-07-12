@@ -64,6 +64,43 @@ export class ClaimsService {
     });
   }
 
+  async list(spaceId: string) {
+    const claims = await this.claimsRepo.find({
+      where: { spaceId },
+      order: { requestedAt: 'DESC' },
+    });
+
+    if (claims.length === 0) return [];
+
+    const [persons, members] = await Promise.all([
+      this.personsRepo.find({
+        where: claims.map((claim) => ({
+          spaceId,
+          personId: claim.personId,
+          isDeleted: false,
+        })),
+        select: ['personId', 'fullName'],
+      }),
+      this.membersRepo.find({
+        where: claims.map((claim) => ({ spaceId, userId: claim.userId })),
+        select: ['userId', 'role'],
+      }),
+    ]);
+
+    const personById = new Map(
+      persons.map((person) => [person.personId, person]),
+    );
+    const memberByUserId = new Map(
+      members.map((member) => [member.userId, member]),
+    );
+
+    return claims.map((claim) => ({
+      ...claim,
+      personName: personById.get(claim.personId)?.fullName ?? null,
+      memberRole: memberByUserId.get(claim.userId)?.role ?? null,
+    }));
+  }
+
   async verify(claimId: string, actorUserId?: string) {
     const claim = await this.claimsRepo.findOneBy({ claimId });
     if (!claim) {

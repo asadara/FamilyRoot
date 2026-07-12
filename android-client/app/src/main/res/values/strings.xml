@@ -31,6 +31,7 @@
     <string name="save">Save</string>
     <string name="saving">Saving…</string>
     <string name="activity">Activity</string>
+    <string name="graph">Graph</string>
     <string name="space_settings">Space settings</string>
     <string name="create_invitation">Create invitation</string>
     <string name="expires_in_days">Expires in days</string>
@@ -53,8 +54,20 @@
     <string name="claim_as_me">Claim as me</string>
     <string name="claiming_profile">Claiming profile...</string>
     <string name="claim_created_format">Claim submitted: %1$s</string>
+    <string name="claim_reviews">Claim reviews</string>
+    <string name="no_claims">No claims yet</string>
+    <string name="claim_status_format">Status: %1$s</string>
+    <string name="claim_member_role_format">Member role: %1$s</string>
+    <string name="claim_user_format">User: ...%1$s</string>
+    <string name="verify_claim">Verify claim</string>
+    <string name="verifying">Verifying...</string>
+    <string name="life_status">Life status</string>
     <string name="relations">Relations</string>
     <string name="parents_count_format">Parents: %1$d</string>
     <string name="children_count_format">Children: %1$d</string>
     <string name="spouses_count_format">Spouses: %1$d</string>
+    <string name="connect_relation">Connect relation</string>
+    <string name="add_as_parent">Parent</string>
+    <string name="add_as_child">Child</string>
+    <string name="add_as_spouse">Spouse</string>
 </resources>

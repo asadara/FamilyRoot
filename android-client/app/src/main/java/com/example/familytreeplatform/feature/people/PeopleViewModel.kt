@@ -16,13 +16,18 @@ import kotlinx.coroutines.launch
 data class PeopleUiState(
     val people: List<PersonListItem> = emptyList(),
     val query: String = "",
+    val lifeStatusFilter: String = "ALL",
     val refreshing: Boolean = false,
     val creating: Boolean = false,
     val offline: Boolean = false,
     val error: String? = null
 ) {
     val filteredPeople: List<PersonListItem>
-        get() = if (query.isBlank()) people else people.filter { it.fullName.contains(query, true) }
+        get() = people.filter { person ->
+            val matchesQuery = query.isBlank() || person.fullName.contains(query, true)
+            val matchesStatus = lifeStatusFilter == "ALL" || person.lifeStatus == lifeStatusFilter
+            matchesQuery && matchesStatus
+        }
 }
 
 class PeopleViewModel(
@@ -30,16 +35,25 @@ class PeopleViewModel(
     private val repository: PersonRepository
 ) : ViewModel() {
     private val query = MutableStateFlow("")
+    private val lifeStatusFilter = MutableStateFlow("ALL")
     private val operation = MutableStateFlow(PeopleUiState())
 
     val uiState: StateFlow<PeopleUiState> = combine(
-        repository.observePersons(spaceId), query, operation
-    ) { people, currentQuery, status -> status.copy(people = people, query = currentQuery) }
+        repository.observePersons(spaceId), query, lifeStatusFilter, operation
+    ) { people, currentQuery, currentStatusFilter, status ->
+        status.copy(
+            people = people,
+            query = currentQuery,
+            lifeStatusFilter = currentStatusFilter
+        )
+    }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PeopleUiState())
 
     init { refresh() }
 
     fun setQuery(value: String) { query.value = value }
+
+    fun setLifeStatusFilter(value: String) { lifeStatusFilter.value = value }
 
     fun refresh() = viewModelScope.launch {
         operation.value = operation.value.copy(refreshing = true, error = null)

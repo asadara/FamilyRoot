@@ -5,6 +5,7 @@ import com.example.familytreeplatform.BuildConfig
 import com.example.familytreeplatform.SessionStore
 import com.example.familytreeplatform.models.ClaimRequest
 import com.example.familytreeplatform.models.ClaimResponse
+import com.example.familytreeplatform.models.ClaimReviewItem
 import com.example.familytreeplatform.models.ChangeLog
 import com.example.familytreeplatform.models.VerifyClaimRequest
 import com.example.familytreeplatform.models.ParentChildRequest
@@ -170,6 +171,19 @@ class PersonRepository(private val personDao: PersonDao? = null) {
     suspend fun createClaim(request: ClaimRequest): Result<ClaimResponse> {
         return try {
             val response = apiService.createClaim(request)
+            if (response.isSuccessful) {
+                response.body()?.let { Result.success(it) } ?: Result.failure(Exception("Empty response"))
+            } else {
+                Result.failure(Exception(parseError(response)))
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun listClaims(spaceId: String): Result<List<ClaimReviewItem>> {
+        return try {
+            val response = apiService.listClaims(spaceId)
             if (response.isSuccessful) {
                 response.body()?.let { Result.success(it) } ?: Result.failure(Exception("Empty response"))
             } else {
