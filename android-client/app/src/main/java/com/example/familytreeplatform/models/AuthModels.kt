@@ -1,0 +1,18 @@
+package com.example.familytreeplatform.models
+
+data class LoginRequest(val email: String, val password: String)
+data class RegisterRequest(val email: String, val displayName: String, val password: String)
+data class AuthUser(val userId: String, val email: String?, val displayName: String)
+data class AuthResponse(
+    val accessToken: String,
+    val tokenType: String,
+    val expiresIn: Int,
+    val user: AuthUser
+)
+data class FamilySpace(
+    val spaceId: String,
+    val name: String,
+    val createdBy: String,
+    val role: String? = null
+)
+data class CreateSpaceRequest(val name: String)

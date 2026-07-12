@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Family Tree Platform</string>
+    <string name="sign_in">Sign in</string>
+    <string name="create_account">Create account</string>
+    <string name="display_name">Display name</string>
+    <string name="email">Email</string>
+    <string name="password">Password</string>
+    <string name="please_wait">Please wait…</string>
+    <string name="register">Register</string>
+    <string name="already_have_account">Already have an account</string>
+    <string name="choose_family_space">Choose Family Space</string>
+    <string name="new_family_space">New Family Space</string>
+    <string name="create_space">Create space</string>
+    <string name="sign_out">Sign out</string>
+    <string name="add_person">Add person</string>
+    <string name="first_name">First name</string>
+    <string name="nickname">Nickname</string>
+    <string name="save">Save</string>
+    <string name="saving">Saving…</string>
+    <string name="activity">Activity</string>
+    <string name="refresh">Refresh</string>
+    <string name="family_members">Family members</string>
+    <string name="search">Search</string>
+    <string name="offline_saved_data">Offline · showing saved data</string>
+    <string name="no_family_members">No family members yet</string>
+    <string name="back">Back</string>
+    <string name="activity_item_format">%1$s - %2$s</string>
+    <string name="person_summary_format">%1$s - %2$s</string>
+    <string name="status_format">Status: %1$s</string>
+    <string name="gender_format">Gender: %1$s</string>
+    <string name="born_format">Born: %1$s</string>
+    <string name="died_format">Died: %1$s</string>
+    <string name="relations">Relations</string>
+    <string name="parents_count_format">Parents: %1$d</string>
+    <string name="children_count_format">Children: %1$d</string>
+    <string name="spouses_count_format">Spouses: %1$d</string>
+</resources>

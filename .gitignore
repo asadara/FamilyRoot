@@ -1,0 +1,38 @@
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Backend
+backend/node_modules/
+backend/dist/
+backend/build/
+backend/coverage/
+backend/.nyc_output/
+backend/*.sqlite
+backend/*.sqlite-*
+backend/*.db
+backend/logs/
+backend/*.log
+
+# Android and Gradle
+android-client/.gradle/
+android-client/build/
+android-client/app/build/
+android-client/local.properties
+android-client/*.iml
+android-client/app/*.iml
+
+# Generated packages and binaries
+*.apk
+*.aab
+*.ap_
+
+# Local scratch artifacts
+tablet-test.png

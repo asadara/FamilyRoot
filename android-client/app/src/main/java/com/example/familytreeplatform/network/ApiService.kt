@@ -1,0 +1,87 @@
+package com.example.familytreeplatform.network
+
+import com.example.familytreeplatform.models.PersonRequest
+import com.example.familytreeplatform.models.PersonResponse
+import com.example.familytreeplatform.models.PersonListItem
+import com.example.familytreeplatform.models.ClaimRequest
+import com.example.familytreeplatform.models.ClaimResponse
+import com.example.familytreeplatform.models.VerifyClaimRequest
+import com.example.familytreeplatform.models.ChangeLog
+import com.example.familytreeplatform.models.ParentChildRequest
+import com.example.familytreeplatform.models.RelationshipResponse
+import com.example.familytreeplatform.models.RelationsResponse
+import com.example.familytreeplatform.models.RelationItem
+import com.example.familytreeplatform.models.CreateSpouseRequest
+import com.example.familytreeplatform.models.SpouseResponse
+import com.example.familytreeplatform.models.UpdateLifeStatusRequest
+import com.example.familytreeplatform.models.ExportSpaceResponse
+import retrofit2.Response
+import retrofit2.http.Body
+import retrofit2.http.POST
+import retrofit2.http.GET
+import retrofit2.http.Query
+import retrofit2.http.PATCH
+import retrofit2.http.Path
+import com.example.familytreeplatform.models.LoginRequest
+import com.example.familytreeplatform.models.RegisterRequest
+import com.example.familytreeplatform.models.AuthResponse
+import com.example.familytreeplatform.models.FamilySpace
+import com.example.familytreeplatform.models.CreateSpaceRequest
+
+interface ApiService {
+    @POST("auth/login")
+    suspend fun login(@Body request: LoginRequest): Response<AuthResponse>
+
+    @POST("auth/register")
+    suspend fun register(@Body request: RegisterRequest): Response<AuthResponse>
+
+    @GET("spaces")
+    suspend fun listSpaces(): Response<List<FamilySpace>>
+
+    @POST("spaces")
+    suspend fun createSpace(@Body request: CreateSpaceRequest): Response<FamilySpace>
+
+    @POST("persons")
+    suspend fun createPerson(@Body request: PersonRequest): Response<PersonResponse>
+
+    @GET("persons")
+    suspend fun listPersons(@Query("spaceId") spaceId: String): Response<List<PersonListItem>>
+
+    @POST("claims")
+    suspend fun createClaim(@Body request: ClaimRequest): Response<ClaimResponse>
+
+    @POST("claims/verify")
+    suspend fun verifyClaim(@Body request: VerifyClaimRequest): Response<ClaimResponse>
+
+    @GET("changes")
+    suspend fun listChanges(
+        @Query("spaceId") spaceId: String,
+        @Query("limit") limit: Int = 50
+    ): Response<List<ChangeLog>>
+
+    @POST("persons/parent-child")
+    suspend fun addParentChild(@Body request: ParentChildRequest): Response<RelationshipResponse>
+
+    @GET("relationships")
+    suspend fun getRelations(
+        @Query("spaceId") spaceId: String,
+        @Query("personId") personId: String
+    ): Response<RelationsResponse>
+
+    @GET("relationships")
+    suspend fun listRelationships(
+        @Query("spaceId") spaceId: String
+    ): Response<List<RelationItem>>
+
+    @POST("relationships/spouse")
+    suspend fun createSpouse(@Body request: CreateSpouseRequest): Response<SpouseResponse>
+
+    @PATCH("persons/{personId}/life")
+    suspend fun updateLifeStatus(
+        @Path("personId") personId: String,
+        @Body request: UpdateLifeStatusRequest
+    ): Response<PersonResponse>
+
+    @GET("export/space")
+    suspend fun exportSpace(@Query("spaceId") spaceId: String): Response<ExportSpaceResponse>
+}
