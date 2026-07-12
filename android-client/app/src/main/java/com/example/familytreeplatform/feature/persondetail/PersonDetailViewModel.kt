@@ -3,6 +3,8 @@ package com.example.familytreeplatform.feature.persondetail
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.familytreeplatform.models.ClaimRequest
+import com.example.familytreeplatform.models.ClaimResponse
 import com.example.familytreeplatform.models.PersonListItem
 import com.example.familytreeplatform.models.RelationsResponse
 import com.example.familytreeplatform.repository.PersonRepository
@@ -17,6 +19,8 @@ data class PersonDetailUiState(
     val person: PersonListItem? = null,
     val relations: RelationsResponse? = null,
     val loadingRelations: Boolean = false,
+    val claiming: Boolean = false,
+    val claim: ClaimResponse? = null,
     val error: String? = null
 )
 
@@ -46,6 +50,19 @@ class PersonDetailViewModel(
                 }
                 .onFailure { error ->
                     _uiState.update { it.copy(loadingRelations = false, error = error.message) }
+                }
+        }
+    }
+
+    fun claimAsMe() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(claiming = true, error = null, claim = null) }
+            repository.createClaim(ClaimRequest(spaceId = spaceId, personId = personId))
+                .onSuccess { claim ->
+                    _uiState.update { it.copy(claiming = false, claim = claim) }
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(claiming = false, error = error.message) }
                 }
         }
     }

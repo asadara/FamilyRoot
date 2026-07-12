@@ -40,6 +40,20 @@ fun PersonDetailScreen(
             Text(stringResource(R.string.gender_format, item.gender ?: "UNKNOWN"))
             item.birthDate?.let { Text(stringResource(R.string.born_format, it)) }
             item.deceasedAt?.let { Text(stringResource(R.string.died_format, it)) }
+            Button(
+                enabled = !state.claiming,
+                onClick = { viewModel.claimAsMe() },
+                modifier = Modifier.padding(top = 12.dp)
+            ) {
+                Text(if (state.claiming) stringResource(R.string.claiming_profile) else stringResource(R.string.claim_as_me))
+            }
+            state.claim?.let { claim ->
+                Text(
+                    stringResource(R.string.claim_created_format, claim.status),
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
             if (state.loadingRelations) {
                 CircularProgressIndicator(modifier = Modifier.padding(top = 12.dp))
             }

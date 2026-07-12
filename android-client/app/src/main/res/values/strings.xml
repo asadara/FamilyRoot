@@ -45,6 +45,9 @@
     <string name="gender_format">Gender: %1$s</string>
     <string name="born_format">Born: %1$s</string>
     <string name="died_format">Died: %1$s</string>
+    <string name="claim_as_me">Claim as me</string>
+    <string name="claiming_profile">Claiming profile...</string>
+    <string name="claim_created_format">Claim submitted: %1$s</string>
     <string name="relations">Relations</string>
     <string name="parents_count_format">Parents: %1$d</string>
     <string name="children_count_format">Children: %1$d</string>
