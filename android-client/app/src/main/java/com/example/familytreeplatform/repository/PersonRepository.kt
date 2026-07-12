@@ -32,6 +32,8 @@ import com.example.familytreeplatform.models.RegisterRequest
 import com.example.familytreeplatform.models.AuthResponse
 import com.example.familytreeplatform.models.FamilySpace
 import com.example.familytreeplatform.models.CreateSpaceRequest
+import com.example.familytreeplatform.models.CreateInvitationRequest
+import com.example.familytreeplatform.models.CreatedInvitation
 import com.example.familytreeplatform.models.AcceptInvitationRequest
 import com.example.familytreeplatform.models.InvitationPreview
 import com.example.familytreeplatform.data.local.PersonDao
@@ -86,6 +88,10 @@ class PersonRepository(private val personDao: PersonDao? = null) {
 
     suspend fun createSpace(name: String): Result<FamilySpace> = apiResult {
         apiService.createSpace(CreateSpaceRequest(name))
+    }
+
+    suspend fun createInvitation(spaceId: String, role: String, expiresInDays: Int): Result<CreatedInvitation> = apiResult {
+        apiService.createInvitation(CreateInvitationRequest(spaceId, role, expiresInDays))
     }
 
     suspend fun previewInvitation(token: String): Result<InvitationPreview> = apiResult {

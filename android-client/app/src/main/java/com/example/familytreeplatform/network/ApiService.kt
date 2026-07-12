@@ -27,6 +27,8 @@ import com.example.familytreeplatform.models.RegisterRequest
 import com.example.familytreeplatform.models.AuthResponse
 import com.example.familytreeplatform.models.FamilySpace
 import com.example.familytreeplatform.models.CreateSpaceRequest
+import com.example.familytreeplatform.models.CreateInvitationRequest
+import com.example.familytreeplatform.models.CreatedInvitation
 import com.example.familytreeplatform.models.AcceptInvitationRequest
 import com.example.familytreeplatform.models.InvitationPreview
 
@@ -42,6 +44,9 @@ interface ApiService {
 
     @POST("spaces")
     suspend fun createSpace(@Body request: CreateSpaceRequest): Response<FamilySpace>
+
+    @POST("spaces/invitations")
+    suspend fun createInvitation(@Body request: CreateInvitationRequest): Response<CreatedInvitation>
 
     @GET("spaces/invitations/{token}")
     suspend fun previewInvitation(@Path("token") token: String): Response<InvitationPreview>

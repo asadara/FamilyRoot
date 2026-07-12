@@ -26,6 +26,13 @@
     <string name="save">Save</string>
     <string name="saving">Saving…</string>
     <string name="activity">Activity</string>
+    <string name="space_settings">Space settings</string>
+    <string name="create_invitation">Create invitation</string>
+    <string name="expires_in_days">Expires in days</string>
+    <string name="generate_invitation_code">Generate invitation code</string>
+    <string name="generated_invitation_format">%1$s - invitation for %2$s</string>
+    <string name="copy_invitation_code">Copy invitation code</string>
+    <string name="invitation_expiry_format">Expires: %1$s</string>
     <string name="refresh">Refresh</string>
     <string name="family_members">Family members</string>
     <string name="search">Search</string>

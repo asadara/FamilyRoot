@@ -23,12 +23,15 @@ import com.example.familytreeplatform.feature.activity.ActivityScreen
 import com.example.familytreeplatform.feature.activity.ActivityViewModel
 import com.example.familytreeplatform.feature.persondetail.PersonDetailScreen
 import com.example.familytreeplatform.feature.persondetail.PersonDetailViewModel
+import com.example.familytreeplatform.feature.spacesettings.SpaceSettingsScreen
+import com.example.familytreeplatform.feature.spacesettings.SpaceSettingsViewModel
 
 object Routes {
     const val AUTH = "auth"
     const val SPACES = "spaces"
     const val PEOPLE = "people"
     const val ACTIVITY = "activity"
+    const val SPACE_SETTINGS = "space-settings"
     const val PERSON_DETAIL = "person/{personId}"
     fun personDetail(personId: String) = "person/$personId"
 }
@@ -67,7 +70,17 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 viewModel = peopleViewModel,
                 onPersonClick = { navController.navigate(Routes.personDetail(it)) },
                 onActivityClick = { navController.navigate(Routes.ACTIVITY) },
+                onSpaceSettingsClick = { navController.navigate(Routes.SPACE_SETTINGS) },
                 onSignOut = SessionStore::clear
+            )
+        }
+        composable(Routes.SPACE_SETTINGS) {
+            val spaceSettingsViewModel: SpaceSettingsViewModel = viewModel(
+                factory = SpaceSettingsViewModel.Factory(requireNotNull(spaceId), repository)
+            )
+            SpaceSettingsScreen(
+                viewModel = spaceSettingsViewModel,
+                onBack = { navController.popBackStack() }
             )
         }
         composable(Routes.ACTIVITY) {

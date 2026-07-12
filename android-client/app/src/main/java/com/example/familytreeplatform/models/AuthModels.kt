@@ -16,10 +16,23 @@ data class FamilySpace(
     val role: String? = null
 )
 data class CreateSpaceRequest(val name: String)
+data class CreateInvitationRequest(
+    val spaceId: String,
+    val role: String,
+    val expiresInDays: Int
+)
 data class AcceptInvitationRequest(val token: String)
 data class InvitationPreview(
     val spaceId: String,
     val spaceName: String,
     val role: String,
+    val expiresAt: String
+)
+data class CreatedInvitation(
+    val inviteId: String,
+    val token: String,
+    val role: String,
+    val spaceId: String,
+    val spaceName: String,
     val expiresAt: String
 )
