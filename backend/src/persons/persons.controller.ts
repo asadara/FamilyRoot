@@ -15,6 +15,7 @@ import { isUUID } from 'class-validator';
 import { AddParentChildDto } from './dto/add-parent-child.dto';
 import { UpdateLifeStatusDto } from './dto/update-life-status.dto';
 import { DeletePersonDto } from './dto/delete-person.dto';
+import { MergePersonsDto } from './dto/merge-persons.dto';
 import { ActorUserId } from '../common/actor-user-id.decorator';
 import { SpaceRoles } from '../common/space-roles.decorator';
 
@@ -35,6 +36,26 @@ export class PersonsController {
   @SpaceRoles('OWNER', 'ADMIN', 'EDITOR')
   create(@ActorUserId() actorUserId: string, @Body() dto: CreatePersonDto) {
     return this.personsService.create(dto, actorUserId);
+  }
+
+  @Get('duplicates')
+  @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
+  duplicates(@Query('spaceId') spaceId: string) {
+    if (!spaceId || !isUUID(spaceId)) {
+      throw new BadRequestException('Invalid spaceId');
+    }
+    return this.personsService.findDuplicateCandidates(spaceId);
+  }
+
+  @Post('merge')
+  @SpaceRoles('OWNER', 'ADMIN')
+  merge(@ActorUserId() actorUserId: string, @Body() dto: MergePersonsDto) {
+    return this.personsService.mergePersons(
+      dto.spaceId,
+      dto.sourcePersonId,
+      dto.targetPersonId,
+      actorUserId,
+    );
   }
 
   @Post('parent-child')

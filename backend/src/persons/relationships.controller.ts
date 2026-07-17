@@ -16,6 +16,29 @@ import { SpaceRoles } from '../common/space-roles.decorator';
 export class RelationshipsController {
   constructor(private readonly relationshipsService: RelationshipsService) {}
 
+  @Get('path')
+  @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
+  path(
+    @Query('spaceId') spaceId: string,
+    @Query('fromPersonId') fromPersonId: string,
+    @Query('toPersonId') toPersonId: string,
+  ) {
+    if (!spaceId || !isUUID(spaceId)) {
+      throw new BadRequestException('Invalid spaceId');
+    }
+    if (!fromPersonId || !isUUID(fromPersonId)) {
+      throw new BadRequestException('Invalid fromPersonId');
+    }
+    if (!toPersonId || !isUUID(toPersonId)) {
+      throw new BadRequestException('Invalid toPersonId');
+    }
+    return this.relationshipsService.findPath(
+      spaceId,
+      fromPersonId,
+      toPersonId,
+    );
+  }
+
   @Get()
   @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
   list(

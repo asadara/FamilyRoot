@@ -5,6 +5,10 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.familytreeplatform.models.ClaimReviewItem
 import com.example.familytreeplatform.models.CreatedInvitation
+import com.example.familytreeplatform.models.DuplicateGroup
+import com.example.familytreeplatform.models.MergePersonsRequest
+import com.example.familytreeplatform.models.ProposalItem
+import com.example.familytreeplatform.models.ReviewProposalRequest
 import com.example.familytreeplatform.models.VerifyClaimRequest
 import com.example.familytreeplatform.repository.PersonRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,9 +22,15 @@ data class SpaceSettingsUiState(
     val expiresInDays: String = "7",
     val creating: Boolean = false,
     val loadingClaims: Boolean = false,
+    val loadingProposals: Boolean = false,
+    val loadingDuplicates: Boolean = false,
     val verifyingClaimId: String? = null,
+    val reviewingProposalId: String? = null,
+    val merging: Boolean = false,
     val invitation: CreatedInvitation? = null,
     val claims: List<ClaimReviewItem> = emptyList(),
+    val proposals: List<ProposalItem> = emptyList(),
+    val duplicates: List<DuplicateGroup> = emptyList(),
     val error: String? = null
 )
 
@@ -33,6 +43,8 @@ class SpaceSettingsViewModel(
 
     init {
         refreshClaims()
+        refreshProposals()
+        refreshDuplicates()
     }
 
     fun setRole(value: String) {
@@ -94,6 +106,68 @@ class SpaceSettingsViewModel(
                     _uiState.update {
                         it.copy(verifyingClaimId = null, error = error.message)
                     }
+                }
+        }
+    }
+
+    fun refreshProposals() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(loadingProposals = true, error = null) }
+            repository.listProposals(spaceId)
+                .onSuccess { proposals ->
+                    _uiState.update { it.copy(loadingProposals = false, proposals = proposals) }
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(loadingProposals = false, error = error.message) }
+                }
+        }
+    }
+
+    fun approveProposal(proposalId: String) {
+        reviewProposal(proposalId, approve = true)
+    }
+
+    fun rejectProposal(proposalId: String) {
+        reviewProposal(proposalId, approve = false)
+    }
+
+    private fun reviewProposal(proposalId: String, approve: Boolean) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(reviewingProposalId = proposalId, error = null) }
+            val request = ReviewProposalRequest(spaceId, proposalId)
+            val result = if (approve) repository.approveProposal(request) else repository.rejectProposal(request)
+            result.onSuccess {
+                _uiState.update { it.copy(reviewingProposalId = null) }
+                refreshProposals()
+            }.onFailure { error ->
+                _uiState.update { it.copy(reviewingProposalId = null, error = error.message) }
+            }
+        }
+    }
+
+    fun refreshDuplicates() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(loadingDuplicates = true, error = null) }
+            repository.listDuplicates(spaceId)
+                .onSuccess { duplicates ->
+                    _uiState.update { it.copy(loadingDuplicates = false, duplicates = duplicates) }
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(loadingDuplicates = false, error = error.message) }
+                }
+        }
+    }
+
+    fun mergeDuplicate(sourcePersonId: String, targetPersonId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(merging = true, error = null) }
+            repository.mergePersons(MergePersonsRequest(spaceId, sourcePersonId, targetPersonId))
+                .onSuccess {
+                    _uiState.update { it.copy(merging = false) }
+                    refreshDuplicates()
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(merging = false, error = error.message) }
                 }
         }
     }

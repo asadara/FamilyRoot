@@ -21,7 +21,10 @@ export class ChangeLogEntity {
     | 'INVITATION'
     | 'PERSON'
     | 'RELATIONSHIP'
-    | 'CLAIM';
+    | 'CLAIM'
+    | 'SOURCE'
+    | 'MEDIA'
+    | 'PROPOSAL';
 
   @Column({ type: 'uuid' })
   entityId!: string;

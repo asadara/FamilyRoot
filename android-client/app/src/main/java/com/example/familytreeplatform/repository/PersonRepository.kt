@@ -19,6 +19,16 @@ import com.example.familytreeplatform.models.PersonListItem
 import com.example.familytreeplatform.models.PersonRequest
 import com.example.familytreeplatform.models.PersonResponse
 import com.example.familytreeplatform.models.ExportSpaceResponse
+import com.example.familytreeplatform.models.DuplicateGroup
+import com.example.familytreeplatform.models.MediaItem
+import com.example.familytreeplatform.models.MediaRequest
+import com.example.familytreeplatform.models.MergePersonsRequest
+import com.example.familytreeplatform.models.ProposalItem
+import com.example.familytreeplatform.models.ProposalRequest
+import com.example.familytreeplatform.models.RelationshipPathResponse
+import com.example.familytreeplatform.models.ReviewProposalRequest
+import com.example.familytreeplatform.models.SourceItem
+import com.example.familytreeplatform.models.SourceRequest
 import com.example.familytreeplatform.network.ApiService
 import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException
@@ -167,6 +177,43 @@ class PersonRepository(private val personDao: PersonDao? = null) {
 
     fun observePerson(personId: String): Flow<PersonListItem?> =
         personDao?.observeById(personId)?.map { it?.toModel() } ?: emptyFlow()
+
+    suspend fun listDuplicates(spaceId: String): Result<List<DuplicateGroup>> =
+        apiResult { apiService.listDuplicates(spaceId) }
+
+    suspend fun mergePersons(request: MergePersonsRequest): Result<Map<String, Any>> =
+        apiResult { apiService.mergePersons(request) }
+
+    suspend fun listSources(spaceId: String, personId: String): Result<List<SourceItem>> =
+        apiResult { apiService.listSources(personId, spaceId) }
+
+    suspend fun createSource(personId: String, request: SourceRequest): Result<SourceItem> =
+        apiResult { apiService.createSource(personId, request) }
+
+    suspend fun listMedia(spaceId: String, personId: String): Result<List<MediaItem>> =
+        apiResult { apiService.listMedia(personId, spaceId) }
+
+    suspend fun createMedia(personId: String, request: MediaRequest): Result<MediaItem> =
+        apiResult { apiService.createMedia(personId, request) }
+
+    suspend fun listProposals(spaceId: String): Result<List<ProposalItem>> =
+        apiResult { apiService.listProposals(spaceId) }
+
+    suspend fun createProposal(request: ProposalRequest): Result<ProposalItem> =
+        apiResult { apiService.createProposal(request) }
+
+    suspend fun approveProposal(request: ReviewProposalRequest): Result<ProposalItem> =
+        apiResult { apiService.approveProposal(request) }
+
+    suspend fun rejectProposal(request: ReviewProposalRequest): Result<ProposalItem> =
+        apiResult { apiService.rejectProposal(request) }
+
+    suspend fun relationshipPath(
+        spaceId: String,
+        fromPersonId: String,
+        toPersonId: String
+    ): Result<RelationshipPathResponse> =
+        apiResult { apiService.relationshipPath(spaceId, fromPersonId, toPersonId) }
 
     suspend fun createClaim(request: ClaimRequest): Result<ClaimResponse> {
         return try {

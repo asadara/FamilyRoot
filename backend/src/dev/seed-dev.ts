@@ -9,6 +9,9 @@ import { RelationshipEntity } from '../persons/relationship.entity';
 import { UserPersonClaimEntity } from '../claims/user-person-claim.entity';
 import { ChangeLogEntity } from '../changes/change-log.entity';
 import { SpaceInvitationEntity } from '../spaces/space-invitation.entity';
+import { EditProposalEntity } from '../archive/edit-proposal.entity';
+import { FactSourceEntity } from '../archive/fact-source.entity';
+import { MediaItemEntity } from '../archive/media-item.entity';
 
 const DEMO_PASSWORD = 'Test123456!';
 const DEMO_SPACE_NAME = 'Keluarga Demo';
@@ -84,6 +87,9 @@ const dataSource = new DataSource({
     UserPersonClaimEntity,
     ChangeLogEntity,
     SpaceInvitationEntity,
+    FactSourceEntity,
+    MediaItemEntity,
+    EditProposalEntity,
   ],
   synchronize: process.env.NODE_ENV !== 'production',
 });
@@ -161,6 +167,9 @@ async function main() {
     const relationshipsRepo = dataSource.getRepository(RelationshipEntity);
     const claimsRepo = dataSource.getRepository(UserPersonClaimEntity);
     const changesRepo = dataSource.getRepository(ChangeLogEntity);
+    const sourcesRepo = dataSource.getRepository(FactSourceEntity);
+    const mediaRepo = dataSource.getRepository(MediaItemEntity);
+    const proposalsRepo = dataSource.getRepository(EditProposalEntity);
 
     const passwordHash = await bcrypt.hash(DEMO_PASSWORD, 10);
     const usersByKey = new Map<string, UserEntity>();
@@ -281,6 +290,90 @@ async function main() {
       toPersonId: ibu.personId,
       meta: 'MARRIED',
     });
+
+    let source = await sourcesRepo.findOne({
+      where: {
+        spaceId: space.spaceId,
+        personId: ayah.personId,
+        title: 'Kartu Keluarga Demo',
+      },
+    });
+    if (!source) {
+      source = await sourcesRepo.save(
+        sourcesRepo.create({
+          spaceId: space.spaceId,
+          personId: ayah.personId,
+          title: 'Kartu Keluarga Demo',
+          type: 'DOCUMENT',
+          url: null,
+          note: 'Sumber dummy untuk test provenance Phase 3',
+        }),
+      );
+    }
+
+    const media = await mediaRepo.findOne({
+      where: {
+        spaceId: space.spaceId,
+        personId: ayah.personId,
+        label: 'Foto keluarga demo',
+      },
+    });
+    if (!media) {
+      await mediaRepo.save(
+        mediaRepo.create({
+          spaceId: space.spaceId,
+          personId: ayah.personId,
+          label: 'Foto keluarga demo',
+          kind: 'PHOTO',
+          uri: 'demo://family-photo',
+          sourceId: source.sourceId,
+        }),
+      );
+    }
+
+    const proposal = await proposalsRepo.findOne({
+      where: {
+        spaceId: space.spaceId,
+        personId: ayah.personId,
+        field: 'notes',
+        proposedValue: 'Catatan profil ayah dari proposal dummy',
+      },
+    });
+    if (!proposal) {
+      await proposalsRepo.save(
+        proposalsRepo.create({
+          spaceId: space.spaceId,
+          personId: ayah.personId,
+          field: 'notes',
+          proposedValue: 'Catatan profil ayah dari proposal dummy',
+          reason: 'Test proposal approval Phase 3',
+        }),
+      );
+    }
+
+    const duplicate = await personsRepo.findOne({
+      where: {
+        spaceId: space.spaceId,
+        fullName: anak.fullName,
+        notes: 'Duplicate candidate for merge test',
+        isDeleted: false,
+      },
+    });
+    if (!duplicate) {
+      await personsRepo.save(
+        personsRepo.create({
+          spaceId: space.spaceId,
+          fullName: anak.fullName,
+          firstName: anak.firstName,
+          nickName: 'Duplikat',
+          gender: anak.gender,
+          birthDate: anak.birthDate,
+          lifeStatus: anak.lifeStatus,
+          deceasedAt: null,
+          notes: 'Duplicate candidate for merge test',
+        }),
+      );
+    }
 
     console.log('Development seed ready.');
     console.table(

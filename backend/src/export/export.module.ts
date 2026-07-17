@@ -5,6 +5,9 @@ import { ExportService } from './export.service';
 import { PersonEntity } from '../persons/person.entity';
 import { RelationshipEntity } from '../persons/relationship.entity';
 import { UserPersonClaimEntity } from '../claims/user-person-claim.entity';
+import { EditProposalEntity } from '../archive/edit-proposal.entity';
+import { FactSourceEntity } from '../archive/fact-source.entity';
+import { MediaItemEntity } from '../archive/media-item.entity';
 
 @Module({
   imports: [
@@ -12,6 +15,9 @@ import { UserPersonClaimEntity } from '../claims/user-person-claim.entity';
       PersonEntity,
       RelationshipEntity,
       UserPersonClaimEntity,
+      FactSourceEntity,
+      MediaItemEntity,
+      EditProposalEntity,
     ]),
   ],
   controllers: [ExportController],

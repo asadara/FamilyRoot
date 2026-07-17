@@ -8,6 +8,7 @@ import { ClaimsModule } from './claims/claims.module';
 import { ChangesModule } from './changes/changes.module';
 import { ExportModule } from './export/export.module';
 import { AuthModule } from './auth/auth.module';
+import { ArchiveModule } from './archive/archive.module';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { SpaceMemberGuard } from './common/space-member.guard';
@@ -32,6 +33,7 @@ import { ApiExceptionFilter } from './common/api-exception.filter';
     ChangesModule,
     ExportModule,
     AuthModule,
+    ArchiveModule,
     CommonModule,
   ],
   controllers: [AppController],

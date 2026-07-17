@@ -6,9 +6,15 @@ import androidx.lifecycle.viewModelScope
 import com.example.familytreeplatform.models.ClaimRequest
 import com.example.familytreeplatform.models.ClaimResponse
 import com.example.familytreeplatform.models.CreateSpouseRequest
+import com.example.familytreeplatform.models.MediaItem
+import com.example.familytreeplatform.models.MediaRequest
 import com.example.familytreeplatform.models.ParentChildRequest
 import com.example.familytreeplatform.models.PersonListItem
+import com.example.familytreeplatform.models.ProposalRequest
+import com.example.familytreeplatform.models.RelationshipPathResponse
 import com.example.familytreeplatform.models.RelationsResponse
+import com.example.familytreeplatform.models.SourceItem
+import com.example.familytreeplatform.models.SourceRequest
 import com.example.familytreeplatform.models.UpdateLifeStatusRequest
 import com.example.familytreeplatform.repository.PersonRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -22,6 +28,9 @@ data class PersonDetailUiState(
     val person: PersonListItem? = null,
     val relations: RelationsResponse? = null,
     val people: List<PersonListItem> = emptyList(),
+    val sources: List<SourceItem> = emptyList(),
+    val media: List<MediaItem> = emptyList(),
+    val path: RelationshipPathResponse? = null,
     val loadingRelations: Boolean = false,
     val claiming: Boolean = false,
     val updating: Boolean = false,
@@ -53,6 +62,7 @@ class PersonDetailViewModel(
             repository.listPersons(spaceId)
         }
         refreshRelations()
+        refreshArchive()
     }
 
     fun refreshRelations() {
@@ -77,6 +87,94 @@ class PersonDetailViewModel(
                 }
                 .onFailure { error ->
                     _uiState.update { it.copy(claiming = false, error = error.message) }
+                }
+        }
+    }
+
+    fun refreshArchive() {
+        viewModelScope.launch {
+            val sourcesResult = repository.listSources(spaceId, personId)
+            val mediaResult = repository.listMedia(spaceId, personId)
+            _uiState.update {
+                it.copy(
+                    sources = sourcesResult.getOrNull().orEmpty(),
+                    media = mediaResult.getOrNull().orEmpty(),
+                    error = sourcesResult.exceptionOrNull()?.message
+                        ?: mediaResult.exceptionOrNull()?.message
+                        ?: it.error
+                )
+            }
+        }
+    }
+
+    fun addSource(title: String, note: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(updating = true, error = null, message = null) }
+            repository.createSource(
+                personId,
+                SourceRequest(
+                    spaceId = spaceId,
+                    title = title.trim(),
+                    type = "DOCUMENT",
+                    note = note.trim().ifBlank { null }
+                )
+            ).onSuccess {
+                refreshArchive()
+                _uiState.update { it.copy(updating = false, message = "Source added") }
+            }.onFailure { error ->
+                _uiState.update { it.copy(updating = false, error = error.message) }
+            }
+        }
+    }
+
+    fun addMedia(label: String, uri: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(updating = true, error = null, message = null) }
+            repository.createMedia(
+                personId,
+                MediaRequest(
+                    spaceId = spaceId,
+                    label = label.trim(),
+                    kind = "PHOTO",
+                    uri = uri.trim()
+                )
+            ).onSuccess {
+                refreshArchive()
+                _uiState.update { it.copy(updating = false, message = "Media added") }
+            }.onFailure { error ->
+                _uiState.update { it.copy(updating = false, error = error.message) }
+            }
+        }
+    }
+
+    fun proposeNotes(value: String, reason: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(updating = true, error = null, message = null) }
+            repository.createProposal(
+                ProposalRequest(
+                    spaceId = spaceId,
+                    personId = personId,
+                    field = "notes",
+                    proposedValue = value.trim(),
+                    reason = reason.trim().ifBlank { null }
+                )
+            ).onSuccess {
+                _uiState.update { it.copy(updating = false, message = "Proposal submitted") }
+            }.onFailure { error ->
+                _uiState.update { it.copy(updating = false, error = error.message) }
+            }
+        }
+    }
+
+    fun findPathTo(targetPersonId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(updating = true, error = null, path = null) }
+            repository.relationshipPath(spaceId, personId, targetPersonId)
+                .onSuccess { path ->
+                    _uiState.update { it.copy(updating = false, path = path) }
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(updating = false, error = error.message) }
                 }
         }
     }

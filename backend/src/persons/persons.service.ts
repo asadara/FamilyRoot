@@ -149,6 +149,135 @@ export class PersonsService {
     });
   }
 
+  async findDuplicateCandidates(spaceId: string) {
+    const people = await this.personsRepo.find({
+      where: { spaceId, isDeleted: false },
+      order: { fullName: 'ASC' },
+      select: [
+        'personId',
+        'fullName',
+        'birthDate',
+        'gender',
+        'lifeStatus',
+        'createdAt',
+      ],
+    });
+    const groups = new Map<string, typeof people>();
+    for (const person of people) {
+      const key = [
+        person.fullName.trim().toLowerCase().replace(/\s+/g, ' '),
+        person.birthDate ?? 'unknown-birth',
+      ].join('|');
+      groups.set(key, [...(groups.get(key) ?? []), person]);
+    }
+    return [...groups.values()]
+      .filter((group) => group.length > 1)
+      .map((group) => ({
+        reason: 'Same normalized full name and birth date',
+        people: group,
+      }));
+  }
+
+  async mergePersons(
+    spaceId: string,
+    sourcePersonId: string,
+    targetPersonId: string,
+    actorUserId: string,
+  ) {
+    if (sourcePersonId === targetPersonId) {
+      throw new BadRequestException(
+        'sourcePersonId and targetPersonId must differ',
+      );
+    }
+
+    const [source, target] = await Promise.all([
+      this.personsRepo.findOneBy({
+        spaceId,
+        personId: sourcePersonId,
+        isDeleted: false,
+      }),
+      this.personsRepo.findOneBy({
+        spaceId,
+        personId: targetPersonId,
+        isDeleted: false,
+      }),
+    ]);
+    if (!source || !target) {
+      throw new NotFoundException('Source or target person not found');
+    }
+
+    return this.personsRepo.manager.transaction(async (manager) => {
+      const relations = await manager.find(RelationshipEntity, {
+        where: [
+          { spaceId, fromPersonId: sourcePersonId },
+          { spaceId, toPersonId: sourcePersonId },
+        ],
+      });
+
+      for (const relation of relations) {
+        const fromPersonId =
+          relation.fromPersonId === sourcePersonId
+            ? targetPersonId
+            : relation.fromPersonId;
+        const toPersonId =
+          relation.toPersonId === sourcePersonId
+            ? targetPersonId
+            : relation.toPersonId;
+
+        if (fromPersonId === toPersonId) {
+          await manager.delete(RelationshipEntity, {
+            relationshipId: relation.relationshipId,
+          });
+          continue;
+        }
+
+        const existing = await manager.findOne(RelationshipEntity, {
+          where: {
+            spaceId,
+            type: relation.type,
+            fromPersonId,
+            toPersonId,
+          },
+        });
+        if (existing) {
+          await manager.delete(RelationshipEntity, {
+            relationshipId: relation.relationshipId,
+          });
+          continue;
+        }
+
+        relation.fromPersonId = fromPersonId;
+        relation.toPersonId = toPersonId;
+        await manager.save(relation);
+      }
+
+      const beforeSource = JSON.stringify(source);
+      source.isDeleted = true;
+      source.notes = [
+        source.notes,
+        `Merged into ${target.fullName} (${target.personId})`,
+      ]
+        .filter(Boolean)
+        .join('\n');
+      const savedSource = await manager.save(source);
+
+      await manager.save(
+        manager.create(ChangeLogEntity, {
+          spaceId,
+          actorUserId,
+          entityType: 'PERSON',
+          entityId: savedSource.personId,
+          operation: 'DELETE',
+          note: `Merge duplicate into ${target.personId}`,
+          beforeJson: beforeSource,
+          afterJson: JSON.stringify(savedSource),
+        }),
+      );
+
+      return { sourcePersonId, targetPersonId, merged: true };
+    });
+  }
+
   async addParentChild(
     spaceId: string,
     parentId: string,

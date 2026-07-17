@@ -70,4 +70,26 @@
     <string name="add_as_parent">Parent</string>
     <string name="add_as_child">Child</string>
     <string name="add_as_spouse">Spouse</string>
+    <string name="sources">Sources</string>
+    <string name="source_title">Source title</string>
+    <string name="source_note">Source note</string>
+    <string name="add_source">Add source</string>
+    <string name="media">Media</string>
+    <string name="media_label">Media label</string>
+    <string name="media_uri">Media URI</string>
+    <string name="add_media">Add media</string>
+    <string name="propose_edit">Propose edit</string>
+    <string name="proposed_notes">Proposed notes</string>
+    <string name="reason">Reason</string>
+    <string name="submit_proposal">Submit proposal</string>
+    <string name="find_path">Find path</string>
+    <string name="path_result_format">Path: %1$s</string>
+    <string name="no_path_found">No relationship path found</string>
+    <string name="proposal_reviews">Proposal reviews</string>
+    <string name="no_proposals">No proposals yet</string>
+    <string name="approve">Approve</string>
+    <string name="reject">Reject</string>
+    <string name="duplicate_candidates">Duplicate candidates</string>
+    <string name="no_duplicates">No duplicate candidates</string>
+    <string name="merge_into_first">Merge into first</string>
 </resources>

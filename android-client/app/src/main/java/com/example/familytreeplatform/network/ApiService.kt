@@ -16,6 +16,16 @@ import com.example.familytreeplatform.models.CreateSpouseRequest
 import com.example.familytreeplatform.models.SpouseResponse
 import com.example.familytreeplatform.models.UpdateLifeStatusRequest
 import com.example.familytreeplatform.models.ExportSpaceResponse
+import com.example.familytreeplatform.models.DuplicateGroup
+import com.example.familytreeplatform.models.MediaItem
+import com.example.familytreeplatform.models.MediaRequest
+import com.example.familytreeplatform.models.MergePersonsRequest
+import com.example.familytreeplatform.models.ProposalItem
+import com.example.familytreeplatform.models.ProposalRequest
+import com.example.familytreeplatform.models.RelationshipPathResponse
+import com.example.familytreeplatform.models.ReviewProposalRequest
+import com.example.familytreeplatform.models.SourceItem
+import com.example.familytreeplatform.models.SourceRequest
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.POST
@@ -61,6 +71,48 @@ interface ApiService {
     @GET("persons")
     suspend fun listPersons(@Query("spaceId") spaceId: String): Response<List<PersonListItem>>
 
+    @GET("persons/duplicates")
+    suspend fun listDuplicates(@Query("spaceId") spaceId: String): Response<List<DuplicateGroup>>
+
+    @POST("persons/merge")
+    suspend fun mergePersons(@Body request: MergePersonsRequest): Response<Map<String, Any>>
+
+    @GET("persons/{personId}/sources")
+    suspend fun listSources(
+        @Path("personId") personId: String,
+        @Query("spaceId") spaceId: String
+    ): Response<List<SourceItem>>
+
+    @POST("persons/{personId}/sources")
+    suspend fun createSource(
+        @Path("personId") personId: String,
+        @Body request: SourceRequest
+    ): Response<SourceItem>
+
+    @GET("persons/{personId}/media")
+    suspend fun listMedia(
+        @Path("personId") personId: String,
+        @Query("spaceId") spaceId: String
+    ): Response<List<MediaItem>>
+
+    @POST("persons/{personId}/media")
+    suspend fun createMedia(
+        @Path("personId") personId: String,
+        @Body request: MediaRequest
+    ): Response<MediaItem>
+
+    @GET("proposals")
+    suspend fun listProposals(@Query("spaceId") spaceId: String): Response<List<ProposalItem>>
+
+    @POST("proposals")
+    suspend fun createProposal(@Body request: ProposalRequest): Response<ProposalItem>
+
+    @POST("proposals/approve")
+    suspend fun approveProposal(@Body request: ReviewProposalRequest): Response<ProposalItem>
+
+    @POST("proposals/reject")
+    suspend fun rejectProposal(@Body request: ReviewProposalRequest): Response<ProposalItem>
+
     @POST("claims")
     suspend fun createClaim(@Body request: ClaimRequest): Response<ClaimResponse>
 
@@ -89,6 +141,13 @@ interface ApiService {
     suspend fun listRelationships(
         @Query("spaceId") spaceId: String
     ): Response<List<RelationItem>>
+
+    @GET("relationships/path")
+    suspend fun relationshipPath(
+        @Query("spaceId") spaceId: String,
+        @Query("fromPersonId") fromPersonId: String,
+        @Query("toPersonId") toPersonId: String
+    ): Response<RelationshipPathResponse>
 
     @POST("relationships/spouse")
     suspend fun createSpouse(@Body request: CreateSpouseRequest): Response<SpouseResponse>

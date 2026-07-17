@@ -4,6 +4,9 @@ import { Repository } from 'typeorm';
 import { PersonEntity } from '../persons/person.entity';
 import { RelationshipEntity } from '../persons/relationship.entity';
 import { UserPersonClaimEntity } from '../claims/user-person-claim.entity';
+import { EditProposalEntity } from '../archive/edit-proposal.entity';
+import { FactSourceEntity } from '../archive/fact-source.entity';
+import { MediaItemEntity } from '../archive/media-item.entity';
 
 @Injectable()
 export class ExportService {
@@ -14,6 +17,12 @@ export class ExportService {
     private readonly relationsRepo: Repository<RelationshipEntity>,
     @InjectRepository(UserPersonClaimEntity)
     private readonly claimsRepo: Repository<UserPersonClaimEntity>,
+    @InjectRepository(FactSourceEntity)
+    private readonly sourcesRepo: Repository<FactSourceEntity>,
+    @InjectRepository(MediaItemEntity)
+    private readonly mediaRepo: Repository<MediaItemEntity>,
+    @InjectRepository(EditProposalEntity)
+    private readonly proposalsRepo: Repository<EditProposalEntity>,
   ) {}
 
   async exportSpace(spaceId: string) {
@@ -44,10 +53,25 @@ export class ExportService {
       select: ['claimId', 'status', 'userId', 'personId', 'requestedAt'],
     });
 
+    const [sources, media, proposals] = await Promise.all([
+      this.sourcesRepo.find({
+        where: { spaceId },
+        order: { createdAt: 'ASC' },
+      }),
+      this.mediaRepo.find({ where: { spaceId }, order: { createdAt: 'ASC' } }),
+      this.proposalsRepo.find({
+        where: { spaceId },
+        order: { createdAt: 'ASC' },
+      }),
+    ]);
+
     return {
       spaceId,
       persons,
       relationships,
+      sources,
+      media,
+      proposals,
       claims: claims.map((c) => ({
         claimId: c.claimId,
         status: c.status,

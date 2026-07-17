@@ -118,5 +118,70 @@ fun SpaceSettingsScreen(
                 }
             }
         }
+        Text(
+            stringResource(R.string.proposal_reviews),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(top = 24.dp).semantics { heading() }
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+            Button(onClick = { viewModel.refreshProposals() }) { Text(stringResource(R.string.refresh)) }
+            if (state.loadingProposals) CircularProgressIndicator()
+        }
+        if (!state.loadingProposals && state.proposals.isEmpty()) {
+            Text(stringResource(R.string.no_proposals), modifier = Modifier.padding(top = 8.dp))
+        }
+        state.proposals.forEach { proposal ->
+            Card(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text("${proposal.field}: ${proposal.proposedValue}", style = MaterialTheme.typography.titleSmall)
+                    Text(stringResource(R.string.claim_status_format, proposal.status))
+                    proposal.reason?.let { Text(it) }
+                    if (proposal.status == "PENDING") {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                            Button(
+                                enabled = state.reviewingProposalId != proposal.proposalId,
+                                onClick = { viewModel.approveProposal(proposal.proposalId) }
+                            ) { Text(stringResource(R.string.approve)) }
+                            Button(
+                                enabled = state.reviewingProposalId != proposal.proposalId,
+                                onClick = { viewModel.rejectProposal(proposal.proposalId) }
+                            ) { Text(stringResource(R.string.reject)) }
+                        }
+                    }
+                }
+            }
+        }
+        Text(
+            stringResource(R.string.duplicate_candidates),
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(top = 24.dp).semantics { heading() }
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+            Button(onClick = { viewModel.refreshDuplicates() }) { Text(stringResource(R.string.refresh)) }
+            if (state.loadingDuplicates) CircularProgressIndicator()
+        }
+        if (!state.loadingDuplicates && state.duplicates.isEmpty()) {
+            Text(stringResource(R.string.no_duplicates), modifier = Modifier.padding(top = 8.dp))
+        }
+        state.duplicates.forEach { group ->
+            Card(modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(group.reason, style = MaterialTheme.typography.titleSmall)
+                    group.people.forEach { person -> Text(person.fullName) }
+                    if (group.people.size >= 2) {
+                        Button(
+                            enabled = !state.merging,
+                            onClick = {
+                                viewModel.mergeDuplicate(
+                                    sourcePersonId = group.people[1].personId,
+                                    targetPersonId = group.people[0].personId
+                                )
+                            },
+                            modifier = Modifier.padding(top = 8.dp)
+                        ) { Text(stringResource(R.string.merge_into_first)) }
+                    }
+                }
+            }
+        }
     }
 }

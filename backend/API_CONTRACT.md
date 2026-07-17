@@ -19,6 +19,8 @@
 | Soft-delete a person | Yes | Yes | No | No |
 | Create a claim for own account | Yes | Yes | Yes | Yes |
 | Verify claims | Yes | Yes | No | No |
+| Review proposals and merge duplicates | Yes | Yes | No | No |
+| Create sources, media metadata, and proposals | Yes | Yes | Yes | Proposal only |
 | Add VIEWER/EDITOR | Yes | Yes | No | No |
 | Add ADMIN | Yes | No | No | No |
 | Create invitations for VIEWER/EDITOR | Yes | Yes | No | No |
@@ -46,11 +48,24 @@ Primary endpoint groups:
 - `/persons`
 - `/relationships`
 - `/claims`
+- `/proposals`
+- `/persons/:personId/sources`
+- `/persons/:personId/media`
 - `/changes`
 - `/export/space`
 - `/spaces`, `/spaces/members`, and `/spaces/invitations`
 
 UUID response fields are explicit: `userId`, `spaceId`, `memberId`, `personId`, `relationshipId`, `claimId`, and `changeId`.
+
+Phase 3 core endpoints:
+
+- `GET /persons/duplicates?spaceId=...` — lists duplicate candidates.
+- `POST /persons/merge` — OWNER/ADMIN merges `sourcePersonId` into `targetPersonId` and audits the merge.
+- `GET /relationships/path?spaceId=...&fromPersonId=...&toPersonId=...` — returns the shortest relationship path.
+- `GET|POST /persons/:personId/sources` — reads or creates source/citation records for facts.
+- `GET|POST /persons/:personId/media` — reads or creates media metadata/URI records.
+- `GET|POST /proposals` — reads or creates edit proposals.
+- `POST /proposals/approve` and `POST /proposals/reject` — OWNER/ADMIN review proposal changes.
 
 ## Error envelope
 

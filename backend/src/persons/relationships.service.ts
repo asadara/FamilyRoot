@@ -84,6 +84,138 @@ export class RelationshipsService {
     });
   }
 
+  async findPath(spaceId: string, fromPersonId: string, toPersonId: string) {
+    const people = await this.personsRepo.find({
+      where: [
+        { spaceId, personId: fromPersonId, isDeleted: false },
+        { spaceId, personId: toPersonId, isDeleted: false },
+      ],
+      select: ['personId', 'fullName'],
+    });
+    if (people.length < 2 && fromPersonId !== toPersonId) {
+      throw new BadRequestException(
+        'Both people must exist in this Family Space',
+      );
+    }
+    if (fromPersonId === toPersonId) {
+      return {
+        found: true,
+        people: people,
+        edges: [],
+      };
+    }
+
+    const relationships = await this.relationsRepo.find({
+      where: { spaceId },
+      select: [
+        'relationshipId',
+        'type',
+        'fromPersonId',
+        'toPersonId',
+        'meta',
+        'createdAt',
+      ],
+    });
+    const personIds = new Set<string>();
+    relationships.forEach((rel) => {
+      personIds.add(rel.fromPersonId);
+      personIds.add(rel.toPersonId);
+    });
+    const personNames = await this.personsRepo.find({
+      where: [...personIds].map((personId) => ({
+        spaceId,
+        personId,
+        isDeleted: false,
+      })),
+      select: ['personId', 'fullName'],
+    });
+    const personById = new Map(
+      personNames.map((person) => [person.personId, person]),
+    );
+    const adjacency = new Map<
+      string,
+      Array<{
+        next: string;
+        relationship: RelationshipEntity;
+        direction: string;
+      }>
+    >();
+    const addEdge = (
+      from: string,
+      next: string,
+      relationship: RelationshipEntity,
+      direction: string,
+    ) => {
+      adjacency.set(from, [
+        ...(adjacency.get(from) ?? []),
+        { next, relationship, direction },
+      ]);
+    };
+    relationships.forEach((rel) => {
+      addEdge(rel.fromPersonId, rel.toPersonId, rel, 'FORWARD');
+      addEdge(rel.toPersonId, rel.fromPersonId, rel, 'REVERSE');
+    });
+
+    const queue = [fromPersonId];
+    const visited = new Set([fromPersonId]);
+    const previous = new Map<
+      string,
+      { personId: string; relationship: RelationshipEntity; direction: string }
+    >();
+
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      for (const edge of adjacency.get(current) ?? []) {
+        if (visited.has(edge.next)) continue;
+        visited.add(edge.next);
+        previous.set(edge.next, {
+          personId: current,
+          relationship: edge.relationship,
+          direction: edge.direction,
+        });
+        if (edge.next === toPersonId) queue.length = 0;
+        else queue.push(edge.next);
+      }
+    }
+
+    if (!previous.has(toPersonId)) {
+      return { found: false, people: [], edges: [] };
+    }
+
+    const pathPeople = [toPersonId];
+    const edges: Array<{
+      relationshipId: string;
+      type: RelationshipEntity['type'];
+      fromPersonId: string;
+      toPersonId: string;
+      meta: RelationshipEntity['meta'];
+      direction: string;
+    }> = [];
+    let cursor = toPersonId;
+    while (cursor !== fromPersonId) {
+      const prev = previous.get(cursor)!;
+      edges.unshift({
+        relationshipId: prev.relationship.relationshipId,
+        type: prev.relationship.type,
+        fromPersonId: prev.relationship.fromPersonId,
+        toPersonId: prev.relationship.toPersonId,
+        meta: prev.relationship.meta,
+        direction: prev.direction,
+      });
+      cursor = prev.personId;
+      pathPeople.unshift(cursor);
+    }
+
+    return {
+      found: true,
+      people: pathPeople.map((personId) => ({
+        personId,
+        fullName: personById.get(personId)?.fullName ?? personId,
+      })),
+      edges,
+    };
+  }
+
   async createSpouse(
     spaceId: string,
     personAId: string,

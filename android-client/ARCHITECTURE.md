@@ -55,11 +55,12 @@ Client saat ini telah menyelesaikan target arsitektur Fase 2 Android Modern, den
 Tambahan Fase 3 yang sudah aktif di Android:
 
 - Space Settings dapat membuat invitation code dan melakukan review/verify claim;
+- Space Settings dapat melakukan review proposal edit dan merge duplicate candidate;
 - People menyediakan filter status hidup dan pintu masuk ke Graph;
 - GraphScreen lama diaktifkan kembali lewat `TreeGraphScreen` + `TreeGraphViewModel`;
-- Person Detail menyediakan aksi claim diri, update status hidup, dan editor relasi parent/child/spouse berbasis daftar anggota.
+- Person Detail menyediakan aksi claim diri, update status hidup, editor relasi parent/child/spouse, source/media metadata, proposal notes, dan relationship path berbasis daftar anggota.
 
-Sisa pekerjaan Android berikutnya masuk fase lanjutan, terutama graph matang dan aksesibel, media/sumber fakta, duplicate/merge UX, relationship path, offline write, WorkManager sync persisten, serta release hardening.
+Sisa pekerjaan Android berikutnya masuk Fase 4, terutama offline write, WorkManager sync persisten, conflict resolution, export lanjutan, backup/restore, benchmark, dan release hardening.
 
 ## 3. Arsitektur Target
 
