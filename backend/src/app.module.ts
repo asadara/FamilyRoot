@@ -9,13 +9,14 @@ import { ChangesModule } from './changes/changes.module';
 import { ExportModule } from './export/export.module';
 import { AuthModule } from './auth/auth.module';
 import { ArchiveModule } from './archive/archive.module';
-import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtAuthGuard } from './auth/jwt-auth.guard';
 import { SpaceMemberGuard } from './common/space-member.guard';
 import { CommonModule } from './common/common.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ApiExceptionFilter } from './common/api-exception.filter';
+import { RequestObservabilityInterceptor } from './common/request-observability.interceptor';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { ApiExceptionFilter } from './common/api-exception.filter';
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useExisting: SpaceMemberGuard },
     { provide: APP_FILTER, useClass: ApiExceptionFilter },
+    { provide: APP_INTERCEPTOR, useClass: RequestObservabilityInterceptor },
   ],
 })
 export class AppModule {}

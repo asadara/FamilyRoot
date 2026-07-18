@@ -10,6 +10,7 @@ import com.example.familytreeplatform.models.MergePersonsRequest
 import com.example.familytreeplatform.models.ProposalItem
 import com.example.familytreeplatform.models.ReviewProposalRequest
 import com.example.familytreeplatform.models.VerifyClaimRequest
+import com.example.familytreeplatform.models.PortableDocument
 import com.example.familytreeplatform.repository.PersonRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -31,6 +32,12 @@ data class SpaceSettingsUiState(
     val claims: List<ClaimReviewItem> = emptyList(),
     val proposals: List<ProposalItem> = emptyList(),
     val duplicates: List<DuplicateGroup> = emptyList(),
+    val transferringData: Boolean = false,
+    val pendingDocument: PortableDocument? = null,
+    val transferMessage: String? = null,
+    val clearingOfflineData: Boolean = false,
+    val showClearOfflineConfirmation: Boolean = false,
+    val privacyMessage: String? = null,
     val error: String? = null
 )
 
@@ -168,6 +175,134 @@ class SpaceSettingsViewModel(
                 }
                 .onFailure { error ->
                     _uiState.update { it.copy(merging = false, error = error.message) }
+                }
+        }
+    }
+
+    fun prepareGedcomExport() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(transferringData = true, error = null, transferMessage = null) }
+            repository.exportGedcom(spaceId)
+                .onSuccess { document ->
+                    _uiState.update {
+                        it.copy(
+                            transferringData = false,
+                            pendingDocument = PortableDocument(
+                                document.fileName,
+                                document.mimeType,
+                                document.content,
+                                "GEDCOM"
+                            )
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(transferringData = false, error = error.message) }
+                }
+        }
+    }
+
+    fun prepareBackupExport() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(transferringData = true, error = null, transferMessage = null) }
+            repository.createBackup(spaceId)
+                .onSuccess { content ->
+                    _uiState.update {
+                        it.copy(
+                            transferringData = false,
+                            pendingDocument = PortableDocument(
+                                "familyroot-backup.json",
+                                "application/json",
+                                content,
+                                "BACKUP"
+                            )
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(transferringData = false, error = error.message) }
+                }
+        }
+    }
+
+    fun documentHandled(saved: Boolean) {
+        _uiState.update {
+            it.copy(
+                pendingDocument = null,
+                transferMessage = if (saved) "File saved" else null
+            )
+        }
+    }
+
+    fun importGedcom(content: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(transferringData = true, error = null, transferMessage = null) }
+            repository.importGedcom(spaceId, content)
+                .onSuccess { result ->
+                    _uiState.update {
+                        it.copy(
+                            transferringData = false,
+                            transferMessage = "Imported ${result.personCount} people and ${result.relationshipCount} relationships"
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(transferringData = false, error = error.message) }
+                }
+        }
+    }
+
+    fun restoreBackup(content: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(transferringData = true, error = null, transferMessage = null) }
+            repository.restoreBackup(spaceId, content)
+                .onSuccess { result ->
+                    _uiState.update {
+                        it.copy(
+                            transferringData = false,
+                            transferMessage = "Restored ${result.personCount} people and ${result.relationshipCount} relationships"
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(transferringData = false, error = error.message) }
+                }
+        }
+    }
+
+    fun requestClearOfflineData() {
+        _uiState.update {
+            it.copy(showClearOfflineConfirmation = true, privacyMessage = null, error = null)
+        }
+    }
+
+    fun cancelClearOfflineData() {
+        _uiState.update { it.copy(showClearOfflineConfirmation = false) }
+    }
+
+    fun clearOfflineData() {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    showClearOfflineConfirmation = false,
+                    clearingOfflineData = true,
+                    privacyMessage = null,
+                    error = null
+                )
+            }
+            repository.clearOfflineSpaceData(spaceId)
+                .onSuccess {
+                    _uiState.update {
+                        it.copy(
+                            clearingOfflineData = false,
+                            privacyMessage = "Offline family data removed from this device"
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(clearingOfflineData = false, error = error.message)
+                    }
                 }
         }
     }

@@ -4,6 +4,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
+import { randomUUID } from 'node:crypto';
 
 describe('Phase 1 security contract (e2e)', () => {
   let app: INestApplication<App>;
@@ -35,7 +36,12 @@ describe('Phase 1 security contract (e2e)', () => {
   afterAll(async () => app.close());
 
   it('keeps health public but protects family data', async () => {
-    await request(app.getHttpServer()).get('/').expect(200);
+    const health = await request(app.getHttpServer())
+      .get('/health')
+      .set('x-request-id', 'phase4-health-check')
+      .expect(200);
+    expect(health.body.status).toBe('ok');
+    expect(health.headers['x-request-id']).toBe('phase4-health-check');
     await request(app.getHttpServer())
       .get('/persons')
       .query({ spaceId: '00000000-0000-4000-8000-000000000000' })
@@ -105,6 +111,55 @@ describe('Phase 1 security contract (e2e)', () => {
       })
       .expect(401)
       .expect(({ body }) => expect(body.code).toBe('UNAUTHENTICATED'));
+  });
+
+  it('rotates refresh tokens, detects replay, and revokes logout sessions', async () => {
+    const registered = await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({
+        email: 'refresh@example.test',
+        displayName: 'Refresh Test',
+        password: 'very-secure-refresh-password',
+      })
+      .expect(201);
+    expect(registered.body.refreshToken).toEqual(expect.any(String));
+    expect(registered.body.refreshExpiresIn).toBeGreaterThan(0);
+
+    const rotated = await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .send({ refreshToken: registered.body.refreshToken })
+      .expect(200);
+    expect(rotated.body.refreshToken).not.toBe(registered.body.refreshToken);
+    await request(app.getHttpServer())
+      .get('/auth/me')
+      .set('Authorization', `Bearer ${rotated.body.accessToken}`)
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .send({ refreshToken: registered.body.refreshToken })
+      .expect(401)
+      .expect(({ body }) => expect(body.code).toBe('UNAUTHENTICATED'));
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .send({ refreshToken: rotated.body.refreshToken })
+      .expect(401);
+
+    const loggedIn = await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({
+        email: 'refresh@example.test',
+        password: 'very-secure-refresh-password',
+      })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/auth/logout')
+      .send({ refreshToken: loggedIn.body.refreshToken })
+      .expect(204);
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .send({ refreshToken: loggedIn.body.refreshToken })
+      .expect(401);
   });
 
   it('creates a Family Space and OWNER membership atomically', async () => {
@@ -261,6 +316,159 @@ describe('Phase 1 security contract (e2e)', () => {
       .send({ spaceId, firstName: 'Budi', nickName: 'Budi', gender: 'MALE' })
       .expect(201);
 
+    const mutationId = randomUUID();
+    const lifeMutation = {
+      spaceId,
+      lifeStatus: 'UNKNOWN',
+      expectedVersion: firstPerson.body.version,
+      clientMutationId: mutationId,
+    };
+    const firstUpdate = await request(app.getHttpServer())
+      .patch(`/persons/${firstPerson.body.personId}/life`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(lifeMutation)
+      .expect(200);
+    expect(firstUpdate.body.version).toBe(firstPerson.body.version + 1);
+
+    await request(app.getHttpServer())
+      .patch(`/persons/${firstPerson.body.personId}/life`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(lifeMutation)
+      .expect(200)
+      .expect(({ body }) =>
+        expect(body.version).toBe(firstUpdate.body.version),
+      );
+
+    await request(app.getHttpServer())
+      .patch(`/persons/${firstPerson.body.personId}/life`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        ...lifeMutation,
+        clientMutationId: randomUUID(),
+        lifeStatus: 'ALIVE',
+      })
+      .expect(409)
+      .expect(({ body }) => {
+        expect(body.code).toBe('CONFLICT');
+        expect(body.details.version).toBe(firstUpdate.body.version);
+      });
+
+    const profileMutationId = randomUUID();
+    const profileMutation = {
+      spaceId,
+      birthPlace: 'Bandung',
+      notes: 'Profile edited from the offline-capable client',
+      expectedVersion: firstUpdate.body.version,
+      clientMutationId: profileMutationId,
+    };
+    const profileUpdate = await request(app.getHttpServer())
+      .patch(`/persons/${firstPerson.body.personId}/profile`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(profileMutation)
+      .expect(200);
+    expect(profileUpdate.body).toEqual(
+      expect.objectContaining({
+        birthPlace: 'Bandung',
+        notes: profileMutation.notes,
+        version: firstUpdate.body.version + 1,
+      }),
+    );
+
+    await request(app.getHttpServer())
+      .patch(`/persons/${firstPerson.body.personId}/profile`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(profileMutation)
+      .expect(200)
+      .expect(({ body }) =>
+        expect(body.version).toBe(profileUpdate.body.version),
+      );
+
+    await request(app.getHttpServer())
+      .patch(`/persons/${firstPerson.body.personId}/profile`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ ...profileMutation, clientMutationId: randomUUID() })
+      .expect(409)
+      .expect(({ body }) => {
+        expect(body.details).toEqual(
+          expect.objectContaining({
+            version: profileUpdate.body.version,
+            birthPlace: 'Bandung',
+            notes: profileMutation.notes,
+          }),
+        );
+      });
+
+    const child = await request(app.getHttpServer())
+      .post('/persons')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ spaceId, firstName: 'Child', nickName: 'Child', gender: 'MALE' })
+      .expect(201);
+    const parentMutation = {
+      spaceId,
+      parentId: firstPerson.body.personId,
+      childId: child.body.personId,
+      meta: 'BIOLOGICAL',
+      clientMutationId: randomUUID(),
+    };
+    const parentRelation = await request(app.getHttpServer())
+      .post('/persons/parent-child')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(parentMutation)
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/persons/parent-child')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(parentMutation)
+      .expect(201)
+      .expect(({ body }) =>
+        expect(body.relationshipId).toBe(parentRelation.body.relationshipId),
+      );
+
+    const spouse = await request(app.getHttpServer())
+      .post('/persons')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        spaceId,
+        firstName: 'Spouse',
+        nickName: 'Spouse',
+        gender: 'FEMALE',
+      })
+      .expect(201);
+    const spouseMutation = {
+      spaceId,
+      personAId: firstPerson.body.personId,
+      personBId: spouse.body.personId,
+      meta: 'MARRIED',
+      startDate: '2020-01-01',
+      clientMutationId: randomUUID(),
+    };
+    const spouseRelation = await request(app.getHttpServer())
+      .post('/relationships/spouse')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(spouseMutation)
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/relationships/spouse')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(spouseMutation)
+      .expect(201)
+      .expect(({ body }) =>
+        expect(body.relationshipId).toBe(spouseRelation.body.relationshipId),
+      );
+    await request(app.getHttpServer())
+      .get('/relationships')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .query({ spaceId })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ type: 'PARENT_CHILD' }),
+            expect.objectContaining({ type: 'SPOUSE' }),
+          ]),
+        );
+      });
+
     const secondSpace = await request(app.getHttpServer())
       .post('/spaces')
       .set('Authorization', `Bearer ${ownerToken}`)
@@ -284,6 +492,7 @@ describe('Phase 1 security contract (e2e)', () => {
         parentId: firstPerson.body.personId,
         childId: outsider.body.personId,
         meta: 'BIOLOGICAL',
+        clientMutationId: randomUUID(),
       })
       .expect(400)
       .expect(({ body }) => expect(body.code).toBe('VALIDATION_ERROR'));
@@ -309,5 +518,59 @@ describe('Phase 1 security contract (e2e)', () => {
       .set('Authorization', `Bearer ${ownerToken}`)
       .query({ spaceId })
       .expect(200);
+
+    const gedcom = await request(app.getHttpServer())
+      .get('/export/space/gedcom')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .query({ spaceId })
+      .expect(200);
+    expect(gedcom.body.content).toContain('0 HEAD');
+    expect(gedcom.body.content).toContain('1 CHIL');
+
+    const gedcomTarget = await request(app.getHttpServer())
+      .post('/spaces')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: 'GEDCOM Restore' })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/export/space/gedcom/import')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        spaceId: gedcomTarget.body.spaceId,
+        content: gedcom.body.content,
+      })
+      .expect(201)
+      .expect(({ body }) => expect(body.personCount).toBeGreaterThan(0));
+
+    const backup = await request(app.getHttpServer())
+      .get('/export/space/backup')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .query({ spaceId })
+      .expect(200);
+    expect(backup.body).toEqual(
+      expect.objectContaining({
+        format: 'familyroot-backup',
+        schemaVersion: 1,
+      }),
+    );
+    const backupTarget = await request(app.getHttpServer())
+      .post('/spaces')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: 'Backup Restore' })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/export/space/backup/restore')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ spaceId: backupTarget.body.spaceId, backup: backup.body })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body.personCount).toBe(backup.body.persons.length);
+        expect(body.relationshipCount).toBe(backup.body.relationships.length);
+      });
+    await request(app.getHttpServer())
+      .post('/export/space/backup/restore')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ spaceId: backupTarget.body.spaceId, backup: backup.body })
+      .expect(400);
   });
 });

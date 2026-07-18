@@ -6,5 +6,6 @@ data class CreateSpouseRequest(
     val personBId: String,
     val meta: String,
     val startDate: String,
-    val endDate: String? = null
+    val endDate: String? = null,
+    val clientMutationId: String = java.util.UUID.randomUUID().toString()
 )

@@ -14,6 +14,7 @@ import { CreatePersonDto } from './dto/create-person.dto';
 import { isUUID } from 'class-validator';
 import { AddParentChildDto } from './dto/add-parent-child.dto';
 import { UpdateLifeStatusDto } from './dto/update-life-status.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { DeletePersonDto } from './dto/delete-person.dto';
 import { MergePersonsDto } from './dto/merge-persons.dto';
 import { ActorUserId } from '../common/actor-user-id.decorator';
@@ -70,6 +71,7 @@ export class PersonsController {
       dto.childId,
       dto.meta,
       actorUserId,
+      dto.clientMutationId,
     );
   }
 
@@ -89,6 +91,29 @@ export class PersonsController {
       dto.lifeStatus,
       dto.deceasedAt ?? null,
       actorUserId,
+      dto.expectedVersion,
+      dto.clientMutationId,
+    );
+  }
+
+  @Patch(':personId/profile')
+  @SpaceRoles('OWNER', 'ADMIN', 'EDITOR')
+  updateProfile(
+    @Param('personId') personId: string,
+    @ActorUserId() actorUserId: string,
+    @Body() dto: UpdateProfileDto,
+  ) {
+    if (!isUUID(personId)) {
+      throw new BadRequestException('Invalid personId');
+    }
+    return this.personsService.updateProfile(
+      dto.spaceId,
+      personId,
+      dto.birthPlace,
+      dto.notes,
+      actorUserId,
+      dto.expectedVersion,
+      dto.clientMutationId,
     );
   }
 

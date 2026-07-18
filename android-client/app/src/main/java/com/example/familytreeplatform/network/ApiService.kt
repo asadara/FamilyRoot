@@ -15,6 +15,7 @@ import com.example.familytreeplatform.models.RelationItem
 import com.example.familytreeplatform.models.CreateSpouseRequest
 import com.example.familytreeplatform.models.SpouseResponse
 import com.example.familytreeplatform.models.UpdateLifeStatusRequest
+import com.example.familytreeplatform.models.UpdateProfileRequest
 import com.example.familytreeplatform.models.ExportSpaceResponse
 import com.example.familytreeplatform.models.DuplicateGroup
 import com.example.familytreeplatform.models.MediaItem
@@ -42,10 +43,21 @@ import com.example.familytreeplatform.models.CreateInvitationRequest
 import com.example.familytreeplatform.models.CreatedInvitation
 import com.example.familytreeplatform.models.AcceptInvitationRequest
 import com.example.familytreeplatform.models.InvitationPreview
+import com.example.familytreeplatform.models.RefreshTokenRequest
+import com.example.familytreeplatform.models.GedcomDocument
+import com.example.familytreeplatform.models.ImportGedcomRequest
+import com.example.familytreeplatform.models.ImportSummary
+import com.example.familytreeplatform.models.RestoreBackupRequest
 
 interface ApiService {
     @POST("auth/login")
     suspend fun login(@Body request: LoginRequest): Response<AuthResponse>
+
+    @POST("auth/refresh")
+    suspend fun refresh(@Body request: RefreshTokenRequest): Response<AuthResponse>
+
+    @POST("auth/logout")
+    suspend fun logout(@Body request: RefreshTokenRequest): Response<Unit>
 
     @POST("auth/register")
     suspend fun register(@Body request: RegisterRequest): Response<AuthResponse>
@@ -158,6 +170,24 @@ interface ApiService {
         @Body request: UpdateLifeStatusRequest
     ): Response<PersonResponse>
 
+    @PATCH("persons/{personId}/profile")
+    suspend fun updateProfile(
+        @Path("personId") personId: String,
+        @Body request: UpdateProfileRequest
+    ): Response<PersonResponse>
+
     @GET("export/space")
     suspend fun exportSpace(@Query("spaceId") spaceId: String): Response<ExportSpaceResponse>
+
+    @GET("export/space/gedcom")
+    suspend fun exportGedcom(@Query("spaceId") spaceId: String): Response<GedcomDocument>
+
+    @POST("export/space/gedcom/import")
+    suspend fun importGedcom(@Body request: ImportGedcomRequest): Response<ImportSummary>
+
+    @GET("export/space/backup")
+    suspend fun createBackup(@Query("spaceId") spaceId: String): Response<Map<String, Any?>>
+
+    @POST("export/space/backup/restore")
+    suspend fun restoreBackup(@Body request: RestoreBackupRequest): Response<ImportSummary>
 }

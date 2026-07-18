@@ -1,7 +1,7 @@
 # Android Client Architecture
 
 > **Status:** Aktif — arsitektur teknis Android  
-> **Diperbarui:** 13 Juli 2026  
+> **Diperbarui:** 18 Juli 2026
 > **Dokumen induk:** [`../PROJECT_BLUEPRINT.md`](../PROJECT_BLUEPRINT.md)
 
 Dokumen ini menjelaskan arsitektur teknis Android untuk Family Tree Platform. Visi produk, scope, prioritas, roadmap, dan Definition of Done lintas platform ditentukan oleh `PROJECT_BLUEPRINT.md`. Jika terdapat pertentangan, blueprint adalah sumber yang berlaku.
@@ -57,10 +57,10 @@ Tambahan Fase 3 yang sudah aktif di Android:
 - Space Settings dapat membuat invitation code dan melakukan review/verify claim;
 - Space Settings dapat melakukan review proposal edit dan merge duplicate candidate;
 - People menyediakan filter status hidup dan pintu masuk ke Graph;
-- GraphScreen lama diaktifkan kembali lewat `TreeGraphScreen` + `TreeGraphViewModel`;
+- GraphScreen lama diaktifkan kembali lewat `TreeGraphScreen` + `TreeGraphViewModel`, memilih pusat awal yang terhubung, serta membedakan garis lineage `PARENT_CHILD` dari garis horizontal pasangan agar anak biologis dan menantu tidak tertukar;
 - Person Detail menyediakan aksi claim diri, update status hidup, editor relasi parent/child/spouse, source/media metadata, proposal notes, dan relationship path berbasis daftar anggota.
 
-Sisa pekerjaan Android berikutnya masuk Fase 4, terutama offline write, WorkManager sync persisten, conflict resolution, export lanjutan, backup/restore, benchmark, dan release hardening.
+Fase 4 berstatus `DONE`. Antrean offline persisten dan conflict resolution mencakup update status hidup, profil non-lineage (`birthPlace`, `notes`), serta pembuatan relasi parent-child/spouse. Room v4 menjadi cache graph, validasi lokal menjaga cycle dan batas orang tua, sedangkan edge optimistis yang ditolak server di-rollback. Refresh-token rotation dan penyimpanan Android Keystore memungkinkan session serta background sync pulih setelah process restart. Data portability mencakup GEDCOM 5.5.1, backup JSON ber-schema, restore ke space kosong, serta renderer graph PDF/PNG. Renderer export menyusun pasangan sebagai satu unit pada generasi yang sama, memakai garis spouse horizontal, dan menggabungkan garis dua orang tua sebelum menuju anak agar lineage tidak bersilangan dengan kartu. Penutup fase menambahkan privacy clear yang menjaga mutation queue, menonaktifkan Android system backup, benchmark di CI/perangkat, baseline profile, R8/resource shrinking, dan signed-release workflow tanpa menyimpan secret di Git.
 
 ## 3. Arsitektur Target
 
@@ -194,13 +194,42 @@ Ketentuan:
 - Version dari backend digunakan untuk mendeteksi conflict.
 - Conflict tidak diselesaikan diam-diam jika berpotensi menghilangkan kontribusi keluarga.
 
+Slice offline-write yang sudah aktif:
+
+- Room v2 menyimpan `offline_mutations` dan mempertahankan cache person melalui migrasi eksplisit v1→v2;
+- update status hidup langsung diterapkan ke cache lokal, kemudian WorkManager mengirim antrean saat jaringan tersedia;
+- backend memvalidasi `expectedVersion` dan menyimpan hasil berdasarkan `clientMutationId` agar retry identik tidak menggandakan mutasi/audit;
+- HTTP 409 membawa snapshot server dan Person Detail menampilkan pilihan mempertahankan perubahan lokal atau memakai versi server;
+- antrean bertahan melewati process death; refresh token terenkripsi memungkinkan WorkManager memperoleh access token baru tanpa login manual;
+- Room v3 menambahkan `birthPlace` dan `notes` ke cache person; kedua field dapat diedit secara optimistis dan disinkronkan melalui endpoint profile ber-version/idempoten;
+- antrean status hidup dan profil dipisah berdasarkan jenis mutasi sehingga perubahan yang belum tersinkron tidak saling menghapus;
+- setelah satu mutasi sukses, mutasi pending lain untuk person yang sama di-rebase ke version server terbaru; Person Detail menampilkan status dan resolusi konflik untuk setiap item antrean;
+- Room v4 menyimpan cache graph parent-child dan spouse; create relation masuk antrean idempoten dan tampil optimistis;
+- validasi lokal mencegah self-link, duplicate, cycle, pasangan tidak valid, dan lebih dari dua orang tua biologis sebelum queue; backend tetap memvalidasi ulang sebagai source of truth;
+- jika backend menolak relasi karena graph server sudah berubah, edge optimistis di-rollback dan item ditandai `FAILED` agar garis lineage yang tidak sah tidak tertinggal.
+
+### Session persisten Fase 4
+
+- access token berumur pendek dan hanya berada di memori;
+- opaque refresh token berotasi disimpan sebagai ciphertext AES-256-GCM, sedangkan key enkripsi berada non-exportable di Android Keystore;
+- file ciphertext session dikecualikan dari cloud backup dan device transfer;
+- satu refresh dikoordinasikan saat beberapa request menerima `401`, lalu request diulang memakai access token baru;
+- startup memulihkan session dan Family Space aktif, sedangkan logout mencoba revoke server sebelum membersihkan seluruh state lokal;
+- bila server tidak tersedia saat startup, pengguna masih dapat membuka cache offline dan refresh dicoba kembali ketika request online atau worker berjalan.
+
 ## 7. Networking dan Kontrak API
 
 Kontrak endpoint tidak disalin secara manual ke dokumen ini agar tidak menjadi usang. Kontrak kanonik harus dihasilkan atau divalidasi dari backend melalui OpenAPI dan diuji dengan contract test.
 
 Ketentuan client:
 
-- development emulator menggunakan host `http://10.0.2.2:3001/`;
+- endpoint debug dibaca dari Gradle property `familyTreeApiBaseUrl` atau environment
+  variable `FAMILY_TREE_API_BASE_URL`, dengan default emulator
+  `http://10.0.2.2:3001/`; physical-device test memakai `127.0.0.1` bersama
+  ADB reverse tanpa mengubah source;
+- instalasi APK, instrumentation, logcat, dan smoke test pada perangkat fisik wajib
+  menargetkan serial USB. Wireless debugging/Wireless ADB tidak digunakan sebagai
+  kebijakan keamanan proyek;
 - base URL selalu berasal dari build/environment configuration dan memiliki trailing slash;
 - device fisik menggunakan endpoint environment yang dikonfigurasi, bukan perubahan source manual;
 - production wajib menggunakan HTTPS;
@@ -276,6 +305,13 @@ Pesan UI harus user-friendly dan tidak menampilkan stack trace, raw response sen
 - ukur startup, scrolling daftar, dan membuka pohon menggunakan Macrobenchmark;
 - sediakan Baseline Profile untuk critical user journeys;
 - optimasi hanya dinyatakan berhasil setelah diukur.
+
+Baseline penutupan Fase 4 pada SM-T225: pemilihan pusat graph 10.000 anggota 260 ms
+pada JVM gate, PNG 60 anggota 403 ms pada device (budget 8 detik), cold start
+3.823–3.854 detik (budget 5 detik), dan release AAB 2.76 MB (budget 25 MiB).
+Baseline Profile sudah terkemas di AAB. Macrobenchmark startup/list/tree tetap menjadi
+alat pengukuran berkelanjutan ketika runner emulator terkontrol tersedia; regresi saat
+ini dicegah oleh unit budget, connected-device budget, dan release-size gate.
 
 ## 11. Definition of Done Android Modern
 

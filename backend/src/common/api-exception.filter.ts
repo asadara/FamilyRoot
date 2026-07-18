@@ -31,10 +31,15 @@ export class ApiExceptionFilter implements ExceptionFilter {
       typeof payload === 'string'
         ? payload
         : (payload as { message?: string | string[] }).message;
+    const details =
+      typeof payload === 'object' && payload !== null
+        ? (payload as { details?: unknown }).details
+        : undefined;
     response.status(status).json({
       statusCode: status,
       code: codes[status] ?? 'INTERNAL_ERROR',
       message: rawMessage ?? 'Request failed',
+      ...(details === undefined ? {} : { details }),
       timestamp: new Date().toISOString(),
     });
   }

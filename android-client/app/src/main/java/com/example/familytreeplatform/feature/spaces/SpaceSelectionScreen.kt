@@ -135,7 +135,10 @@ fun SpaceSelectionScreen(repository: PersonRepository, modifier: Modifier = Modi
                 loading = false
             }
         }, modifier = Modifier.padding(top = 8.dp)) { Text(stringResource(R.string.create_space)) }
-        Button(onClick = { SessionStore.clear() }, modifier = Modifier.padding(top = 8.dp)) { Text(stringResource(R.string.sign_out)) }
+        Button(
+            onClick = { scope.launch { repository.logout() } },
+            modifier = Modifier.padding(top = 8.dp)
+        ) { Text(stringResource(R.string.sign_out)) }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
     }
 }

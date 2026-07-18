@@ -4,6 +4,7 @@ import {
   Entity,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
+  VersionColumn,
 } from 'typeorm';
 
 @Entity('persons')
@@ -59,7 +60,7 @@ export class PersonEntity {
   @Column({ type: 'date', nullable: true })
   deceasedAt!: string | null;
 
-  @Column({ type: 'int', default: 1 })
+  @VersionColumn({ type: 'int', default: 1 })
   version!: number;
 
   @Column({ type: 'boolean', default: false })

@@ -12,4 +12,7 @@ export class AddParentChildDto {
 
   @IsIn(['BIOLOGICAL', 'ADOPTIVE', 'STEP'])
   meta!: 'BIOLOGICAL' | 'ADOPTIVE' | 'STEP';
+
+  @IsUUID()
+  clientMutationId!: string;
 }

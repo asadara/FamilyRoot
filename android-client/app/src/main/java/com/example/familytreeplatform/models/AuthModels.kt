@@ -5,10 +5,13 @@ data class RegisterRequest(val email: String, val displayName: String, val passw
 data class AuthUser(val userId: String, val email: String?, val displayName: String)
 data class AuthResponse(
     val accessToken: String,
+    val refreshToken: String,
     val tokenType: String,
     val expiresIn: Int,
+    val refreshExpiresIn: Int,
     val user: AuthUser
 )
+data class RefreshTokenRequest(val refreshToken: String)
 data class FamilySpace(
     val spaceId: String,
     val name: String,

@@ -15,8 +15,8 @@ import com.example.familytreeplatform.models.RelationshipPathResponse
 import com.example.familytreeplatform.models.RelationsResponse
 import com.example.familytreeplatform.models.SourceItem
 import com.example.familytreeplatform.models.SourceRequest
-import com.example.familytreeplatform.models.UpdateLifeStatusRequest
 import com.example.familytreeplatform.repository.PersonRepository
+import com.example.familytreeplatform.data.local.OfflineMutationEntity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,6 +35,7 @@ data class PersonDetailUiState(
     val claiming: Boolean = false,
     val updating: Boolean = false,
     val claim: ClaimResponse? = null,
+    val offlineMutations: List<OfflineMutationEntity> = emptyList(),
     val message: String? = null,
     val error: String? = null
 )
@@ -56,6 +57,11 @@ class PersonDetailViewModel(
         viewModelScope.launch {
             repository.observePersons(spaceId).collectLatest { people ->
                 _uiState.update { it.copy(people = people) }
+            }
+        }
+        viewModelScope.launch {
+            repository.observeOfflineMutations(personId).collectLatest { mutations ->
+                _uiState.update { it.copy(offlineMutations = mutations) }
             }
         }
         viewModelScope.launch {
@@ -182,17 +188,48 @@ class PersonDetailViewModel(
     fun updateLifeStatus(lifeStatus: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(updating = true, error = null, message = null) }
-            repository.updateLifeStatus(
-                personId,
-                UpdateLifeStatusRequest(spaceId = spaceId, lifeStatus = lifeStatus)
-            ).onSuccess {
-                repository.listPersons(spaceId)
+            repository.queueLifeStatusUpdate(spaceId, personId, lifeStatus).onSuccess {
                 _uiState.update {
-                    it.copy(updating = false, message = "Life status updated")
+                    it.copy(updating = false, message = "Saved locally; sync queued")
                 }
             }.onFailure { error ->
                 _uiState.update { it.copy(updating = false, error = error.message) }
             }
+        }
+    }
+
+    fun updateProfile(birthPlace: String, notes: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(updating = true, error = null, message = null) }
+            repository.queueProfileUpdate(spaceId, personId, birthPlace, notes).onSuccess {
+                _uiState.update {
+                    it.copy(updating = false, message = "Profile saved locally; sync queued")
+                }
+            }.onFailure { error ->
+                _uiState.update { it.copy(updating = false, error = error.message) }
+            }
+        }
+    }
+
+    fun keepLocalConflict(mutationId: String) {
+        val mutation = _uiState.value.offlineMutations.firstOrNull { it.mutationId == mutationId } ?: return
+        val serverVersion = mutation.conflictVersion ?: return
+        viewModelScope.launch {
+            repository.keepLocalConflict(mutation.mutationId, serverVersion)
+        }
+    }
+
+    fun useServerConflict(mutationId: String) {
+        val mutation = _uiState.value.offlineMutations.firstOrNull { it.mutationId == mutationId } ?: return
+        viewModelScope.launch {
+            repository.useServerConflict(mutation)
+        }
+    }
+
+    fun retryFailedSync(mutationId: String) {
+        val mutation = _uiState.value.offlineMutations.firstOrNull { it.mutationId == mutationId } ?: return
+        viewModelScope.launch {
+            repository.retryFailedMutation(mutation.mutationId, mutation.baseVersion)
         }
     }
 
@@ -207,16 +244,17 @@ class PersonDetailViewModel(
     private fun addParentChild(parentId: String, childId: String, success: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(updating = true, error = null, message = null) }
-            repository.addParentChild(
+            repository.queueParentChild(
                 ParentChildRequest(
                     spaceId = spaceId,
                     parentId = parentId,
                     childId = childId,
                     meta = "BIOLOGICAL"
-                )
+                ),
+                focusPersonId = personId
             ).onSuccess {
                 refreshRelations()
-                _uiState.update { it.copy(updating = false, message = success) }
+                _uiState.update { it.copy(updating = false, message = "$success locally; sync queued") }
             }.onFailure { error ->
                 _uiState.update { it.copy(updating = false, error = error.message) }
             }
@@ -226,17 +264,18 @@ class PersonDetailViewModel(
     fun addSpouse(spouseId: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(updating = true, error = null, message = null) }
-            repository.createSpouse(
+            repository.queueSpouse(
                 CreateSpouseRequest(
                     spaceId = spaceId,
                     personAId = personId,
                     personBId = spouseId,
                     meta = "MARRIED",
                     startDate = "2020-01-01"
-                )
+                ),
+                focusPersonId = personId
             ).onSuccess {
                 refreshRelations()
-                _uiState.update { it.copy(updating = false, message = "Spouse added") }
+                _uiState.update { it.copy(updating = false, message = "Spouse saved locally; sync queued") }
             }.onFailure { error ->
                 _uiState.update { it.copy(updating = false, error = error.message) }
             }

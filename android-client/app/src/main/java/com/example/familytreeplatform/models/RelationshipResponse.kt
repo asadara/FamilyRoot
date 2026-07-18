@@ -5,5 +5,6 @@ data class RelationshipResponse(
     val type: String,
     val fromPersonId: String,
     val toPersonId: String,
-    val meta: String
+    val meta: String,
+    val createdAt: String? = null
 )

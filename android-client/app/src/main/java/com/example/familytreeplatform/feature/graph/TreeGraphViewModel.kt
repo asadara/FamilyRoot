@@ -37,10 +37,20 @@ class TreeGraphViewModel(
         viewModelScope.launch {
             _uiState.update { it.copy(loading = true, error = null) }
             val peopleResult = repository.listPersons(spaceId)
-            val exportResult = repository.exportSpace(spaceId)
+            val relationshipsResult = repository.listRelationships(spaceId)
             val people = peopleResult.getOrNull().orEmpty()
-            val relationships = exportResult.getOrNull()?.relationships.orEmpty()
-            val center = _uiState.value.centerPersonId ?: people.firstOrNull()?.personId
+            val relationships = relationshipsResult.getOrNull().orEmpty().map { relationship ->
+                ExportRelationship(
+                    relationshipId = relationship.relationshipId,
+                    type = relationship.type,
+                    fromPersonId = relationship.fromPersonId,
+                    toPersonId = relationship.toPersonId,
+                    meta = relationship.meta,
+                    startDate = relationship.startDate,
+                    endDate = relationship.endDate,
+                    createdAt = relationship.createdAt
+                )
+            }
 
             if (peopleResult.isFailure) {
                 _uiState.update {
@@ -48,12 +58,15 @@ class TreeGraphViewModel(
                 }
                 return@launch
             }
-            if (exportResult.isFailure) {
+            if (relationshipsResult.isFailure) {
                 _uiState.update {
-                    it.copy(loading = false, error = exportResult.exceptionOrNull()?.message)
+                    it.copy(loading = false, error = relationshipsResult.exceptionOrNull()?.message)
                 }
                 return@launch
             }
+
+            val center = _uiState.value.centerPersonId
+                ?: chooseInitialCenterPersonId(people, relationships)
 
             _uiState.update {
                 it.copy(
@@ -89,4 +102,40 @@ class TreeGraphViewModel(
             return TreeGraphViewModel(spaceId, repository) as T
         }
     }
+}
+
+/**
+ * Opens the graph on the most connected family member so disconnected records
+ * (for example a duplicate candidate) do not look like an empty family tree.
+ */
+internal fun chooseInitialCenterPersonId(
+    persons: List<PersonListItem>,
+    relationships: List<ExportRelationship>
+): String? {
+    if (persons.isEmpty()) return null
+
+    val availableIds = persons.mapTo(mutableSetOf()) { it.personId }
+    val connectionCount = mutableMapOf<String, Int>()
+    val hasParent = mutableSetOf<String>()
+    val hasChild = mutableSetOf<String>()
+    relationships.forEach { relationship ->
+        if (relationship.fromPersonId in availableIds && relationship.toPersonId in availableIds) {
+            connectionCount[relationship.fromPersonId] =
+                connectionCount.getOrDefault(relationship.fromPersonId, 0) + 1
+            connectionCount[relationship.toPersonId] =
+                connectionCount.getOrDefault(relationship.toPersonId, 0) + 1
+            if (relationship.type == "PARENT_CHILD") {
+                hasChild += relationship.fromPersonId
+                hasParent += relationship.toPersonId
+            }
+        }
+    }
+
+    return persons.maxWithOrNull(
+        compareBy<PersonListItem> {
+            val generationBridgeBonus = if (it.personId in hasParent && it.personId in hasChild) 100 else 0
+            generationBridgeBonus + connectionCount.getOrDefault(it.personId, 0)
+        }
+            .thenByDescending { it.createdAt }
+    )?.personId
 }

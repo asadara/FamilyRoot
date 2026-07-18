@@ -18,6 +18,8 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
+      - run: npm audit --omit=dev --audit-level=high
+      - run: npm run lint:check
       - run: npm run build
       - run: npm test -- --runInBand
       - run: npm run test:e2e
@@ -39,4 +41,11 @@ jobs:
           cache: gradle
       - uses: android-actions/setup-android@v3
       - run: chmod +x gradlew
-      - run: ./gradlew assembleDebug testDebugUnitTest
+      - run: ./gradlew lintDebug testDebugUnitTest assembleDebug bundleRelease -PfamilyTreeReleaseApiBaseUrl=https://ci.familyroot.invalid/
+      - name: Enforce release bundle size budget
+        run: test $(stat -c%s app/build/outputs/bundle/release/app-release.aab) -le 26214400
+      - uses: actions/upload-artifact@v4
+        with:
+          name: familyroot-unsigned-release
+          path: android-client/app/build/outputs/bundle/release/app-release.aab
+          if-no-files-found: error

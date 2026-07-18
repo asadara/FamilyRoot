@@ -18,6 +18,7 @@ data class PersonResponse(
     val lifeStatus: String?,
     val deceasedAt: String?,
     val notes: String?,
+    val version: Int,
     val createdAt: String,
     val updatedAt: String
 )

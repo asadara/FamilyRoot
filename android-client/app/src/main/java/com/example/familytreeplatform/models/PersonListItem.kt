@@ -7,5 +7,8 @@ data class PersonListItem(
     val lifeStatus: String,
     val deceasedAt: String? = null,
     val birthDate: String? = null,
-    val gender: String? = null
+    val birthPlace: String? = null,
+    val gender: String? = null,
+    val notes: String? = null,
+    val version: Int = 1
 )

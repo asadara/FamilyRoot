@@ -10,6 +10,7 @@ import { PersonEntity } from './person.entity';
 import { RelationshipEntity } from './relationship.entity';
 import { ChangeLogEntity } from '../changes/change-log.entity';
 import { databaseErrorMessage } from '../common/database-error';
+import { ClientMutationEntity } from './client-mutation.entity';
 
 @Injectable()
 export class PersonsService {
@@ -144,7 +145,10 @@ export class PersonsService {
         'lifeStatus',
         'deceasedAt',
         'birthDate',
+        'birthPlace',
         'gender',
+        'notes',
+        'version',
       ],
     });
   }
@@ -284,7 +288,29 @@ export class PersonsService {
     childId: string,
     meta: 'BIOLOGICAL' | 'ADOPTIVE' | 'STEP',
     actorUserId: string,
+    clientMutationId: string,
   ) {
+    const requestFingerprint = JSON.stringify({
+      spaceId,
+      parentId,
+      childId,
+      meta,
+    });
+    const priorMutation = await this.personsRepo.manager.findOne(
+      ClientMutationEntity,
+      { where: { clientMutationId } },
+    );
+    if (priorMutation) {
+      if (
+        priorMutation.actorUserId !== actorUserId ||
+        priorMutation.requestFingerprint !== requestFingerprint
+      ) {
+        throw new ConflictException(
+          'clientMutationId was already used for another mutation',
+        );
+      }
+      return JSON.parse(priorMutation.responseJson) as RelationshipEntity;
+    }
     if (parentId === childId) {
       throw new BadRequestException(
         'Parent and child cannot be the same person',
@@ -338,6 +364,16 @@ export class PersonsService {
             afterJson: JSON.stringify(savedRelation),
           }),
         );
+        await manager.save(
+          manager.create(ClientMutationEntity, {
+            clientMutationId,
+            actorUserId,
+            spaceId,
+            operation: 'ADD_PARENT_CHILD',
+            requestFingerprint,
+            responseJson: JSON.stringify(savedRelation),
+          }),
+        );
         return savedRelation;
       });
     } catch (error: unknown) {
@@ -387,77 +423,286 @@ export class PersonsService {
     lifeStatus: 'ALIVE' | 'DECEASED' | 'UNKNOWN',
     deceasedAt?: string | null,
     actorUserId?: string,
+    expectedVersion?: number,
+    clientMutationId?: string,
   ) {
-    const person = await this.personsRepo.findOneBy({ personId, spaceId });
-    if (!person) {
-      throw new NotFoundException('Person not found');
+    if (!actorUserId || !expectedVersion || !clientMutationId) {
+      throw new BadRequestException(
+        'Mutation identity and expectedVersion are required',
+      );
     }
 
-    const beforePerson = JSON.stringify(person);
-
-    const effectiveDeceasedAt =
-      lifeStatus === 'DECEASED'
-        ? (deceasedAt ?? new Date().toISOString().slice(0, 10))
-        : null;
-
-    person.lifeStatus = lifeStatus;
-    person.deceasedAt = effectiveDeceasedAt;
-
-    const savedPerson = await this.personsRepo.save(person);
-
-    await this.changeRepo.save({
+    const requestFingerprint = JSON.stringify({
       spaceId,
-      actorUserId: actorUserId ?? 'SYSTEM',
-      entityType: 'PERSON',
-      entityId: savedPerson.personId,
-      operation: 'UPDATE',
-      note: 'Update life status',
-      beforeJson: beforePerson,
-      afterJson: JSON.stringify(savedPerson),
+      personId,
+      lifeStatus,
+      deceasedAt: deceasedAt ?? null,
+      expectedVersion,
     });
 
-    if (lifeStatus === 'DECEASED') {
-      const endDate =
-        effectiveDeceasedAt ?? new Date().toISOString().slice(0, 10);
-
-      const spouses = await this.relationsRepo.find({
-        where: [
-          {
-            spaceId,
-            type: 'SPOUSE',
-            fromPersonId: personId,
-            meta: 'MARRIED',
-            endDate: IsNull(),
-          },
-          {
-            spaceId,
-            type: 'SPOUSE',
-            toPersonId: personId,
-            meta: 'MARRIED',
-            endDate: IsNull(),
-          },
-        ],
+    return this.personsRepo.manager.transaction(async (manager) => {
+      const priorMutation = await manager.findOne(ClientMutationEntity, {
+        where: { clientMutationId },
       });
+      if (priorMutation) {
+        if (
+          priorMutation.actorUserId !== actorUserId ||
+          priorMutation.requestFingerprint !== requestFingerprint
+        ) {
+          throw new ConflictException(
+            'clientMutationId was already used for another mutation',
+          );
+        }
+        return JSON.parse(priorMutation.responseJson) as PersonEntity;
+      }
 
-      for (const spouse of spouses) {
-        const beforeRel = JSON.stringify(spouse);
-        spouse.meta = 'WIDOWED';
-        spouse.endDate = endDate;
-
-        const savedRel = await this.relationsRepo.save(spouse);
-        await this.changeRepo.save({
-          spaceId,
-          actorUserId: actorUserId ?? 'SYSTEM',
-          entityType: 'RELATIONSHIP',
-          entityId: savedRel.relationshipId,
-          operation: 'UPDATE',
-          note: 'Auto-update spouse to widowed',
-          beforeJson: beforeRel,
-          afterJson: JSON.stringify(savedRel),
+      const person = await manager.findOneBy(PersonEntity, {
+        personId,
+        spaceId,
+      });
+      if (!person) {
+        throw new NotFoundException('Person not found');
+      }
+      if (person.version !== expectedVersion) {
+        throw new ConflictException({
+          message: 'Person was changed by another contributor',
+          details: {
+            personId: person.personId,
+            version: person.version,
+            lifeStatus: person.lifeStatus,
+            deceasedAt: person.deceasedAt,
+            updatedAt: person.updatedAt,
+          },
         });
       }
-    }
 
-    return savedPerson;
+      const beforePerson = JSON.stringify(person);
+      const effectiveDeceasedAt =
+        lifeStatus === 'DECEASED'
+          ? (deceasedAt ?? new Date().toISOString().slice(0, 10))
+          : null;
+
+      const updateResult = await manager
+        .createQueryBuilder()
+        .update(PersonEntity)
+        .set({
+          lifeStatus,
+          deceasedAt: effectiveDeceasedAt,
+          version: () => 'version + 1',
+        })
+        .where('personId = :personId', { personId })
+        .andWhere('spaceId = :spaceId', { spaceId })
+        .andWhere('version = :expectedVersion', { expectedVersion })
+        .execute();
+      if (updateResult.affected !== 1) {
+        const current = await manager.findOneBy(PersonEntity, {
+          personId,
+          spaceId,
+        });
+        throw new ConflictException({
+          message: 'Person was changed by another contributor',
+          details: current
+            ? {
+                personId: current.personId,
+                version: current.version,
+                lifeStatus: current.lifeStatus,
+                deceasedAt: current.deceasedAt,
+                updatedAt: current.updatedAt,
+              }
+            : null,
+        });
+      }
+
+      const savedPerson = await manager.findOneByOrFail(PersonEntity, {
+        personId,
+        spaceId,
+      });
+      await manager.save(
+        manager.create(ChangeLogEntity, {
+          spaceId,
+          actorUserId,
+          entityType: 'PERSON',
+          entityId: savedPerson.personId,
+          operation: 'UPDATE',
+          note: 'Update life status',
+          beforeJson: beforePerson,
+          afterJson: JSON.stringify(savedPerson),
+        }),
+      );
+
+      if (lifeStatus === 'DECEASED') {
+        const endDate =
+          effectiveDeceasedAt ?? new Date().toISOString().slice(0, 10);
+        const spouses = await manager.find(RelationshipEntity, {
+          where: [
+            {
+              spaceId,
+              type: 'SPOUSE',
+              fromPersonId: personId,
+              meta: 'MARRIED',
+              endDate: IsNull(),
+            },
+            {
+              spaceId,
+              type: 'SPOUSE',
+              toPersonId: personId,
+              meta: 'MARRIED',
+              endDate: IsNull(),
+            },
+          ],
+        });
+        for (const spouse of spouses) {
+          const beforeRel = JSON.stringify(spouse);
+          spouse.meta = 'WIDOWED';
+          spouse.endDate = endDate;
+          const savedRel = await manager.save(spouse);
+          await manager.save(
+            manager.create(ChangeLogEntity, {
+              spaceId,
+              actorUserId,
+              entityType: 'RELATIONSHIP',
+              entityId: savedRel.relationshipId,
+              operation: 'UPDATE',
+              note: 'Auto-update spouse to widowed',
+              beforeJson: beforeRel,
+              afterJson: JSON.stringify(savedRel),
+            }),
+          );
+        }
+      }
+
+      await manager.save(
+        manager.create(ClientMutationEntity, {
+          clientMutationId,
+          actorUserId,
+          spaceId,
+          operation: 'UPDATE_LIFE_STATUS',
+          requestFingerprint,
+          responseJson: JSON.stringify(savedPerson),
+        }),
+      );
+      return savedPerson;
+    });
+  }
+
+  async updateProfile(
+    spaceId: string,
+    personId: string,
+    birthPlace: string,
+    notes: string,
+    actorUserId: string,
+    expectedVersion: number,
+    clientMutationId: string,
+  ) {
+    const normalizedBirthPlace = birthPlace.trim() || null;
+    const normalizedNotes = notes.trim() || null;
+    const requestFingerprint = JSON.stringify({
+      spaceId,
+      personId,
+      birthPlace: normalizedBirthPlace,
+      notes: normalizedNotes,
+      expectedVersion,
+    });
+
+    return this.personsRepo.manager.transaction(async (manager) => {
+      const priorMutation = await manager.findOne(ClientMutationEntity, {
+        where: { clientMutationId },
+      });
+      if (priorMutation) {
+        if (
+          priorMutation.actorUserId !== actorUserId ||
+          priorMutation.requestFingerprint !== requestFingerprint
+        ) {
+          throw new ConflictException(
+            'clientMutationId was already used for another mutation',
+          );
+        }
+        return JSON.parse(priorMutation.responseJson) as PersonEntity;
+      }
+
+      const person = await manager.findOneBy(PersonEntity, {
+        personId,
+        spaceId,
+      });
+      if (!person) {
+        throw new NotFoundException('Person not found');
+      }
+      if (person.version !== expectedVersion) {
+        throw new ConflictException({
+          message: 'Person was changed by another contributor',
+          details: {
+            personId: person.personId,
+            version: person.version,
+            lifeStatus: person.lifeStatus,
+            deceasedAt: person.deceasedAt,
+            birthPlace: person.birthPlace,
+            notes: person.notes,
+            updatedAt: person.updatedAt,
+          },
+        });
+      }
+
+      const beforePerson = JSON.stringify(person);
+      const updateResult = await manager
+        .createQueryBuilder()
+        .update(PersonEntity)
+        .set({
+          birthPlace: normalizedBirthPlace,
+          notes: normalizedNotes,
+          version: () => 'version + 1',
+        })
+        .where('personId = :personId', { personId })
+        .andWhere('spaceId = :spaceId', { spaceId })
+        .andWhere('version = :expectedVersion', { expectedVersion })
+        .execute();
+      if (updateResult.affected !== 1) {
+        const current = await manager.findOneBy(PersonEntity, {
+          personId,
+          spaceId,
+        });
+        throw new ConflictException({
+          message: 'Person was changed by another contributor',
+          details: current
+            ? {
+                personId: current.personId,
+                version: current.version,
+                lifeStatus: current.lifeStatus,
+                deceasedAt: current.deceasedAt,
+                birthPlace: current.birthPlace,
+                notes: current.notes,
+                updatedAt: current.updatedAt,
+              }
+            : null,
+        });
+      }
+
+      const savedPerson = await manager.findOneByOrFail(PersonEntity, {
+        personId,
+        spaceId,
+      });
+      await manager.save(
+        manager.create(ChangeLogEntity, {
+          spaceId,
+          actorUserId,
+          entityType: 'PERSON',
+          entityId: savedPerson.personId,
+          operation: 'UPDATE',
+          note: 'Update offline-editable profile',
+          beforeJson: beforePerson,
+          afterJson: JSON.stringify(savedPerson),
+        }),
+      );
+      await manager.save(
+        manager.create(ClientMutationEntity, {
+          clientMutationId,
+          actorUserId,
+          spaceId,
+          operation: 'UPDATE_PROFILE',
+          requestFingerprint,
+          responseJson: JSON.stringify(savedPerson),
+        }),
+      );
+      return savedPerson;
+    });
   }
 }

@@ -1,5 +1,7 @@
 package com.example.familytreeplatform.feature.spacesettings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -9,15 +11,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -34,6 +39,64 @@ fun SpaceSettingsScreen(
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+    fun writePending(uri: android.net.Uri?) {
+        val document = state.pendingDocument
+        if (uri == null || document == null) {
+            viewModel.documentHandled(false)
+            return
+        }
+        val saved = runCatching {
+            context.contentResolver.openOutputStream(uri)?.bufferedWriter().use { writer ->
+                requireNotNull(writer).write(document.content)
+            }
+        }.isSuccess
+        viewModel.documentHandled(saved)
+    }
+    val gedcomWriter = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("text/vnd.familysearch.gedcom"),
+        ::writePending
+    )
+    val backupWriter = rememberLauncherForActivityResult(
+        ActivityResultContracts.CreateDocument("application/json"),
+        ::writePending
+    )
+    val gedcomReader = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) runCatching {
+            context.contentResolver.openInputStream(uri)?.bufferedReader().use { requireNotNull(it).readText() }
+        }.onSuccess(viewModel::importGedcom)
+    }
+    val backupReader = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) runCatching {
+            context.contentResolver.openInputStream(uri)?.bufferedReader().use { requireNotNull(it).readText() }
+        }.onSuccess(viewModel::restoreBackup)
+    }
+
+    LaunchedEffect(state.pendingDocument) {
+        state.pendingDocument?.let { document ->
+            if (document.kind == "GEDCOM") gedcomWriter.launch(document.fileName)
+            else backupWriter.launch(document.fileName)
+        }
+    }
+
+    if (state.showClearOfflineConfirmation) {
+        AlertDialog(
+            onDismissRequest = viewModel::cancelClearOfflineData,
+            title = { Text("Clear offline data?") },
+            text = {
+                Text(
+                    "This removes this Family Space's cached people and relationships from this device only. " +
+                        "Server data and your portable backups are not deleted."
+                )
+            },
+            confirmButton = {
+                Button(onClick = viewModel::clearOfflineData) { Text("Clear from device") }
+            },
+            dismissButton = {
+                Button(onClick = viewModel::cancelClearOfflineData) { Text("Cancel") }
+            }
+        )
+    }
 
     Column(modifier = modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)) {
         Button(onClick = onBack) { Text(stringResource(R.string.back)) }
@@ -42,6 +105,55 @@ fun SpaceSettingsScreen(
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.padding(top = 12.dp).semantics { heading() }
         )
+        Text(
+            "Data portability",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(top = 16.dp).semantics { heading() }
+        )
+        Text("Import and restore are accepted only when this Family Space has no people.")
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+        ) {
+            Button(enabled = !state.transferringData, onClick = viewModel::prepareGedcomExport) {
+                Text("Export GEDCOM")
+            }
+            Button(enabled = !state.transferringData, onClick = viewModel::prepareBackupExport) {
+                Text("Create backup")
+            }
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+        ) {
+            Button(
+                enabled = !state.transferringData,
+                onClick = { gedcomReader.launch(arrayOf("text/*", "application/octet-stream")) }
+            ) { Text("Import GEDCOM") }
+            Button(
+                enabled = !state.transferringData,
+                onClick = { backupReader.launch(arrayOf("application/json", "text/json")) }
+            ) { Text("Restore backup") }
+        }
+        if (state.transferringData) CircularProgressIndicator(modifier = Modifier.padding(top = 8.dp))
+        state.transferMessage?.let { Text(it, modifier = Modifier.padding(top = 8.dp)) }
+        Text(
+            "Privacy on this device",
+            style = MaterialTheme.typography.titleMedium,
+            modifier = Modifier.padding(top = 20.dp).semantics { heading() }
+        )
+        Text(
+            "Family data is excluded from Android cloud backup. Choose a storage location you " +
+                "control for exported files; FamilyRoot exports are not encrypted automatically."
+        )
+        Button(
+            enabled = !state.clearingOfflineData,
+            onClick = viewModel::requestClearOfflineData,
+            modifier = Modifier.padding(top = 8.dp)
+        ) {
+            Text(if (state.clearingOfflineData) "Clearing..." else "Clear offline data")
+        }
+        state.privacyMessage?.let { Text(it, modifier = Modifier.padding(top = 8.dp)) }
         Text(
             stringResource(R.string.create_invitation),
             style = MaterialTheme.typography.titleMedium,

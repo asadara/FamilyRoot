@@ -8,6 +8,7 @@ import { UserPersonClaimEntity } from '../claims/user-person-claim.entity';
 import { EditProposalEntity } from '../archive/edit-proposal.entity';
 import { FactSourceEntity } from '../archive/fact-source.entity';
 import { MediaItemEntity } from '../archive/media-item.entity';
+import { ChangeLogEntity } from '../changes/change-log.entity';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { MediaItemEntity } from '../archive/media-item.entity';
       FactSourceEntity,
       MediaItemEntity,
       EditProposalEntity,
+      ChangeLogEntity,
     ]),
   ],
   controllers: [ExportController],

@@ -1,36 +1,48 @@
 # Family Tree Platform Android Client
 
-Minimal Android client for creating persons in the Family Tree Platform backend.
+Android client berbasis Jetpack Compose untuk FamilyRoot. Implementasi aktif mencakup
+authentication, Family Space, person dan relationship graph, Room offline cache,
+mutation queue, conflict resolution, serta session terenkripsi Android Keystore.
 
-## Setup
+## Menjalankan aplikasi
 
-1. Open the project in Android Studio.
-2. Ensure the backend is running on `http://localhost:3001` (or update `Config.BASE_URL` accordingly).
+1. Jalankan backend pada port `3001`.
+2. Buka `android-client` di Android Studio atau gunakan Gradle wrapper.
+3. Pilih endpoint debug tanpa mengubah source:
+   - perangkat fisik USB: default `http://127.0.0.1:3001/`, setelah menjalankan
+     `adb reverse tcp:3001 tcp:3001`;
+   - emulator: `-PfamilyTreeApiBaseUrl=http://10.0.2.2:3001/`;
+   - LAN: `-PfamilyTreeApiBaseUrl=http://<IP-LAPTOP>:3001/`;
+   - endpoint lain tetap harus diberikan eksplisit melalui Gradle property.
 
-## Running
+Environment variable `FAMILY_TREE_API_BASE_URL` dapat dipakai sebagai pengganti
+Gradle property. Production mempunyai endpoint HTTPS terpisah dan tidak memakai
+cleartext traffic.
 
-### On Android Emulator
-- The `BASE_URL` is set to `http://10.0.2.2:3001` which is the emulator's loopback address to reach the host machine.
-- Start the emulator.
-- Run the app.
+Release bundle dibangun dengan R8, resource shrinking, dan Baseline Profile:
 
-### On Physical Device
-- Update `Config.BASE_URL` to your computer's LAN IP, e.g., `http://192.168.1.100:3001`.
-- Ensure the device and computer are on the same network.
-- Enable "USB debugging" and connect the device.
-- Run the app.
+```powershell
+.\gradlew.bat lintRelease testDebugUnitTest bundleRelease `
+  -PfamilyTreeReleaseApiBaseUrl=https://api.example.com/ `
+  -PfamilyTreeVersionName=1.0.0 -PfamilyTreeVersionCode=1
+```
 
-## Features
+Signing tidak memiliki fallback key di repository. Workflow `Android release` mengambil
+URL API, keystore, password, dan alias dari GitHub Actions secrets, lalu memverifikasi
+signature serta membuat checksum SHA-256.
 
-- Single screen with "Create Person" button.
-- On click, sends POST request to create a person with hardcoded data.
-- Displays the response (personId and fullName) or error message.
+Semua instalasi APK, instrumentation, logcat, dan smoke test perangkat fisik wajib
+melalui serial USB. Wireless debugging/Wireless ADB tidak digunakan.
 
-## Architecture
+## Verifikasi utama
 
-- **Config**: Centralized configuration.
-- **Models**: Data classes for request/response.
-- **Network**: ApiService interface.
-- **Repository**: Handles API calls with Retrofit.
-- **ViewModel**: Manages UI state and business logic.
-- **UI**: Compose-based screen.
+```powershell
+.\gradlew.bat testDebugUnitTest lintDebug assembleDebug
+.\gradlew.bat connectedDebugAndroidTest
+```
+
+Review privacy/security dan budget performa Fase 4 berada di
+`../docs/PHASE4_PRODUCTION_REVIEW.md`.
+
+Blueprint kanonik berada di `../PROJECT_BLUEPRINT.md`; keputusan arsitektur Android
+berada di `ARCHITECTURE.md`.

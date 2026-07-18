@@ -4,6 +4,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
@@ -27,6 +32,7 @@ import com.example.familytreeplatform.feature.persondetail.PersonDetailScreen
 import com.example.familytreeplatform.feature.persondetail.PersonDetailViewModel
 import com.example.familytreeplatform.feature.spacesettings.SpaceSettingsScreen
 import com.example.familytreeplatform.feature.spacesettings.SpaceSettingsViewModel
+import kotlinx.coroutines.launch
 
 object Routes {
     const val AUTH = "auth"
@@ -45,9 +51,19 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
     val repository = (context.applicationContext as FamilyTreeApplication).container.personRepository
     val token by SessionStore.accessToken.collectAsState()
     val spaceId by SessionStore.activeSpaceId.collectAsState()
+    val restoring by SessionStore.restoring.collectAsState()
+    val hasPersistedSession by SessionStore.hasPersistedSession.collectAsState()
+    val scope = rememberCoroutineScope()
+
+    if (restoring) {
+        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+        return
+    }
 
     val target = when {
-        token == null -> Routes.AUTH
+        token == null && !hasPersistedSession -> Routes.AUTH
         spaceId == null -> Routes.SPACES
         else -> Routes.PEOPLE
     }
@@ -75,7 +91,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 onActivityClick = { navController.navigate(Routes.ACTIVITY) },
                 onGraphClick = { navController.navigate(Routes.GRAPH) },
                 onSpaceSettingsClick = { navController.navigate(Routes.SPACE_SETTINGS) },
-                onSignOut = SessionStore::clear
+                onSignOut = { scope.launch { repository.logout() } }
             )
         }
         composable(Routes.GRAPH) {

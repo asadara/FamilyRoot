@@ -102,6 +102,8 @@ private data class CoupleNode(
     val leftRect: RectDp,
     val rightRect: RectDp,
     val wrapper: RectDp,
+    val leftRole: String,
+    val rightRole: String,
     override val role: String
 ) : GraphNode(role) {
     override fun bounds(): RectDp = wrapper
@@ -110,8 +112,8 @@ private data class CoupleNode(
     override fun spouseLine(): Pair<PointDp, PointDp> = leftRect.center() to rightRect.center()
 
     override fun tiles(): List<TileRender> = listOf(
-        TileRender(id = leftId, label = leftLabel, role = role, rect = leftRect, isCenter = role == "CENTER"),
-        TileRender(id = rightId, label = rightLabel, role = role, rect = rightRect, isCenter = role == "CENTER")
+        TileRender(id = leftId, label = leftLabel, role = leftRole, rect = leftRect, isCenter = role == "CENTER"),
+        TileRender(id = rightId, label = rightLabel, role = rightRole, rect = rightRect, isCenter = role == "CENTER")
     )
 
     override fun hitId(worldPx: Offset, density: androidx.compose.ui.unit.Density): String? {
@@ -141,14 +143,23 @@ private data class GraphLayout(
     val parents: List<GraphNode>,
     val children: List<GraphNode>,
     val nodes: List<GraphNode>,
+    val lineageEdges: List<LineageEdge>,
     val width: Dp,
     val height: Dp
+)
+
+private data class LineageEdge(
+    val from: PointDp,
+    val to: PointDp,
+    val meta: String?
 )
 
 private data class ChildRender(
     val id: String,
     val label: String,
-    val role: String
+    val role: String,
+    val spouseId: String? = null,
+    val spouseLabel: String? = null
 )
 
 private data class VisibleTree(
@@ -179,7 +190,7 @@ fun GraphScreen(
     val personById = remember(persons) { persons.associateBy { it.personId } }
     val displayName: (String) -> String = { id ->
         val p = personById[id]
-        if (p != null) "${p.fullName} (${id.takeLast(5)})" else "ID ${id.takeLast(5)}"
+        p?.fullName ?: "Unknown person"
     }
 
     val tileW = 150.dp
@@ -318,42 +329,34 @@ fun GraphScreen(
                         }
                     }
 
-                    if (layout.parents.isNotEmpty()) {
-                        val parentAnchors = layout.parents.map { it.anchorBottom() }
-                        val centerTop = layout.center.anchorTop()
-                        val hubY = (with(density) { centerTop.y.toPx() } + with(density) { parentAnchors.first().y.toPx() }) / 2f
-                        val xs = parentAnchors.map { with(density) { it.x.toPx() } } + with(density) { centerTop.x.toPx() }
-                        val minX = xs.minOrNull() ?: 0f
-                        val maxX = xs.maxOrNull() ?: 0f
-
-                        parentAnchors.forEach { p ->
-                            val px = with(density) { p.x.toPx() }
-                            val py = with(density) { p.y.toPx() }
-                            drawLine(color = lineColor, start = Offset(px, py), end = Offset(px, hubY), strokeWidth = 4f)
-                        }
-                        val cx = with(density) { centerTop.x.toPx() }
-                        val cy = with(density) { centerTop.y.toPx() }
-                        drawLine(color = lineColor, start = Offset(cx, cy), end = Offset(cx, hubY), strokeWidth = 4f)
-                        drawLine(color = lineColor, start = Offset(minX, hubY), end = Offset(maxX, hubY), strokeWidth = 4f)
-                    }
-
-                    if (layout.children.isNotEmpty()) {
-                        val childAnchors = layout.children.map { it.anchorTop() }
-                        val centerBottom = layout.center.anchorBottom()
-                        val hubY = (with(density) { centerBottom.y.toPx() } + with(density) { childAnchors.first().y.toPx() }) / 2f
-                        val xs = childAnchors.map { with(density) { it.x.toPx() } } + with(density) { centerBottom.x.toPx() }
-                        val minX = xs.minOrNull() ?: 0f
-                        val maxX = xs.maxOrNull() ?: 0f
-
-                        childAnchors.forEach { c ->
-                            val cx = with(density) { c.x.toPx() }
-                            val cy = with(density) { c.y.toPx() }
-                            drawLine(color = lineColor, start = Offset(cx, hubY), end = Offset(cx, cy), strokeWidth = 4f)
-                        }
-                        val mx = with(density) { centerBottom.x.toPx() }
-                        val my = with(density) { centerBottom.y.toPx() }
-                        drawLine(color = lineColor, start = Offset(mx, my), end = Offset(mx, hubY), strokeWidth = 4f)
-                        drawLine(color = lineColor, start = Offset(minX, hubY), end = Offset(maxX, hubY), strokeWidth = 4f)
+                    layout.lineageEdges.forEach { edge ->
+                        val start = Offset(
+                            with(density) { edge.from.x.toPx() },
+                            with(density) { edge.from.y.toPx() }
+                        )
+                        val end = Offset(
+                            with(density) { edge.to.x.toPx() },
+                            with(density) { edge.to.y.toPx() }
+                        )
+                        val hubY = start.y + (end.y - start.y) / 2f
+                        drawLine(
+                            color = lineColor,
+                            start = start,
+                            end = Offset(start.x, hubY),
+                            strokeWidth = 4f
+                        )
+                        drawLine(
+                            color = lineColor,
+                            start = Offset(start.x, hubY),
+                            end = Offset(end.x, hubY),
+                            strokeWidth = 4f
+                        )
+                        drawLine(
+                            color = lineColor,
+                            start = Offset(end.x, hubY),
+                            end = end,
+                            strokeWidth = 4f
+                        )
                     }
                 }
 
@@ -446,6 +449,8 @@ private fun buildCoupleGraphLayout(
             leftLabel = displayName(centerPersonId),
             rightLabel = displayName(activeSpouseId),
             role = "CENTER",
+            leftRole = "CENTER",
+            rightRole = "SPOUSE",
             x = (-((tileW.value * 2f + spouseGapX.value) / 2f)).dp,
             y = 0.dp,
             tileW = tileW,
@@ -464,7 +469,35 @@ private fun buildCoupleGraphLayout(
         )
     }
 
-    val parentIds = relations.parents.map { it.fromPersonId }.distinct().take(2)
+    val centerMemberIds = setOfNotNull(centerPersonId, activeSpouseId)
+    val parentRelationships = if (allRelationships.isNotEmpty()) {
+        allRelationships.filter {
+            it.type == "PARENT_CHILD" && it.toPersonId in centerMemberIds
+        }
+    } else {
+        relations.parents.map {
+            ExportRelationship(
+                relationshipId = it.relationshipId,
+                type = "PARENT_CHILD",
+                fromPersonId = it.fromPersonId,
+                toPersonId = it.toPersonId,
+                meta = it.meta,
+                startDate = it.startDate,
+                endDate = it.endDate,
+                createdAt = it.createdAt
+            )
+        }
+    }
+    val parentIds = parentRelationships
+        .sortedBy { relationship ->
+            when (relationship.toPersonId) {
+                centerPersonId -> 0
+                activeSpouseId -> 1
+                else -> 2
+            }
+        }
+        .map { it.fromPersonId }
+        .distinct()
     val parentsY = (-rankGapY.value - tileH.value).dp
     val parentItems = buildParentRowItems(parentIds, allRelationships, displayName, tileW, spouseGapX)
     val parentPlaced = layoutRow(parentItems, centerX = 0f, gap = siblingGapX.value)
@@ -485,6 +518,8 @@ private fun buildCoupleGraphLayout(
                 leftLabel = placed.item.labelA,
                 rightLabel = placed.item.labelB ?: "",
                 role = "PARENT",
+                leftRole = "PARENT",
+                rightRole = "PARENT",
                 x = placed.x.dp,
                 y = parentsY,
                 tileW = tileW,
@@ -506,25 +541,53 @@ private fun buildCoupleGraphLayout(
     )
 
     val childItems = visibleTree.children.map { child ->
-        RowItem(
-            kind = RowKind.PERSON,
-            idA = child.id,
-            labelA = child.label,
-            role = child.role,
-            width = tileW.value
-        )
+        if (child.spouseId != null) {
+            RowItem(
+                kind = RowKind.COUPLE,
+                idA = child.id,
+                idB = child.spouseId,
+                labelA = child.label,
+                labelB = child.spouseLabel,
+                role = child.role,
+                width = tileW.value * 2f + spouseGapX.value
+            )
+        } else {
+            RowItem(
+                kind = RowKind.PERSON,
+                idA = child.id,
+                labelA = child.label,
+                role = child.role,
+                width = tileW.value
+            )
+        }
     }
     val childPlaced = layoutRow(childItems, centerX = 0f, gap = siblingGapX.value)
     val childNodes = childPlaced.map { placed ->
-        personNode(
-            id = placed.item.idA,
-            label = placed.item.labelA,
-            role = placed.item.role,
-            x = placed.x.dp,
-            y = childrenY,
-            tileW = tileW,
-            tileH = tileH
-        )
+        when (placed.item.kind) {
+            RowKind.PERSON -> personNode(
+                id = placed.item.idA,
+                label = placed.item.labelA,
+                role = placed.item.role,
+                x = placed.x.dp,
+                y = childrenY,
+                tileW = tileW,
+                tileH = tileH
+            )
+            RowKind.COUPLE -> coupleNode(
+                leftId = placed.item.idA,
+                rightId = placed.item.idB ?: "",
+                leftLabel = placed.item.labelA,
+                rightLabel = placed.item.labelB ?: "",
+                role = "CHILD",
+                leftRole = "CHILD",
+                rightRole = "SPOUSE",
+                x = placed.x.dp,
+                y = childrenY,
+                tileW = tileW,
+                tileH = tileH,
+                gap = spouseGapX
+            )
+        }
     }
 
     val allNodes = parentNodes + centerNode + childNodes
@@ -542,6 +605,21 @@ private fun buildCoupleGraphLayout(
     val shiftedCenter = shiftedNodes.first { it.role == "CENTER" }
     val shiftedParents = shiftedNodes.filter { it.role == "PARENT" }
     val shiftedChildren = shiftedNodes.filter { it.role == "CHILD" }
+    val parentLineageEdges = parentRelationships.mapNotNull { relationship ->
+        val from = shiftedNodes.tileRect(relationship.fromPersonId)?.bottomCenter()
+        val to = shiftedNodes.tileRect(relationship.toPersonId)?.topCenter()
+        if (from != null && to != null) LineageEdge(from, to, relationship.meta) else null
+    }
+    val childLineageEdges = visibleTree.children.mapNotNull { child ->
+        if (child.role == "PLACEHOLDER") return@mapNotNull null
+        val to = shiftedNodes.tileRect(child.id)?.topCenter() ?: return@mapNotNull null
+        val meta = allRelationships.firstOrNull {
+            it.type == "PARENT_CHILD" &&
+                it.toPersonId == child.id &&
+                it.fromPersonId in centerMemberIds
+        }?.meta
+        LineageEdge(shiftedCenter.anchorBottom(), to, meta)
+    }
 
     return GraphLayout(
         centerCoupleId = centerCoupleId,
@@ -549,6 +627,7 @@ private fun buildCoupleGraphLayout(
         parents = shiftedParents,
         children = shiftedChildren,
         nodes = shiftedNodes,
+        lineageEdges = parentLineageEdges + childLineageEdges,
         width = width,
         height = height
     )
@@ -561,26 +640,33 @@ private fun buildParentRowItems(
     tileW: Dp,
     spouseGapX: Dp
 ): List<RowItem> {
-    if (parentIds.size >= 2 && isActiveSpouseBetween(parentIds[0], parentIds[1], allRelationships)) {
-        return listOf(
-            RowItem(
+    val remaining = parentIds.toMutableList()
+    val items = mutableListOf<RowItem>()
+    while (remaining.isNotEmpty()) {
+        val personId = remaining.removeAt(0)
+        val spouseId = remaining.firstOrNull {
+            isActiveSpouseBetween(personId, it, allRelationships)
+        }
+        if (spouseId != null) {
+            remaining.remove(spouseId)
+            items += RowItem(
                 kind = RowKind.COUPLE,
-                idA = parentIds[0],
-                idB = parentIds[1],
-                labelA = displayName(parentIds[0]),
-                labelB = displayName(parentIds[1]),
+                idA = personId,
+                idB = spouseId,
+                labelA = displayName(personId),
+                labelB = displayName(spouseId),
                 width = tileW.value * 2f + spouseGapX.value
             )
-        )
+        } else {
+            items += RowItem(
+                kind = RowKind.PERSON,
+                idA = personId,
+                labelA = displayName(personId),
+                width = tileW.value
+            )
+        }
     }
-    return parentIds.map { id ->
-        RowItem(
-            kind = RowKind.PERSON,
-            idA = id,
-            labelA = displayName(id),
-            width = tileW.value
-        )
-    }
+    return items
 }
 
 private fun buildChildrenIds(
@@ -632,7 +718,14 @@ private fun preprocessTree(
 
     return VisibleTree(
         children = orderedChildren.map { id ->
-            ChildRender(id = id, label = displayName(id), role = "CHILD")
+            val spouseId = findActiveSpouseId(id, allRelationships)
+            ChildRender(
+                id = id,
+                label = displayName(id),
+                role = "CHILD",
+                spouseId = spouseId,
+                spouseLabel = spouseId?.let(displayName)
+            )
         },
         edges = orderedChildren.map { id -> coupleId to id },
         coupleId = coupleId
@@ -722,15 +815,8 @@ private fun findActiveSpouseId(
     relations: RelationsResponse,
     allRelationships: List<ExportRelationship>
 ): String? {
-    val fromExport = allRelationships.firstOrNull {
-        it.type == "SPOUSE" &&
-            it.meta == "MARRIED" &&
-            it.endDate == null &&
-            (it.fromPersonId == personId || it.toPersonId == personId)
-    }
-    if (fromExport != null) {
-        return if (fromExport.fromPersonId == personId) fromExport.toPersonId else fromExport.fromPersonId
-    }
+    val fromExport = findActiveSpouseId(personId, allRelationships)
+    if (fromExport != null) return fromExport
 
     val fromRelations = relations.spouses.firstOrNull {
         it.meta == "MARRIED" &&
@@ -739,6 +825,20 @@ private fun findActiveSpouseId(
     } ?: return null
 
     return if (fromRelations.fromPersonId == personId) fromRelations.toPersonId else fromRelations.fromPersonId
+}
+
+private fun findActiveSpouseId(
+    personId: String,
+    allRelationships: List<ExportRelationship>
+): String? {
+    val relationship = allRelationships.firstOrNull {
+        it.type == "SPOUSE" &&
+            it.meta == "MARRIED" &&
+            it.endDate == null &&
+            (it.fromPersonId == personId || it.toPersonId == personId)
+    } ?: return null
+
+    return if (relationship.fromPersonId == personId) relationship.toPersonId else relationship.fromPersonId
 }
 
 private fun isActiveSpouseBetween(
@@ -777,6 +877,8 @@ private fun coupleNode(
     leftLabel: String,
     rightLabel: String,
     role: String,
+    leftRole: String,
+    rightRole: String,
     x: Dp,
     y: Dp,
     tileW: Dp,
@@ -794,6 +896,14 @@ private fun coupleNode(
         leftRect = leftRect,
         rightRect = rightRect,
         wrapper = wrapper,
+        leftRole = leftRole,
+        rightRole = rightRole,
         role = role
     )
 }
+
+private fun List<GraphNode>.tileRect(personId: String): RectDp? =
+    asSequence()
+        .flatMap { it.tiles().asSequence() }
+        .firstOrNull { it.id == personId }
+        ?.rect

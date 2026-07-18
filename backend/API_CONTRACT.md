@@ -1,13 +1,24 @@
 # Family Tree Platform API Contract
 
-> Phase 1 contract. Interactive OpenAPI documentation is served at `/api/docs` while the backend is running.
+> Canonical contract. Interactive OpenAPI documentation is served at `/api/docs` in non-production environments only.
+
+## Health and request correlation
+
+- `GET /health` is public and returns only service status, version, and timestamp.
+- Every response includes `X-Request-Id`. A safe caller-supplied value is preserved; otherwise the server creates a UUID.
+- Structured request events contain request ID, method, path without query, status, and duration. They deliberately exclude request/response bodies, query values, authentication data, user IDs, and family values.
 
 ## Authentication
 
 - `POST /auth/register` — public; accepts `email`, `displayName`, and a password of at least 10 characters.
 - `POST /auth/login` — public; accepts `email` and `password`.
+- `POST /auth/refresh` — public; accepts the opaque `refreshToken`, rotates it, and returns a new access/refresh pair.
+- `POST /auth/logout` — public; revokes the refresh-token family and returns `204`.
 - `GET /auth/me` — requires `Authorization: Bearer <accessToken>`.
-- Access tokens expire after one hour. `JWT_SECRET` is mandatory in production.
+- Login/register/refresh responses contain `accessToken`, `refreshToken`, `expiresIn`, `refreshExpiresIn`, and the authenticated `user`.
+- Access tokens expire after one hour; refresh sessions expire after 30 days. Only SHA-256 token digests are stored server-side.
+- Refresh tokens are single-use. Reuse of a rotated token revokes the active token family and returns `401`.
+- `JWT_SECRET` is mandatory in production.
 - The legacy `x-user-id` header is not accepted as authentication.
 
 ## Space roles
@@ -26,6 +37,7 @@
 | Create invitations for VIEWER/EDITOR | Yes | Yes | No | No |
 | Create invitations for ADMIN | Yes | No | No | No |
 | Export a Family Space | Yes | Yes | No | No |
+| Import GEDCOM or restore backup | Yes | Yes | No | No |
 
 `POST /spaces` creates the authenticated creator's OWNER membership in the same transaction. `GET /spaces` lists only spaces belonging to the authenticated user.
 
@@ -53,6 +65,8 @@ Primary endpoint groups:
 - `/persons/:personId/media`
 - `/changes`
 - `/export/space`
+- `/export/space/gedcom`, `/export/space/gedcom/import`
+- `/export/space/backup`, `/export/space/backup/restore`
 - `/spaces`, `/spaces/members`, and `/spaces/invitations`
 
 UUID response fields are explicit: `userId`, `spaceId`, `memberId`, `personId`, `relationshipId`, `claimId`, and `changeId`.
@@ -66,6 +80,23 @@ Phase 3 core endpoints:
 - `GET|POST /persons/:personId/media` — reads or creates media metadata/URI records.
 - `GET|POST /proposals` — reads or creates edit proposals.
 - `POST /proposals/approve` and `POST /proposals/reject` — OWNER/ADMIN review proposal changes.
+
+Phase 4 concurrency contract (initial slice):
+
+- `PATCH /persons/:personId/life` requires `spaceId`, `lifeStatus`, `expectedVersion`, and UUID `clientMutationId`; `deceasedAt` remains optional.
+- `PATCH /persons/:personId/profile` uses the same contract for offline-safe edits to `birthPlace` and `notes`.
+- A successful mutation increments `version`. Repeating the same request with the same `clientMutationId` returns the stored successful response without repeating side effects or audit entries.
+- Reusing a mutation ID for different input, or sending a stale `expectedVersion`, returns `409 CONFLICT`.
+- A stale-version response includes `details` with the current version and relevant server fields so clients can present an explicit resolution choice.
+- `POST /persons/parent-child` and `POST /relationships/spouse` require UUID `clientMutationId`; replaying an identical relationship creation returns the originally stored relationship without duplicating graph edges or audit entries.
+- `GET /relationships?spaceId=...` returns both `PARENT_CHILD` and `SPOUSE` edges, including `type`, dates, and metadata, so clients can maintain one offline graph cache.
+
+Phase 4 data portability contract:
+
+- `GET /export/space/gedcom?spaceId=...` returns UTF-8 GEDCOM 5.5.1 content; `POST /export/space/gedcom/import` accepts up to 5 MB and imports the supported individual/family subset.
+- `GET /export/space/backup?spaceId=...` returns `familyroot-backup` schema version `1`, including people, graph relationships, sources, and media metadata. Binary media content is not embedded.
+- `POST /export/space/backup/restore` validates format, version, size limits, and references, remaps identifiers, and audits the operation.
+- GEDCOM import and backup restore are transactional and require an empty target Family Space. This prevents an accidental merge, overwrite, or duplicate restore; OWNER/ADMIN can create a fresh space before recovery.
 
 ## Error envelope
 

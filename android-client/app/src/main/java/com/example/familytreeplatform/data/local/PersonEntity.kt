@@ -3,6 +3,7 @@ package com.example.familytreeplatform.data.local
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import androidx.room.ColumnInfo
 import com.example.familytreeplatform.models.PersonListItem
 
 @Entity(tableName = "persons", indices = [Index("spaceId")])
@@ -14,13 +15,35 @@ data class PersonEntity(
     val lifeStatus: String,
     val deceasedAt: String?,
     val birthDate: String?,
-    val gender: String?
+    val birthPlace: String? = null,
+    val gender: String?,
+    val notes: String? = null,
+    @ColumnInfo(defaultValue = "1") val version: Int = 1
 )
 
 fun PersonEntity.toModel() = PersonListItem(
-    personId, fullName, createdAt, lifeStatus, deceasedAt, birthDate, gender
+    personId = personId,
+    fullName = fullName,
+    createdAt = createdAt,
+    lifeStatus = lifeStatus,
+    deceasedAt = deceasedAt,
+    birthDate = birthDate,
+    birthPlace = birthPlace,
+    gender = gender,
+    notes = notes,
+    version = version
 )
 
 fun PersonListItem.toEntity(spaceId: String) = PersonEntity(
-    personId, spaceId, fullName, createdAt, lifeStatus, deceasedAt, birthDate, gender
+    personId = personId,
+    spaceId = spaceId,
+    fullName = fullName,
+    createdAt = createdAt,
+    lifeStatus = lifeStatus,
+    deceasedAt = deceasedAt,
+    birthDate = birthDate,
+    birthPlace = birthPlace,
+    gender = gender,
+    notes = notes,
+    version = version
 )

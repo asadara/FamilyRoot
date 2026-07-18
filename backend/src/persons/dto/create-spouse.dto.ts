@@ -19,4 +19,7 @@ export class CreateSpouseDto {
   @IsOptional()
   @Matches(/^\d{4}-\d{2}-\d{2}$/)
   endDate?: string | null;
+
+  @IsUUID()
+  clientMutationId!: string;
 }

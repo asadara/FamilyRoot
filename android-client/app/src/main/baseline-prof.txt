@@ -1,0 +1,7 @@
+Lcom/example/familytreeplatform/FamilyTreeApplication;
+Lcom/example/familytreeplatform/MainActivity;
+Lcom/example/familytreeplatform/navigation/AppNavigationKt;
+Lcom/example/familytreeplatform/feature/auth/AuthScreenKt;
+Lcom/example/familytreeplatform/feature/spaces/SpaceSelectionScreenKt;
+Lcom/example/familytreeplatform/feature/graph/TreeGraphScreenKt;
+Lcom/example/familytreeplatform/repository/PersonRepository;

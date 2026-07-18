@@ -26,6 +26,8 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.familytreeplatform.R
+import com.example.familytreeplatform.data.local.OfflineMutationStatus
+import com.example.familytreeplatform.data.local.OfflineMutationType
 
 @Composable
 fun PersonDetailScreen(
@@ -47,6 +49,12 @@ fun PersonDetailScreen(
         if (item == null) {
             CircularProgressIndicator(modifier = Modifier.padding(top = 16.dp))
         } else {
+            var birthPlace by remember(item.personId, item.birthPlace) {
+                mutableStateOf(item.birthPlace.orEmpty())
+            }
+            var profileNotes by remember(item.personId, item.notes) {
+                mutableStateOf(item.notes.orEmpty())
+            }
             Text(
                 text = item.fullName,
                 style = MaterialTheme.typography.headlineMedium,
@@ -56,6 +64,31 @@ fun PersonDetailScreen(
             Text(stringResource(R.string.gender_format, item.gender ?: "UNKNOWN"))
             item.birthDate?.let { Text(stringResource(R.string.born_format, it)) }
             item.deceasedAt?.let { Text(stringResource(R.string.died_format, it)) }
+            Text(
+                stringResource(R.string.profile_details),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 16.dp)
+            )
+            OutlinedTextField(
+                value = birthPlace,
+                onValueChange = { birthPlace = it },
+                label = { Text(stringResource(R.string.birth_place)) },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                singleLine = true
+            )
+            OutlinedTextField(
+                value = profileNotes,
+                onValueChange = { profileNotes = it },
+                label = { Text(stringResource(R.string.profile_notes)) },
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            )
+            Button(
+                enabled = !state.updating &&
+                    (birthPlace.trim() != item.birthPlace.orEmpty() ||
+                        profileNotes.trim() != item.notes.orEmpty()),
+                onClick = { viewModel.updateProfile(birthPlace, profileNotes) },
+                modifier = Modifier.padding(top = 8.dp)
+            ) { Text(stringResource(R.string.save_profile_offline)) }
             Text(
                 stringResource(R.string.life_status),
                 style = MaterialTheme.typography.titleMedium,
@@ -67,6 +100,55 @@ fun PersonDetailScreen(
                         enabled = !state.updating && item.lifeStatus != status,
                         onClick = { viewModel.updateLifeStatus(status) }
                     ) { Text(status) }
+                }
+            }
+            state.offlineMutations.forEach { mutation ->
+                Text(
+                    when (mutation.mutationType) {
+                        OfflineMutationType.UPDATE_PROFILE -> stringResource(R.string.profile_change)
+                        OfflineMutationType.ADD_PARENT_CHILD -> stringResource(R.string.parent_child_change)
+                        OfflineMutationType.ADD_SPOUSE -> stringResource(R.string.spouse_change)
+                        else -> stringResource(R.string.life_status_change)
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                val syncLabel = when (mutation.status) {
+                    OfflineMutationStatus.PENDING -> stringResource(R.string.sync_pending)
+                    OfflineMutationStatus.SYNCING -> stringResource(R.string.sync_in_progress)
+                    OfflineMutationStatus.CONFLICT -> stringResource(R.string.sync_conflict)
+                    OfflineMutationStatus.FAILED -> stringResource(R.string.sync_failed)
+                    else -> mutation.status
+                }
+                Text(
+                    syncLabel,
+                    color = if (mutation.status == OfflineMutationStatus.CONFLICT || mutation.status == OfflineMutationStatus.FAILED) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.tertiary
+                    },
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                mutation.lastError?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+                if (mutation.status == OfflineMutationStatus.CONFLICT) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.padding(top = 8.dp)
+                    ) {
+                        Button(onClick = { viewModel.keepLocalConflict(mutation.mutationId) }) {
+                            Text(stringResource(R.string.keep_local_change))
+                        }
+                        Button(onClick = { viewModel.useServerConflict(mutation.mutationId) }) {
+                            Text(stringResource(R.string.use_server_change))
+                        }
+                    }
+                } else if (mutation.status == OfflineMutationStatus.FAILED) {
+                    Button(
+                        onClick = { viewModel.retryFailedSync(mutation.mutationId) },
+                        modifier = Modifier.padding(top = 8.dp)
+                    ) {
+                        Text(stringResource(R.string.retry_sync))
+                    }
                 }
             }
             Button(

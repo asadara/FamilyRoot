@@ -10,6 +10,7 @@ import { RelationshipsService } from './relationships.service';
 import { SpaceMemberEntity } from '../spaces/space-member.entity';
 import { UserPersonClaimEntity } from '../claims/user-person-claim.entity';
 import { SpaceMemberGuard } from '../common/space-member.guard';
+import { ClientMutationEntity } from './client-mutation.entity';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { SpaceMemberGuard } from '../common/space-member.guard';
       RelationshipEntity,
       SpaceMemberEntity,
       UserPersonClaimEntity,
+      ClientMutationEntity,
     ]),
     ChangesModule,
   ],

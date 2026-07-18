@@ -9,6 +9,7 @@ import { RelationshipEntity } from './relationship.entity';
 import { ChangeLogEntity } from '../changes/change-log.entity';
 import { PersonEntity } from './person.entity';
 import { databaseErrorMessage } from '../common/database-error';
+import { ClientMutationEntity } from './client-mutation.entity';
 
 @Injectable()
 export class RelationshipsService {
@@ -27,6 +28,7 @@ export class RelationshipsService {
       order: { createdAt: 'DESC' },
       select: [
         'relationshipId',
+        'type',
         'fromPersonId',
         'toPersonId',
         'meta',
@@ -41,6 +43,7 @@ export class RelationshipsService {
       order: { createdAt: 'DESC' },
       select: [
         'relationshipId',
+        'type',
         'fromPersonId',
         'toPersonId',
         'meta',
@@ -58,6 +61,7 @@ export class RelationshipsService {
       order: { createdAt: 'DESC' },
       select: [
         'relationshipId',
+        'type',
         'fromPersonId',
         'toPersonId',
         'meta',
@@ -72,13 +76,16 @@ export class RelationshipsService {
 
   findAll(spaceId: string) {
     return this.relationsRepo.find({
-      where: { spaceId, type: 'PARENT_CHILD' },
+      where: { spaceId },
       order: { createdAt: 'DESC' },
       select: [
         'relationshipId',
+        'type',
         'fromPersonId',
         'toPersonId',
         'meta',
+        'startDate',
+        'endDate',
         'createdAt',
       ],
     });
@@ -224,16 +231,42 @@ export class RelationshipsService {
     startDate: string,
     endDate?: string | null,
     actorUserId?: string,
+    clientMutationId?: string,
   ) {
+    if (!actorUserId || !clientMutationId) {
+      throw new BadRequestException('Mutation identity is required');
+    }
+    const [fromPersonId, toPersonId] =
+      personAId < personBId ? [personAId, personBId] : [personBId, personAId];
+    const requestFingerprint = JSON.stringify({
+      spaceId,
+      fromPersonId,
+      toPersonId,
+      meta,
+      startDate,
+      endDate: endDate ?? null,
+    });
+    const priorMutation = await this.relationsRepo.manager.findOne(
+      ClientMutationEntity,
+      { where: { clientMutationId } },
+    );
+    if (priorMutation) {
+      if (
+        priorMutation.actorUserId !== actorUserId ||
+        priorMutation.requestFingerprint !== requestFingerprint
+      ) {
+        throw new ConflictException(
+          'clientMutationId was already used for another mutation',
+        );
+      }
+      return JSON.parse(priorMutation.responseJson) as RelationshipEntity;
+    }
     if (personAId === personBId) {
       throw new BadRequestException('Spouse cannot be the same person');
     }
     if (endDate && endDate < startDate) {
       throw new BadRequestException('endDate must be >= startDate');
     }
-
-    const [fromPersonId, toPersonId] =
-      personAId < personBId ? [personAId, personBId] : [personBId, personAId];
 
     const people = await this.personsRepo.findBy({
       personId: In([personAId, personBId]),
@@ -291,6 +324,16 @@ export class RelationshipsService {
             operation: 'CREATE',
             note: 'Create spouse relationship',
             afterJson: JSON.stringify(savedRelation),
+          }),
+        );
+        await manager.save(
+          manager.create(ClientMutationEntity, {
+            clientMutationId,
+            actorUserId,
+            spaceId,
+            operation: 'ADD_SPOUSE',
+            requestFingerprint,
+            responseJson: JSON.stringify(savedRelation),
           }),
         );
         return savedRelation;

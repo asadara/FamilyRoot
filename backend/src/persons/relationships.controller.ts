@@ -73,6 +73,7 @@ export class RelationshipsController {
       dto.startDate,
       dto.endDate ?? null,
       actorUserId,
+      dto.clientMutationId,
     );
   }
 }

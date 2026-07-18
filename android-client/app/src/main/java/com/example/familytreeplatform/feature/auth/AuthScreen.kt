@@ -20,7 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.familytreeplatform.BuildConfig
-import com.example.familytreeplatform.SessionStore
 import com.example.familytreeplatform.repository.PersonRepository
 import kotlinx.coroutines.launch
 import androidx.compose.ui.res.stringResource
@@ -43,7 +42,10 @@ fun AuthScreen(repository: PersonRepository, modifier: Modifier = Modifier) {
             email = demoEmail
             password = demoPassword
             repository.login(demoEmail, demoPassword)
-                .onSuccess { SessionStore.saveSession(it.accessToken, it.user.userId) }
+                .onSuccess {
+                    repository.acceptSession(it)
+                    repository.resumeOfflineSync()
+                }
                 .onFailure { error = it.message }
             loading = false
         }
@@ -84,7 +86,10 @@ fun AuthScreen(repository: PersonRepository, modifier: Modifier = Modifier) {
                     error = null
                     val result = if (registerMode) repository.register(email, displayName, password)
                     else repository.login(email, password)
-                    result.onSuccess { SessionStore.saveSession(it.accessToken, it.user.userId) }
+                    result.onSuccess {
+                        repository.acceptSession(it)
+                        repository.resumeOfflineSync()
+                    }
                         .onFailure { error = it.message }
                     loading = false
                 }

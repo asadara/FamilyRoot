@@ -12,9 +12,20 @@ import { SpaceInvitationEntity } from '../spaces/space-invitation.entity';
 import { EditProposalEntity } from '../archive/edit-proposal.entity';
 import { FactSourceEntity } from '../archive/fact-source.entity';
 import { MediaItemEntity } from '../archive/media-item.entity';
+import { ClientMutationEntity } from '../persons/client-mutation.entity';
+import { RefreshSessionEntity } from '../auth/refresh-session.entity';
 
 const DEMO_PASSWORD = 'Test123456!';
 const DEMO_SPACE_NAME = 'Keluarga Demo';
+
+type DemoPersonSeed = {
+  fullName: string;
+  firstName: string;
+  nickName: string;
+  gender: string;
+  lifeStatus: 'ALIVE' | 'DECEASED';
+  birthDate: string;
+};
 
 const demoUsers = [
   {
@@ -56,7 +67,7 @@ const demoUsers = [
       nickName: 'Anak Pertama',
       gender: 'MALE',
       lifeStatus: 'ALIVE' as const,
-      birthDate: '2012-02-03',
+      birthDate: '2001-02-03',
     },
   },
   {
@@ -71,6 +82,31 @@ const demoUsers = [
       gender: 'MALE',
       lifeStatus: 'ALIVE' as const,
       birthDate: '1958-11-10',
+    },
+  },
+];
+
+const demoRelatives: Array<{ key: string; person: DemoPersonSeed }> = [
+  {
+    key: 'nenek_maternal',
+    person: {
+      fullName: 'Nur Aisyah',
+      firstName: 'Nur',
+      nickName: 'Ibu Siti',
+      gender: 'FEMALE',
+      lifeStatus: 'ALIVE',
+      birthDate: '1962-06-15',
+    },
+  },
+  {
+    key: 'istri_anak',
+    person: {
+      fullName: 'Alya Putri',
+      firstName: 'Alya',
+      nickName: 'Istri Raka',
+      gender: 'FEMALE',
+      lifeStatus: 'ALIVE',
+      birthDate: '2002-09-18',
     },
   },
 ];
@@ -90,6 +126,8 @@ const dataSource = new DataSource({
     FactSourceEntity,
     MediaItemEntity,
     EditProposalEntity,
+    ClientMutationEntity,
+    RefreshSessionEntity,
   ],
   synchronize: process.env.NODE_ENV !== 'production',
 });
@@ -114,7 +152,7 @@ async function findOrCreateUser(
 async function findOrCreatePerson(
   personsRepo: Repository<PersonEntity>,
   spaceId: string,
-  person: (typeof demoUsers)[number]['person'],
+  person: DemoPersonSeed,
 ) {
   const existing = await personsRepo.findOne({
     where: { spaceId, fullName: person.fullName, isDeleted: false },
@@ -254,11 +292,20 @@ async function main() {
       }
     }
 
+    for (const relative of demoRelatives) {
+      personsByKey.set(
+        relative.key,
+        await findOrCreatePerson(personsRepo, space.spaceId, relative.person),
+      );
+    }
+
     const ayah = personsByKey.get('ayah');
     const ibu = personsByKey.get('ibu');
     const anak = personsByKey.get('anak');
     const kakek = personsByKey.get('kakek');
-    if (!ayah || !ibu || !anak || !kakek) {
+    const nenekMaternal = personsByKey.get('nenek_maternal');
+    const istriAnak = personsByKey.get('istri_anak');
+    if (!ayah || !ibu || !anak || !kakek || !nenekMaternal || !istriAnak) {
       throw new Error('Missing demo persons');
     }
 
@@ -267,6 +314,13 @@ async function main() {
       type: 'PARENT_CHILD',
       fromPersonId: kakek.personId,
       toPersonId: ayah.personId,
+      meta: 'BIOLOGICAL',
+    });
+    await ensureRelationship(relationshipsRepo, {
+      spaceId: space.spaceId,
+      type: 'PARENT_CHILD',
+      fromPersonId: nenekMaternal.personId,
+      toPersonId: ibu.personId,
       meta: 'BIOLOGICAL',
     });
     await ensureRelationship(relationshipsRepo, {
@@ -288,6 +342,13 @@ async function main() {
       type: 'SPOUSE',
       fromPersonId: ayah.personId,
       toPersonId: ibu.personId,
+      meta: 'MARRIED',
+    });
+    await ensureRelationship(relationshipsRepo, {
+      spaceId: space.spaceId,
+      type: 'SPOUSE',
+      fromPersonId: anak.personId,
+      toPersonId: istriAnak.personId,
       meta: 'MARRIED',
     });
 
@@ -351,29 +412,12 @@ async function main() {
       );
     }
 
-    const duplicate = await personsRepo.findOne({
-      where: {
-        spaceId: space.spaceId,
-        fullName: anak.fullName,
-        notes: 'Duplicate candidate for merge test',
-        isDeleted: false,
-      },
+    // Keep the primary demo family clean. Duplicate-merge behavior is covered by
+    // e2e tests; older seeds may still contain this disconnected test record.
+    await personsRepo.delete({
+      spaceId: space.spaceId,
+      notes: 'Duplicate candidate for merge test',
     });
-    if (!duplicate) {
-      await personsRepo.save(
-        personsRepo.create({
-          spaceId: space.spaceId,
-          fullName: anak.fullName,
-          firstName: anak.firstName,
-          nickName: 'Duplikat',
-          gender: anak.gender,
-          birthDate: anak.birthDate,
-          lifeStatus: anak.lifeStatus,
-          deceasedAt: null,
-          notes: 'Duplicate candidate for merge test',
-        }),
-      );
-    }
 
     console.log('Development seed ready.');
     console.table(
