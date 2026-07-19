@@ -578,6 +578,39 @@ yang sudah selesai:
 > Implementasi frontend telah mencapai Tahap 5: visual graph dan inspector, shell
 > adaptif, pencarian global lokal, serta jalur hubungan hybrid berbasis teks dengan
 > aksi opt-in untuk menyorot dan menambahkan card minimum lintas generasi di graph.
+> Sesudah Tahap 5, polish prafase berikutnya menambahkan halaman Profil Akun yang
+> terpisah dari profil person, mengubah Keluarga menjadi direktori visual dengan
+> statistik/filter/avatar fallback, dan mengubah Aktivitas menjadi timeline
+> kolaboratif yang menerjemahkan kode audit backend ke bahasa pengguna. Header
+> Keluarga dan Aktivitas juga memiliki mode ringkas untuk viewport ponsel 360dp,
+> diverifikasi pada vivo 1816 tanpa memotong daftar atau timeline yang dapat digulir.
+> Ringkasan header Aktivitas dapat di-collapse menjadi strip pendek sehingga timeline
+> memperoleh tinggi maksimum, dengan kontrol eksplisit untuk membukanya kembali.
+> Pada viewport ponsel, halaman Keluarga memakai satu `LazyColumn` untuk seluruh
+> halaman; swipe dari header, form, kontrol direktori, maupun card menggerakkan alur
+> yang sama dan tidak lagi bergantung pada nested list berukuran kecil.
+> Halaman Profil Person lengkap yang dibuka dari inspector juga telah dimigrasikan
+> dari artefak UI lama ke shell dan bahasa visual frontend saat ini. Halaman memakai
+> hero person yang adaptif, satu alur scroll, serta section collapsible untuk data
+> utama, sinkronisasi, sumber keluarga, tautan kenangan, usulan kolaboratif, dan
+> hubungan keluarga. Seluruh aksi lama tetap tersedia, tetapi target hubungan
+> ditampilkan berbasis pencarian agar ringan. Sumber hanya berupa referensi teks dan
+> kenangan berupa tautan eksternal; aplikasi tidak menyediakan unggahan dokumen formal.
+> Tombol kembali dari profil lengkap mempertahankan state graph dan inspector asal.
+> Implementasi ini diverifikasi manual pada vivo 1816 (360dp) dan Samsung SM-T225,
+> serta lulus unit test, lint, dan assemble debug.
+> Audit lanjutan menemukan empat screen generasi awal dan semuanya telah dimigrasikan:
+> Pengaturan Family Space kini berada di dalam shell dengan section collapsible dan
+> istilah Indonesia; Login/Daftar serta Pemilihan Family Space memakai ViewModel,
+> immutable UI state, layout adaptif, satu alur scroll, dan error yang tidak membocorkan
+> endpoint teknis; Beranda menjadi ringkasan berbasis data nyata untuk jumlah person,
+> status hidup, kontributor, antrean sync, kelengkapan profil, dan aktivitas terbaru.
+> Logout dari protected route juga dibuat aman terhadap frame transisi ketika
+> `spaceId` telah dibersihkan. Alur logout → Login → akun demo → pemilihan Keluarga
+> Demo → graph diverifikasi end-to-end pada vivo 1816. Seluruh 18 connected
+> instrumentation tests kembali lulus pada Samsung SM-T225, bersama unit test, lint,
+> dan assemble debug. APK final dipasang pada kedua perangkat dengan USB reverse
+> `tcp:3001` aktif.
 > Quality gate Android terakhir mencatat unit test, lint, assemble, dan 18 connected
 > instrumentation tests lulus pada
 > Samsung SM-T225 Android 14 melalui USB.

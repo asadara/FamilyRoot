@@ -87,6 +87,7 @@ internal fun FamilyRootNavigationShell(
     people: List<PersonListItem>,
     pendingSyncCount: Int,
     onSearchPerson: (String) -> Unit,
+    onOpenProfile: () -> Unit = {},
     onOpenSettings: () -> Unit,
     onSignOut: () -> Unit,
     onGraphAction: ((GraphShellAction) -> Unit)? = null,
@@ -104,6 +105,7 @@ internal fun FamilyRootNavigationShell(
                 pendingSyncCount = pendingSyncCount,
                 compact = !useNavigationRail,
                 onSearchPerson = onSearchPerson,
+                onOpenProfile = onOpenProfile,
                 onOpenSettings = onOpenSettings,
                 onSignOut = onSignOut
             )
@@ -215,6 +217,7 @@ private fun FamilyRootGlobalAppBar(
     pendingSyncCount: Int,
     compact: Boolean,
     onSearchPerson: (String) -> Unit,
+    onOpenProfile: () -> Unit,
     onOpenSettings: () -> Unit,
     onSignOut: () -> Unit
 ) {
@@ -429,6 +432,22 @@ private fun FamilyRootGlobalAppBar(
                             )
                         }
                         HorizontalDivider()
+                        DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text("Lihat profil akun")
+                                    Text(
+                                        "Identitas dan sesi FamilyRoot",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            },
+                            onClick = {
+                                accountMenuExpanded = false
+                                onOpenProfile()
+                            }
+                        )
                         DropdownMenuItem(
                             text = { Text("Pengaturan Family Space") },
                             onClick = {

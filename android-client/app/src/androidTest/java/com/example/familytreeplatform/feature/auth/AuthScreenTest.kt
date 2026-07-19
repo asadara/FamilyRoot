@@ -3,8 +3,7 @@ package com.example.familytreeplatform.feature.auth
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.hasClickAction
-import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.onNodeWithTag
 import com.example.familytreeplatform.repository.PersonRepository
 import com.example.familytreeplatform.ui.theme.FamilyTreePlatformTheme
 import org.junit.Rule
@@ -18,13 +17,13 @@ class AuthScreenTest {
     fun signInFormIsAccessible() {
         composeRule.setContent {
             FamilyTreePlatformTheme(dynamicColor = false) {
-                AuthScreen(repository = PersonRepository())
+                AuthScreen(viewModel = AuthViewModel(PersonRepository()))
             }
         }
 
-        composeRule.onNode(hasText("Sign in") and hasClickAction()).assertIsDisplayed()
+        composeRule.onNodeWithTag("authSubmit").assertIsDisplayed()
         composeRule.onNodeWithText("Email").assertIsDisplayed()
-        composeRule.onNodeWithText("Password").assertIsDisplayed()
-        composeRule.onNodeWithText("Create account").assertIsDisplayed()
+        composeRule.onNodeWithText("Kata sandi").assertIsDisplayed()
+        composeRule.onNodeWithText("Buat akun").assertIsDisplayed()
     }
 }

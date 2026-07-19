@@ -1,144 +1,345 @@
 package com.example.familytreeplatform.feature.spaces
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.example.familytreeplatform.R
-import com.example.familytreeplatform.SessionStore
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.familytreeplatform.models.FamilySpace
-import com.example.familytreeplatform.models.InvitationPreview
-import com.example.familytreeplatform.repository.PersonRepository
-import kotlinx.coroutines.launch
 
 @Composable
-fun SpaceSelectionScreen(repository: PersonRepository, modifier: Modifier = Modifier) {
-    val scope = rememberCoroutineScope()
-    var spaces by remember { mutableStateOf<List<FamilySpace>>(emptyList()) }
-    var name by remember { mutableStateOf("") }
-    var inviteToken by remember { mutableStateOf("") }
-    var invitationPreview by remember { mutableStateOf<InvitationPreview?>(null) }
-    var loading by remember { mutableStateOf(true) }
-    var error by remember { mutableStateOf<String?>(null) }
+fun SpaceSelectionScreen(viewModel: SpaceSelectionViewModel, modifier: Modifier = Modifier) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    var joinOpen by rememberSaveable { mutableStateOf(state.spaces.isEmpty()) }
+    var createOpen by rememberSaveable { mutableStateOf(false) }
 
-    fun load() = scope.launch {
-        loading = true
-        repository.listSpaces().onSuccess { spaces = it }.onFailure { error = it.message }
-        loading = false
-    }
-
-    fun previewInvitation() = scope.launch {
-        val token = inviteToken.trim()
-        if (token.isBlank()) return@launch
-        loading = true
-        error = null
-        invitationPreview = null
-        repository.previewInvitation(token)
-            .onSuccess { invitationPreview = it }
-            .onFailure { error = it.message }
-        loading = false
-    }
-
-    fun acceptInvitation() = scope.launch {
-        val token = inviteToken.trim()
-        if (token.isBlank()) return@launch
-        loading = true
-        error = null
-        repository.acceptInvitation(token)
-            .onSuccess { SessionStore.selectSpace(it.spaceId, it.name) }
-            .onFailure { error = it.message }
-        loading = false
-    }
-
-    LaunchedEffect(Unit) { load() }
-
-    Column(modifier = modifier.fillMaxSize().padding(24.dp)) {
-        Text(
-            stringResource(R.string.choose_family_space),
-            style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.semantics { heading() }
-        )
-        if (loading) CircularProgressIndicator(modifier = Modifier.padding(top = 16.dp))
-        spaces.forEach { space ->
-            Button(
-                onClick = { SessionStore.selectSpace(space.spaceId, space.name) },
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-            ) { Text(stringResource(R.string.space_item_format, space.name, space.role ?: "MEMBER")) }
-        }
-
-        Text(
-            stringResource(R.string.join_with_invitation),
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(top = 16.dp).semantics { heading() }
-        )
-        OutlinedTextField(
-            value = inviteToken,
-            onValueChange = {
-                inviteToken = it
-                invitationPreview = null
-            },
-            label = { Text(stringResource(R.string.invitation_code)) },
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            singleLine = true
-        )
-        Button(
-            enabled = !loading && inviteToken.isNotBlank(),
-            onClick = { previewInvitation() },
-            modifier = Modifier.padding(top = 8.dp)
-        ) { Text(stringResource(R.string.preview_invitation)) }
-        invitationPreview?.let { preview ->
-            Text(
-                stringResource(R.string.invitation_preview_format, preview.spaceName, preview.role),
-                modifier = Modifier.padding(top = 8.dp)
-            )
-            Button(
-                enabled = !loading,
-                onClick = { acceptInvitation() },
-                modifier = Modifier.padding(top = 8.dp)
-            ) { Text(stringResource(R.string.join_family_space)) }
-        }
-
-        Text(
-            stringResource(R.string.create_new_family_space),
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(top = 16.dp).semantics { heading() }
-        )
-        OutlinedTextField(
-            value = name,
-            onValueChange = { name = it },
-            label = { Text(stringResource(R.string.new_family_space)) },
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            singleLine = true
-        )
-        Button(enabled = !loading && name.isNotBlank(), onClick = {
-            scope.launch {
-                loading = true
-                repository.createSpace(name).onSuccess { SessionStore.selectSpace(it.spaceId, it.name) }
-                    .onFailure { error = it.message }
-                loading = false
+    BoxWithConstraints(
+        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+    ) {
+        val wide = maxWidth >= 720.dp
+        LazyColumn(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+            contentPadding = PaddingValues(horizontal = if (wide) 28.dp else 16.dp, vertical = 20.dp),
+            modifier = Modifier.fillMaxSize().imePadding()
+        ) {
+            item {
+                SpaceSelectionHeader(onSignOut = viewModel::signOut, Modifier.fillMaxWidth().widthIn(max = 980.dp))
             }
-        }, modifier = Modifier.padding(top = 8.dp)) { Text(stringResource(R.string.create_space)) }
+            item {
+                SpaceSelectionHero(state.spaces.size, Modifier.fillMaxWidth().widthIn(max = 980.dp))
+            }
+            state.error?.let { error ->
+                item { SpaceError(spaceSelectionErrorMessage(error), Modifier.fillMaxWidth().widthIn(max = 980.dp)) }
+            }
+            item {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier.fillMaxWidth().widthIn(max = 980.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Column(Modifier.weight(1f)) {
+                            Text("Ruang keluarga Anda", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
+                            Text("Pilih ruang untuk melanjutkan.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        if (!state.loadingSpaces) TextButton(onClick = viewModel::refresh) { Text("Perbarui") }
+                    }
+                    if (state.loadingSpaces) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.surface,
+                            shape = RoundedCornerShape(18.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(18.dp)
+                            ) {
+                                CircularProgressIndicator()
+                                Text("Memuat ruang keluarga…")
+                            }
+                        }
+                    } else if (state.spaces.isEmpty()) {
+                        EmptySpaces()
+                    }
+                }
+            }
+            items(state.spaces, key = { it.spaceId }) { space ->
+                FamilySpaceCard(space, { viewModel.selectSpace(space) }, Modifier.fillMaxWidth().widthIn(max = 980.dp))
+            }
+            item {
+                BoxWithConstraints(Modifier.fillMaxWidth().widthIn(max = 980.dp)) {
+                    if (maxWidth >= 720.dp) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
+                            JoinFamilyCard(state, joinOpen, { joinOpen = !joinOpen }, viewModel, Modifier.weight(1f))
+                            CreateFamilyCard(state, createOpen, { createOpen = !createOpen }, viewModel, Modifier.weight(1f))
+                        }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                            JoinFamilyCard(state, joinOpen, { joinOpen = !joinOpen }, viewModel)
+                            CreateFamilyCard(state, createOpen, { createOpen = !createOpen }, viewModel)
+                        }
+                    }
+                }
+            }
+            item {
+                Text(
+                    "Family Space bersifat privat. Akses hanya diberikan melalui keanggotaan atau undangan yang disetujui.",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth().widthIn(max = 980.dp).padding(vertical = 10.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SpaceSelectionHeader(onSignOut: () -> Unit, modifier: Modifier = Modifier) {
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
+        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = CircleShape) {
+            Text("FR", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(11.dp))
+        }
+        Column(Modifier.weight(1f).padding(start = 10.dp)) {
+            Text("FamilyRoot", style = MaterialTheme.typography.titleMedium)
+            Text("Pilih ruang privat keluarga", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        TextButton(onClick = onSignOut) { Text("Keluar") }
+    }
+}
+
+@Composable
+private fun SpaceSelectionHero(spaceCount: Int, modifier: Modifier = Modifier) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer),
+        shape = RoundedCornerShape(24.dp),
+        modifier = modifier
+    ) {
+        Column(Modifier.padding(22.dp)) {
+            Text("Di keluarga mana Anda ingin bekerja?", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Text(
+                if (spaceCount > 0) "Anda terhubung dengan $spaceCount ruang keluarga. Setiap ruang memiliki anggota dan aksesnya sendiri."
+                else "Bergabung melalui undangan keluarga atau buat ruang baru untuk memulai.",
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
+                modifier = Modifier.padding(top = 6.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun FamilySpaceCard(space: FamilySpace, onClick: () -> Unit, modifier: Modifier = Modifier) {
+    Card(
+        onClick = onClick,
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)),
+        modifier = modifier
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(16.dp)) {
+            Surface(color = MaterialTheme.colorScheme.secondaryContainer, shape = CircleShape) {
+                Text(familySpaceInitials(space.name), color = MaterialTheme.colorScheme.onSecondaryContainer, fontWeight = FontWeight.Bold, modifier = Modifier.padding(13.dp))
+            }
+            Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
+                Text(space.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(familySpaceRoleLabel(space.role), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            Text("›", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+}
+
+@Composable
+private fun EmptySpaces() {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(22.dp)) {
+            Text("Belum ada ruang keluarga", style = MaterialTheme.typography.titleMedium)
+            Text("Gunakan undangan atau buat Family Space baru di bawah.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+@Composable
+private fun JoinFamilyCard(
+    state: SpaceSelectionUiState,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    viewModel: SpaceSelectionViewModel,
+    modifier: Modifier = Modifier
+) {
+    SpaceActionCard(
+        title = "Gabung dengan undangan",
+        subtitle = "Masukkan kode yang diberikan pengelola keluarga.",
+        expanded = expanded,
+        onToggle = onToggle,
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = state.invitationCode,
+            onValueChange = viewModel::setInvitationCode,
+            label = { Text("Kode undangan") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
         Button(
-            onClick = { scope.launch { repository.logout() } },
-            modifier = Modifier.padding(top = 8.dp)
-        ) { Text(stringResource(R.string.sign_out)) }
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 8.dp)) }
+            enabled = !state.processing && state.invitationCode.isNotBlank(),
+            onClick = viewModel::previewInvitation,
+            modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
+        ) { Text(if (state.processing) "Memeriksa…" else "Periksa undangan") }
+        state.invitationPreview?.let { preview ->
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+            ) {
+                Column(Modifier.padding(14.dp)) {
+                    Text(preview.spaceName, style = MaterialTheme.typography.titleMedium)
+                    Text("Akses sebagai ${familySpaceRoleLabel(preview.role)}")
+                    Text("Berlaku hingga ${preview.expiresAt}", style = MaterialTheme.typography.bodySmall)
+                    OutlinedButton(
+                        enabled = !state.processing,
+                        onClick = viewModel::acceptInvitation,
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
+                    ) { Text("Terima dan bergabung") }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CreateFamilyCard(
+    state: SpaceSelectionUiState,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    viewModel: SpaceSelectionViewModel,
+    modifier: Modifier = Modifier
+) {
+    SpaceActionCard(
+        title = "Buat ruang keluarga",
+        subtitle = "Mulai ruang privat yang dapat dikembangkan bersama.",
+        expanded = expanded,
+        onToggle = onToggle,
+        modifier = modifier
+    ) {
+        OutlinedTextField(
+            value = state.newSpaceName,
+            onValueChange = viewModel::setNewSpaceName,
+            label = { Text("Nama keluarga atau ruang") },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true
+        )
+        Button(
+            enabled = !state.processing && state.newSpaceName.isNotBlank(),
+            onClick = viewModel::createSpace,
+            modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
+        ) { Text(if (state.processing) "Membuat ruang…" else "Buat Family Space") }
+    }
+}
+
+@Composable
+private fun SpaceActionCard(
+    title: String,
+    subtitle: String,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    Card(
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.22f)),
+        modifier = modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(18.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                Column(Modifier.weight(1f)) {
+                    Text(title, style = MaterialTheme.typography.titleMedium)
+                    Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                TextButton(onClick = onToggle) { Text(if (expanded) "Tutup" else "Buka") }
+            }
+            if (expanded) {
+                Spacer(Modifier.height(14.dp))
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+private fun SpaceError(message: String, modifier: Modifier = Modifier) {
+    Surface(color = MaterialTheme.colorScheme.errorContainer, shape = RoundedCornerShape(14.dp), modifier = modifier) {
+        Text(message, color = MaterialTheme.colorScheme.onErrorContainer, modifier = Modifier.padding(14.dp))
+    }
+}
+
+internal fun familySpaceRoleLabel(role: String?): String = when (role) {
+    "OWNER" -> "Pemilik ruang"
+    "ADMIN" -> "Pengelola"
+    "EDITOR" -> "Kontributor"
+    "VIEWER" -> "Pembaca"
+    else -> "Anggota keluarga"
+}
+
+internal fun familySpaceInitials(name: String): String = name
+    .trim()
+    .split(Regex("\\s+"))
+    .filter(String::isNotBlank)
+    .take(2)
+    .joinToString("") { it.take(1).uppercase() }
+    .ifBlank { "FR" }
+
+internal fun spaceSelectionErrorMessage(message: String?): String {
+    val value = message.orEmpty()
+    return when {
+        value.contains("invite", ignoreCase = true) || value.contains("token", ignoreCase = true) ->
+            "Kode undangan tidak valid atau sudah tidak berlaku."
+        value.contains("connect", ignoreCase = true) || value.contains("failed", ignoreCase = true) ||
+            value.contains("127.0.0.1") || value.contains("localhost") ->
+            "Ruang keluarga belum dapat dimuat. Periksa koneksi lalu coba kembali."
+        else -> "Tindakan belum dapat diselesaikan. Coba kembali."
     }
 }

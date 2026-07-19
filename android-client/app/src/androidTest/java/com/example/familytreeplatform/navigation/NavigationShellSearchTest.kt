@@ -57,6 +57,7 @@ class NavigationShellSearchTest {
 
     @Test
     fun accountAvatarShowsSignedInIdentityBeforeOpeningSpaceSettings() {
+        var profileOpened = false
         var settingsOpened = false
         var signedOut = false
         composeRule.setContent {
@@ -70,6 +71,7 @@ class NavigationShellSearchTest {
                     people = emptyList(),
                     pendingSyncCount = 0,
                     onSearchPerson = {},
+                    onOpenProfile = { profileOpened = true },
                     onOpenSettings = { settingsOpened = true },
                     onSignOut = { signedOut = true }
                 ) { contentModifier ->
@@ -84,8 +86,13 @@ class NavigationShellSearchTest {
         composeRule.runOnIdle {
             assertFalse(settingsOpened)
             assertFalse(signedOut)
+            assertFalse(profileOpened)
         }
 
+        composeRule.onNodeWithText("Lihat profil akun").performClick()
+        composeRule.runOnIdle { assertTrue(profileOpened) }
+
+        composeRule.onNodeWithContentDescription("Akun Budi Santoso").performClick()
         composeRule.onNodeWithText("Pengaturan Family Space").performClick()
         composeRule.runOnIdle {
             assertTrue(settingsOpened)

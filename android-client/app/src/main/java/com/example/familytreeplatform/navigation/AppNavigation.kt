@@ -22,7 +22,9 @@ import androidx.navigation.compose.rememberNavController
 import com.example.familytreeplatform.FamilyTreeApplication
 import com.example.familytreeplatform.SessionStore
 import com.example.familytreeplatform.feature.auth.AuthScreen
+import com.example.familytreeplatform.feature.auth.AuthViewModel
 import com.example.familytreeplatform.feature.spaces.SpaceSelectionScreen
+import com.example.familytreeplatform.feature.spaces.SpaceSelectionViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.navArgument
@@ -33,8 +35,10 @@ import com.example.familytreeplatform.feature.activity.ActivityViewModel
 import com.example.familytreeplatform.feature.graph.TreeGraphScreen
 import com.example.familytreeplatform.feature.graph.TreeGraphViewModel
 import com.example.familytreeplatform.feature.home.HomeScreen
+import com.example.familytreeplatform.feature.home.HomeViewModel
 import com.example.familytreeplatform.feature.persondetail.PersonDetailScreen
 import com.example.familytreeplatform.feature.persondetail.PersonDetailViewModel
+import com.example.familytreeplatform.feature.profile.ProfileScreen
 import com.example.familytreeplatform.feature.spacesettings.SpaceSettingsScreen
 import com.example.familytreeplatform.feature.spacesettings.SpaceSettingsViewModel
 import kotlinx.coroutines.launch
@@ -48,6 +52,7 @@ object Routes {
     const val ACTIVITY = "activity"
     const val GRAPH = "graph"
     const val SPACE_SETTINGS = "space-settings"
+    const val PROFILE = "profile"
     const val PERSON_DETAIL = "person/{personId}"
     fun personDetail(personId: String) = "person/$personId"
 }
@@ -61,6 +66,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
     val spaceName by SessionStore.activeSpaceName.collectAsState()
     val userDisplayName by SessionStore.userDisplayName.collectAsState()
     val userEmail by SessionStore.userEmail.collectAsState()
+    val userId by SessionStore.userId.collectAsState()
     val restoring by SessionStore.restoring.collectAsState()
     val hasPersistedSession by SessionStore.hasPersistedSession.collectAsState()
     val scope = rememberCoroutineScope()
@@ -119,10 +125,18 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
     }
 
     NavHost(navController = navController, startDestination = target, modifier = modifier) {
-        composable(Routes.AUTH) { AuthScreen(repository = repository) }
-        composable(Routes.SPACES) { SpaceSelectionScreen(repository = repository) }
+        composable(Routes.AUTH) {
+            val authViewModel: AuthViewModel = viewModel(factory = AuthViewModel.Factory(repository))
+            AuthScreen(viewModel = authViewModel)
+        }
+        composable(Routes.SPACES) {
+            val spaceSelectionViewModel: SpaceSelectionViewModel = viewModel(
+                factory = SpaceSelectionViewModel.Factory(repository)
+            )
+            SpaceSelectionScreen(viewModel = spaceSelectionViewModel)
+        }
         composable(Routes.PEOPLE) {
-            val selectedSpaceId = requireNotNull(spaceId)
+            val selectedSpaceId = spaceId ?: return@composable
             val peopleViewModel: PeopleViewModel = viewModel(
                 factory = PeopleViewModel.Factory(selectedSpaceId, repository)
             )
@@ -135,21 +149,21 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 people = shellPeople,
                 pendingSyncCount = pendingSyncCount,
                 onSearchPerson = openSearchResult,
+                onOpenProfile = { navController.navigate(Routes.PROFILE) { launchSingleTop = true } },
                 onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
                 onSignOut = { scope.launch { repository.logout() } }
             ) { shellModifier ->
                 PeopleScreen(
                     viewModel = peopleViewModel,
                     onPersonClick = { navController.navigate(Routes.personDetail(it)) },
-                    onSpaceSettingsClick = { navController.navigate(Routes.SPACE_SETTINGS) },
-                    onSignOut = { scope.launch { repository.logout() } },
                     modifier = shellModifier
                 )
             }
         }
         composable(Routes.GRAPH) {
+            val selectedSpaceId = spaceId ?: return@composable
             val graphViewModel: TreeGraphViewModel = viewModel(
-                factory = TreeGraphViewModel.Factory(requireNotNull(spaceId), repository)
+                factory = TreeGraphViewModel.Factory(selectedSpaceId, repository)
             )
             var graphShellAction by remember { mutableStateOf<GraphShellAction?>(null) }
             LaunchedEffect(requestedSearchPersonId) {
@@ -165,6 +179,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 people = shellPeople,
                 pendingSyncCount = pendingSyncCount,
                 onSearchPerson = openSearchResult,
+                onOpenProfile = { navController.navigate(Routes.PROFILE) { launchSingleTop = true } },
                 onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
                 onSignOut = { scope.launch { repository.logout() } },
                 onGraphAction = { graphShellAction = it }
@@ -180,6 +195,10 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
             }
         }
         composable(Routes.HOME) {
+            val selectedSpaceId = spaceId ?: return@composable
+            val homeViewModel: HomeViewModel = viewModel(
+                factory = HomeViewModel.Factory(selectedSpaceId, repository)
+            )
             FamilyRootNavigationShell(
                 currentRoute = Routes.HOME,
                 onNavigate = navigateTopLevel,
@@ -189,10 +208,15 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 people = shellPeople,
                 pendingSyncCount = pendingSyncCount,
                 onSearchPerson = openSearchResult,
+                onOpenProfile = { navController.navigate(Routes.PROFILE) { launchSingleTop = true } },
                 onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
                 onSignOut = { scope.launch { repository.logout() } }
             ) { shellModifier ->
                 HomeScreen(
+                    viewModel = homeViewModel,
+                    displayName = userDisplayName ?: "Keluarga",
+                    spaceName = spaceName ?: "Family Space",
+                    pendingSyncCount = pendingSyncCount,
                     onOpenTree = { navigateTopLevel(Routes.GRAPH) },
                     onOpenFamily = { navigateTopLevel(Routes.PEOPLE) },
                     onOpenActivity = { navigateTopLevel(Routes.ACTIVITY) },
@@ -201,17 +225,60 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
             }
         }
         composable(Routes.SPACE_SETTINGS) {
+            val selectedSpaceId = spaceId ?: return@composable
             val spaceSettingsViewModel: SpaceSettingsViewModel = viewModel(
-                factory = SpaceSettingsViewModel.Factory(requireNotNull(spaceId), repository)
+                factory = SpaceSettingsViewModel.Factory(selectedSpaceId, repository)
             )
-            SpaceSettingsScreen(
-                viewModel = spaceSettingsViewModel,
-                onBack = { navController.popBackStack() }
-            )
+            FamilyRootNavigationShell(
+                currentRoute = Routes.SPACE_SETTINGS,
+                onNavigate = navigateTopLevel,
+                spaceName = spaceName ?: "Family Space",
+                userDisplayName = userDisplayName ?: "Akun",
+                userEmail = userEmail,
+                people = shellPeople,
+                pendingSyncCount = pendingSyncCount,
+                onSearchPerson = openSearchResult,
+                onOpenProfile = { navController.navigate(Routes.PROFILE) { launchSingleTop = true } },
+                onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) { launchSingleTop = true } },
+                onSignOut = { scope.launch { repository.logout() } }
+            ) { shellModifier ->
+                SpaceSettingsScreen(
+                    viewModel = spaceSettingsViewModel,
+                    onBack = { navController.popBackStack() },
+                    modifier = shellModifier
+                )
+            }
+        }
+        composable(Routes.PROFILE) {
+            FamilyRootNavigationShell(
+                currentRoute = Routes.PROFILE,
+                onNavigate = navigateTopLevel,
+                spaceName = spaceName ?: "Family Space",
+                userDisplayName = userDisplayName ?: "Akun",
+                userEmail = userEmail,
+                people = shellPeople,
+                pendingSyncCount = pendingSyncCount,
+                onSearchPerson = openSearchResult,
+                onOpenProfile = { navController.navigate(Routes.PROFILE) { launchSingleTop = true } },
+                onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
+                onSignOut = { scope.launch { repository.logout() } }
+            ) { shellModifier ->
+                ProfileScreen(
+                    displayName = userDisplayName ?: "Akun FamilyRoot",
+                    email = userEmail,
+                    userId = userId,
+                    spaceName = spaceName ?: "Family Space",
+                    pendingSyncCount = pendingSyncCount,
+                    onOpenSpaceSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
+                    onSignOut = { scope.launch { repository.logout() } },
+                    modifier = shellModifier
+                )
+            }
         }
         composable(Routes.ACTIVITY) {
+            val selectedSpaceId = spaceId ?: return@composable
             val activityViewModel: ActivityViewModel = viewModel(
-                factory = ActivityViewModel.Factory(requireNotNull(spaceId), repository)
+                factory = ActivityViewModel.Factory(selectedSpaceId, repository)
             )
             FamilyRootNavigationShell(
                 currentRoute = Routes.ACTIVITY,
@@ -222,24 +289,45 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 people = shellPeople,
                 pendingSyncCount = pendingSyncCount,
                 onSearchPerson = openSearchResult,
+                onOpenProfile = { navController.navigate(Routes.PROFILE) { launchSingleTop = true } },
                 onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
                 onSignOut = { scope.launch { repository.logout() } }
             ) { shellModifier ->
-                ActivityScreen(viewModel = activityViewModel, modifier = shellModifier)
+                ActivityScreen(
+                    viewModel = activityViewModel,
+                    currentUserId = userId,
+                    modifier = shellModifier
+                )
             }
         }
         composable(
             route = Routes.PERSON_DETAIL,
             arguments = listOf(navArgument("personId") { type = NavType.StringType })
         ) { entry ->
+            val selectedSpaceId = spaceId ?: return@composable
             val personId = requireNotNull(entry.arguments?.getString("personId"))
             val detailViewModel: PersonDetailViewModel = viewModel(
-                factory = PersonDetailViewModel.Factory(requireNotNull(spaceId), personId, repository)
+                factory = PersonDetailViewModel.Factory(selectedSpaceId, personId, repository)
             )
-            PersonDetailScreen(
-                viewModel = detailViewModel,
-                onBack = { navController.popBackStack() }
-            )
+            FamilyRootNavigationShell(
+                currentRoute = Routes.PERSON_DETAIL,
+                onNavigate = navigateTopLevel,
+                spaceName = spaceName ?: "Family Space",
+                userDisplayName = userDisplayName ?: "Akun",
+                userEmail = userEmail,
+                people = shellPeople,
+                pendingSyncCount = pendingSyncCount,
+                onSearchPerson = openSearchResult,
+                onOpenProfile = { navController.navigate(Routes.PROFILE) { launchSingleTop = true } },
+                onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
+                onSignOut = { scope.launch { repository.logout() } }
+            ) { shellModifier ->
+                PersonDetailScreen(
+                    viewModel = detailViewModel,
+                    onBack = { navController.popBackStack() },
+                    modifier = shellModifier
+                )
+            }
         }
     }
 }

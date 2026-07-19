@@ -43,12 +43,15 @@ Client saat ini telah menyelesaikan target arsitektur Fase 2 Android Modern, den
 
 - `MainActivity` sebagai host Compose tipis;
 - Navigation Compose untuk route auth, spaces, people, graph, activity, space settings, dan person detail;
-- screen terpisah per feature (`auth`, `spaces`, `people`, `graph`, `activity`, `space-settings`, `person-detail`);
-- `PeopleViewModel`, `ActivityViewModel`, dan `PersonDetailViewModel` yang mengekspos immutable UI state;
+- screen terpisah per feature (`auth`, `spaces`, `home`, `people`, `graph`, `activity`, `profile`, `space-settings`, `person-detail`);
+- `AuthViewModel`, `SpaceSelectionViewModel`, `HomeViewModel`, `PeopleViewModel`,
+  `ActivityViewModel`, `SpaceSettingsViewModel`, dan `PersonDetailViewModel` yang
+  mengekspos immutable UI state;
 - manual application container sebagai constructor DI awal untuk database dan repository;
 - Retrofit dan OkHttp untuk API dengan Bearer access token;
 - Room cache untuk read flow daftar/detail person setelah sinkronisasi;
-- UI people adaptif berbasis available container width untuk phone, tablet, split-screen, dan foldable;
+- navigation shell dan screen utama adaptif berbasis available container width untuk
+  phone, tablet, split-screen, dan foldable;
 - Material 3, resource string, serta semantics heading/content description untuk jalur TalkBack dasar;
 - test unit, lint, dan instrumented test yang berjalan di Samsung SM-T225 Android 14.
 

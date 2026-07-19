@@ -1,9 +1,8 @@
 package com.example.familytreeplatform.zz
 
 import androidx.compose.ui.test.assertIsDisplayed
-import androidx.compose.ui.test.hasClickAction
-import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithTag
 import com.example.familytreeplatform.MainActivity
 import com.example.familytreeplatform.SessionStore
 import kotlinx.coroutines.flow.first
@@ -40,9 +39,9 @@ class MainActivityRecreationTest {
 
     @Test
     fun authenticationRouteSurvivesActivityRecreation() {
-        composeRule.onNode(hasText("Sign in") and hasClickAction()).assertIsDisplayed()
+        composeRule.onNodeWithTag("authSubmit").assertIsDisplayed()
         composeRule.activityRule.scenario.recreate()
         composeRule.waitForIdle()
-        composeRule.onNode(hasText("Sign in") and hasClickAction()).assertIsDisplayed()
+        composeRule.onNodeWithTag("authSubmit").assertIsDisplayed()
     }
 }
