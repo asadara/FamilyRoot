@@ -611,6 +611,23 @@ yang sudah selesai:
 > instrumentation tests kembali lulus pada Samsung SM-T225, bersama unit test, lint,
 > dan assemble debug. APK final dipasang pada kedua perangkat dengan USB reverse
 > `tcp:3001` aktif.
+> Setelah penutupan Tahap 5, Tahap 6 disepakati sebagai pengembangan kompleksitas
+> lineage: recursive expand/collapse dari setiap node, progressive multi-generation,
+> multiple historical partnership, cabang keluarga pasangan, penjagaan satu identitas
+> person, state workspace, collision avoidance, serta regression/performance test.
+> Keputusan privasi berikutnya menetapkan keluarga asal pasangan sebaiknya berada
+> dalam Family Space terpisah. Istri B dapat menjadi anggota Family Space Keluarga B
+> dan Family Space Keluarga Asal Istri B, sedangkan A tidak memperoleh akses lineage
+> keluarga istri B hanya karena ia kakak kandung B. Bahkan B tidak otomatis memperoleh
+> membership ruang keluarga asal istrinya. Relationship graph tidak pernah menjadi
+> ACL; invitation, scope, pencarian, path, cache, dan export tetap terisolasi per
+> Family Space. Model sekarang mendukung satu User pada banyak space, tetapi Person
+> dan claim tetap per-space serta belum mempunyai identitas/sinkronisasi lintas-space.
+> Tahap 6 tidak menghubungkan Family Space terpisah atau memperluas izin otomatis.
+> Tahap 7 baru menyentuh backend dan server sesuai
+> `docs/CLOUD_PILOT_DECISION.md`: NestJS di Cloud Run dan PostgreSQL/private storage
+> Supabase untuk pilot, dengan setiap perubahan kontrak atau cross-space identity
+> memerlukan keputusan tersendiri.
 > Quality gate Android terakhir mencatat unit test, lint, assemble, dan 18 connected
 > instrumentation tests lulus pada
 > Samsung SM-T225 Android 14 melalui USB.

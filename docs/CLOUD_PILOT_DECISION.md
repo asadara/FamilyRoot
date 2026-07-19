@@ -3,6 +3,8 @@
 > **Status:** Disepakati sebagai arah pengujian awal
 > **Tanggal keputusan:** 18 Juli 2026
 > **Status implementasi:** Belum dimulai
+> **Penjadwalan:** Ditetapkan sebagai arah Tahap 7 setelah kompleksitas lineage
+> Tahap 6 ditutup
 > **Ruang lingkup:** Hosting backend, database cloud, dan penyimpanan media untuk pilot
 > **Tidak mengubah:** Arsitektur domain FamilyRoot, Blueprint v1, atau status Fase 1–4
 
@@ -156,6 +158,9 @@ Referensi batas layanan saat keputusan dibuat:
 - durasi pilot dan jumlah tester;
 - ukuran serta jenis media dummy;
 - konfigurasi connection pooling dan batas instance final;
+- apakah dan bagaimana dua representasi Person milik User yang sama pada Family
+  Space berbeda dapat dihubungkan dengan consent, field sharing opt-in, pencabutan,
+  serta audit tanpa membuka lineage atau membership ruang lain;
 - provider, region, SLA, backup retention, dan biaya production final.
 
 Setiap implementasi, perubahan Blueprint, deployment, atau penggunaan data keluarga

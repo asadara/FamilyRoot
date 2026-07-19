@@ -1090,3 +1090,117 @@ luar konteks relationship path, multiple historical partnership lengkap, foto pr
 binary, privacy role × scope, approval, collective confirmation, lifecycle purge,
 dan perubahan kontrak backend. Blueprint v1, database, backend NestJS, serta
 deployment tidak diubah.
+
+## 31. Keputusan Tahap 6 — Kompleksitas Lineage
+
+> **Tanggal keputusan:** 19 Juli 2026
+> **Status:** Disepakati sebagai ruang lingkup Tahap 6; implementasi belum dimulai
+> **Tidak termasuk:** deployment cloud, perubahan kontrak backend, cross-space
+> relationship, foto binary, atau privacy role × scope
+
+Tahap 6 difokuskan pada pengembangan graph kekerabatan kompleks tanpa mengganti
+arsitektur frontend, backend NestJS, atau batas tenant Family Space. Cakupan utama:
+
+1. expand/collapse rekursif dari setiap person atau partnership;
+2. pembukaan generasi lanjutan secara progresif dan hanya atas tindakan pengguna;
+3. multiple historical partnership dengan urutan kronologis;
+4. anak tetap terikat pada parentage dan partnership asal yang tercatat;
+5. cabang biological, adoptive, dan step-parent tetap dapat dibedakan;
+6. collision avoidance, viewport adjustment minimum, dan graph yang tidak reset;
+7. state ekspansi dipertahankan selama navigasi dan perubahan ukuran/orientasi;
+8. regression test untuk keluarga campuran, pernikahan ulang, perceraian, kematian
+   pasangan, serta cabang keluarga pasangan yang sama-sama lengkap;
+9. pengujian performa progressive rendering pada graph yang lebih besar.
+
+### 31.1 Kasus saudara kandung dan keluarga pasangan
+
+Kakak-adik kandung yang masing-masing mempunyai istri dan keluarga istri yang lengkap
+dapat ditampung, tetapi batas privasi default mengikuti Family Space, bukan sejauh apa
+graph secara teknis dapat dirender. Keluarga asal pasangan sebaiknya berada dalam
+Family Space terpisah agar partnership tidak otomatis membuka seluruh lineage
+pasangan kepada saudara suami/istri.
+
+```text
+Orang tua bersama
+        │
+   ┌────┴────┐
+ Kakak      Adik
+   ⚭           ⚭
+ Istri A     Istri B
+   │           │
+ Anak A      Anak B
+
+Dalam Family Space bersama, card Istri A dan Istri B cukup menampilkan person serta
+relationship yang memang dicatat dan diizinkan di ruang tersebut. Lineage keluarga
+asal masing-masing istri tidak otomatis dimuat dari Family Space lain.
+```
+
+Mekanisme datanya:
+
+- kakak dan adik menjadi saudara karena mempunyai relationship parent-child kepada
+  parent yang sama, bukan karena relationship `SIBLING` buatan;
+- setiap istri dihubungkan melalui relationship spouse yang mempunyai status dan
+  tanggal historisnya sendiri;
+- orang tua dan saudara istri hanya dicatat atau dikembangkan di Family Space yang
+  memang menampung lineage keluarga asal istri tersebut;
+- anak dicatat terhadap setiap parent yang benar; renderer boleh mengelompokkannya
+  pada junction partnership hanya jika data relationship mendukung;
+- satu person hanya mempunyai satu identitas/card aktif dalam workspace dan tidak
+  diduplikasi ketika dapat dicapai dari lebih dari satu jalur;
+- pengguna dapat memilih lalu membuka cabang dari card mana pun tanpa mengganti root
+  permanen, tetapi hanya untuk relationship yang tersedia dalam ruang aktif dan
+  memang boleh diterima client.
+
+Model ini menjadikan FamilyRoot sebagai kinship graph berarah, bukan struktur tree
+tampilan yang memaksa setiap orang hanya memiliki satu konteks. Cycle biologis tetap
+ditolak, tetapi jalur graph yang bertemu kembali tidak boleh menggandakan person.
+
+### 31.2 Batas Family Space
+
+Satu akun `User` dapat menjadi anggota lebih dari satu Family Space. Baseline yang
+disepakati untuk kasus keluarga B adalah:
+
+```text
+User Istri B
+  ├─ membership: Family Space Keluarga B
+  │    └─ B — pasangan — Istri B — anak-anak mereka
+  └─ membership: Family Space Keluarga Asal Istri B
+       └─ orang tua, saudara, dan lineage asal Istri B
+```
+
+Akibat batas tersebut:
+
+- A dapat melihat data dalam Family Space Keluarga B hanya sesuai membership dan
+  scope yang diberikan di ruang itu;
+- A tidak dapat melihat lineage keluarga asal Istri B tanpa undangan atau approval
+  eksplisit dari ruang keluarga asal tersebut;
+- status A sebagai kakak kandung B tidak memberi hak akses apa pun terhadap ruang
+  keluarga istri B;
+- B sebagai suami juga tidak otomatis menjadi anggota ruang keluarga asal istrinya;
+- membership dan izin tidak diwariskan melalui spouse, biological, adoptive, step,
+  guardian, atau relationship graph lain;
+- pencarian, relationship path, breadcrumb, jumlah hasil, dan expand control tidak
+  boleh mengungkap bahwa cabang privat tersebut ada;
+- Family Space Keluarga B tidak menerima parent/sibling dari Family Space keluarga
+  istri secara otomatis dan hanya memuat data yang sengaja dicatat di ruang itu;
+- export, cache offline, aktivitas, dan pencarian tetap dibatasi per Family Space.
+
+Model backend saat ini memang mendukung satu `User` mempunyai beberapa membership,
+tetapi setiap record `Person` masih dimiliki tepat oleh satu `spaceId`. Karena itu
+Istri B saat ini akan mempunyai representasi person dan claim terpisah pada kedua
+ruang. Tahap 6 tidak menyatukan, menyinkronkan, atau menyalin kedua record tersebut.
+Perbedaan data antarruang tidak boleh diselesaikan dengan last-write-wins lintas
+tenant.
+
+Identitas person lintas-space, consent untuk menghubungkan representasi, field yang
+boleh dibagikan, sinkronisasi opt-in, pencabutan akses, dan audit harus diputuskan
+pada Tahap 7 sebelum kontrak backend berubah. Tanpa keputusan itu, kedua ruang tetap
+terisolasi dan istri B berpindah ruang melalui pemilih Family Space yang sudah ada.
+
+### 31.3 Serah terima ke Tahap 7
+
+Tahap 7 ditetapkan sebagai tahap pertama yang kembali menyentuh backend dan server,
+mengikuti `docs/CLOUD_PILOT_DECISION.md`. Arah pilot tetap Cloud Run untuk NestJS dan
+Supabase Free untuk PostgreSQL serta private object storage di Singapore. Tahap 6
+tidak boleh mendahului keputusan kontrak, izin, migrasi, secret, deployment, atau
+cross-space identity yang menjadi tanggung jawab pembahasan Tahap 7.
