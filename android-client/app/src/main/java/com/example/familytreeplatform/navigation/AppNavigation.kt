@@ -5,6 +5,10 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -28,16 +32,19 @@ import com.example.familytreeplatform.feature.activity.ActivityScreen
 import com.example.familytreeplatform.feature.activity.ActivityViewModel
 import com.example.familytreeplatform.feature.graph.TreeGraphScreen
 import com.example.familytreeplatform.feature.graph.TreeGraphViewModel
+import com.example.familytreeplatform.feature.home.HomeScreen
 import com.example.familytreeplatform.feature.persondetail.PersonDetailScreen
 import com.example.familytreeplatform.feature.persondetail.PersonDetailViewModel
 import com.example.familytreeplatform.feature.spacesettings.SpaceSettingsScreen
 import com.example.familytreeplatform.feature.spacesettings.SpaceSettingsViewModel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.flowOf
 
 object Routes {
     const val AUTH = "auth"
     const val SPACES = "spaces"
     const val PEOPLE = "people"
+    const val HOME = "home"
     const val ACTIVITY = "activity"
     const val GRAPH = "graph"
     const val SPACE_SETTINGS = "space-settings"
@@ -51,9 +58,28 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
     val repository = (context.applicationContext as FamilyTreeApplication).container.personRepository
     val token by SessionStore.accessToken.collectAsState()
     val spaceId by SessionStore.activeSpaceId.collectAsState()
+    val spaceName by SessionStore.activeSpaceName.collectAsState()
+    val userDisplayName by SessionStore.userDisplayName.collectAsState()
+    val userEmail by SessionStore.userEmail.collectAsState()
     val restoring by SessionStore.restoring.collectAsState()
     val hasPersistedSession by SessionStore.hasPersistedSession.collectAsState()
     val scope = rememberCoroutineScope()
+    val shellPeopleFlow = remember(spaceId) {
+        spaceId?.let(repository::observePersons) ?: flowOf(emptyList())
+    }
+    val shellPeople by shellPeopleFlow.collectAsState(initial = emptyList())
+    val pendingSyncFlow = remember(spaceId) {
+        spaceId?.let(repository::observeOfflineMutationCount) ?: flowOf(0)
+    }
+    val pendingSyncCount by pendingSyncFlow.collectAsState(initial = 0)
+    var requestedSearchPersonId by rememberSaveable { mutableStateOf<String?>(null) }
+    val navigateTopLevel: (String) -> Unit = { route ->
+        navController.navigate(route) {
+            popUpTo(Routes.GRAPH) { saveState = true }
+            launchSingleTop = true
+            restoreState = true
+        }
+    }
 
     if (restoring) {
         Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -65,7 +91,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
     val target = when {
         token == null && !hasPersistedSession -> Routes.AUTH
         spaceId == null -> Routes.SPACES
-        else -> Routes.PEOPLE
+        else -> Routes.GRAPH
     }
 
     LaunchedEffect(target) {
@@ -77,6 +103,21 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
         }
     }
 
+    LaunchedEffect(spaceId) {
+        val selectedSpaceId = spaceId ?: return@LaunchedEffect
+        repository.listSpaces().onSuccess { spaces ->
+            spaces.firstOrNull { it.spaceId == selectedSpaceId }?.let { space ->
+                SessionStore.updateActiveSpaceName(space.name)
+            }
+        }
+        repository.listPersons(selectedSpaceId)
+    }
+
+    val openSearchResult: (String) -> Unit = { personId ->
+        requestedSearchPersonId = personId
+        navigateTopLevel(Routes.GRAPH)
+    }
+
     NavHost(navController = navController, startDestination = target, modifier = modifier) {
         composable(Routes.AUTH) { AuthScreen(repository = repository) }
         composable(Routes.SPACES) { SpaceSelectionScreen(repository = repository) }
@@ -85,23 +126,79 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
             val peopleViewModel: PeopleViewModel = viewModel(
                 factory = PeopleViewModel.Factory(selectedSpaceId, repository)
             )
-            PeopleScreen(
-                viewModel = peopleViewModel,
-                onPersonClick = { navController.navigate(Routes.personDetail(it)) },
-                onActivityClick = { navController.navigate(Routes.ACTIVITY) },
-                onGraphClick = { navController.navigate(Routes.GRAPH) },
-                onSpaceSettingsClick = { navController.navigate(Routes.SPACE_SETTINGS) },
+            FamilyRootNavigationShell(
+                currentRoute = Routes.PEOPLE,
+                onNavigate = navigateTopLevel,
+                spaceName = spaceName ?: "Family Space",
+                userDisplayName = userDisplayName ?: "Akun",
+                userEmail = userEmail,
+                people = shellPeople,
+                pendingSyncCount = pendingSyncCount,
+                onSearchPerson = openSearchResult,
+                onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
                 onSignOut = { scope.launch { repository.logout() } }
-            )
+            ) { shellModifier ->
+                PeopleScreen(
+                    viewModel = peopleViewModel,
+                    onPersonClick = { navController.navigate(Routes.personDetail(it)) },
+                    onSpaceSettingsClick = { navController.navigate(Routes.SPACE_SETTINGS) },
+                    onSignOut = { scope.launch { repository.logout() } },
+                    modifier = shellModifier
+                )
+            }
         }
         composable(Routes.GRAPH) {
             val graphViewModel: TreeGraphViewModel = viewModel(
                 factory = TreeGraphViewModel.Factory(requireNotNull(spaceId), repository)
             )
-            TreeGraphScreen(
-                viewModel = graphViewModel,
-                onBack = { navController.popBackStack() }
-            )
+            var graphShellAction by remember { mutableStateOf<GraphShellAction?>(null) }
+            LaunchedEffect(requestedSearchPersonId) {
+                requestedSearchPersonId?.let(graphViewModel::selectSearchResult)
+                requestedSearchPersonId = null
+            }
+            FamilyRootNavigationShell(
+                currentRoute = Routes.GRAPH,
+                onNavigate = navigateTopLevel,
+                spaceName = spaceName ?: "Family Space",
+                userDisplayName = userDisplayName ?: "Akun",
+                userEmail = userEmail,
+                people = shellPeople,
+                pendingSyncCount = pendingSyncCount,
+                onSearchPerson = openSearchResult,
+                onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
+                onSignOut = { scope.launch { repository.logout() } },
+                onGraphAction = { graphShellAction = it }
+            ) { shellModifier ->
+                TreeGraphScreen(
+                    viewModel = graphViewModel,
+                    onBack = { navigateTopLevel(Routes.PEOPLE) },
+                    onOpenPerson = { navController.navigate(Routes.personDetail(it)) },
+                    shellAction = graphShellAction,
+                    onShellActionConsumed = { graphShellAction = null },
+                    modifier = shellModifier
+                )
+            }
+        }
+        composable(Routes.HOME) {
+            FamilyRootNavigationShell(
+                currentRoute = Routes.HOME,
+                onNavigate = navigateTopLevel,
+                spaceName = spaceName ?: "Family Space",
+                userDisplayName = userDisplayName ?: "Akun",
+                userEmail = userEmail,
+                people = shellPeople,
+                pendingSyncCount = pendingSyncCount,
+                onSearchPerson = openSearchResult,
+                onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
+                onSignOut = { scope.launch { repository.logout() } }
+            ) { shellModifier ->
+                HomeScreen(
+                    onOpenTree = { navigateTopLevel(Routes.GRAPH) },
+                    onOpenFamily = { navigateTopLevel(Routes.PEOPLE) },
+                    onOpenActivity = { navigateTopLevel(Routes.ACTIVITY) },
+                    modifier = shellModifier
+                )
+            }
         }
         composable(Routes.SPACE_SETTINGS) {
             val spaceSettingsViewModel: SpaceSettingsViewModel = viewModel(
@@ -116,10 +213,20 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
             val activityViewModel: ActivityViewModel = viewModel(
                 factory = ActivityViewModel.Factory(requireNotNull(spaceId), repository)
             )
-            ActivityScreen(
-                viewModel = activityViewModel,
-                onBack = { navController.popBackStack() }
-            )
+            FamilyRootNavigationShell(
+                currentRoute = Routes.ACTIVITY,
+                onNavigate = navigateTopLevel,
+                spaceName = spaceName ?: "Family Space",
+                userDisplayName = userDisplayName ?: "Akun",
+                userEmail = userEmail,
+                people = shellPeople,
+                pendingSyncCount = pendingSyncCount,
+                onSearchPerson = openSearchResult,
+                onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
+                onSignOut = { scope.launch { repository.logout() } }
+            ) { shellModifier ->
+                ActivityScreen(viewModel = activityViewModel, modifier = shellModifier)
+            }
         }
         composable(
             route = Routes.PERSON_DETAIL,

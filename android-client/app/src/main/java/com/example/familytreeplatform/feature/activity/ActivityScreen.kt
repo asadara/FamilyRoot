@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -23,17 +22,15 @@ import com.example.familytreeplatform.R
 @Composable
 fun ActivityScreen(
     viewModel: ActivityViewModel,
-    onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
 
     Column(modifier = modifier.fillMaxSize().padding(16.dp)) {
-        Button(onClick = onBack) { Text(stringResource(R.string.back)) }
         Text(
             text = stringResource(R.string.activity),
             style = MaterialTheme.typography.headlineSmall,
-            modifier = Modifier.padding(top = 12.dp).semantics { heading() }
+            modifier = Modifier.semantics { heading() }
         )
         if (state.loading) {
             CircularProgressIndicator(modifier = Modifier.padding(top = 8.dp))

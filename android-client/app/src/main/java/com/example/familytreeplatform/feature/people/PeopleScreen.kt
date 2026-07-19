@@ -34,8 +34,6 @@ import com.example.familytreeplatform.R
 fun PeopleScreen(
     viewModel: PeopleViewModel,
     onPersonClick: (String) -> Unit,
-    onActivityClick: () -> Unit,
-    onGraphClick: () -> Unit,
     onSpaceSettingsClick: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier
@@ -83,11 +81,7 @@ fun PeopleScreen(
         Column(modifier = listModifier.padding(16.dp)) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = onActivityClick) { Text(stringResource(R.string.activity)) }
-                    Button(onClick = onGraphClick) { Text(stringResource(R.string.graph)) }
                     Button(onClick = onSpaceSettingsClick) { Text(stringResource(R.string.space_settings)) }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = { viewModel.refresh() }) { Text(stringResource(R.string.refresh)) }
                     Button(onClick = onSignOut) { Text(stringResource(R.string.sign_out)) }
                 }

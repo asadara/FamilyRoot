@@ -62,7 +62,7 @@ fun SpaceSelectionScreen(repository: PersonRepository, modifier: Modifier = Modi
         loading = true
         error = null
         repository.acceptInvitation(token)
-            .onSuccess { SessionStore.selectSpace(it.spaceId) }
+            .onSuccess { SessionStore.selectSpace(it.spaceId, it.name) }
             .onFailure { error = it.message }
         loading = false
     }
@@ -78,7 +78,7 @@ fun SpaceSelectionScreen(repository: PersonRepository, modifier: Modifier = Modi
         if (loading) CircularProgressIndicator(modifier = Modifier.padding(top = 16.dp))
         spaces.forEach { space ->
             Button(
-                onClick = { SessionStore.selectSpace(space.spaceId) },
+                onClick = { SessionStore.selectSpace(space.spaceId, space.name) },
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
             ) { Text(stringResource(R.string.space_item_format, space.name, space.role ?: "MEMBER")) }
         }
@@ -130,7 +130,7 @@ fun SpaceSelectionScreen(repository: PersonRepository, modifier: Modifier = Modi
         Button(enabled = !loading && name.isNotBlank(), onClick = {
             scope.launch {
                 loading = true
-                repository.createSpace(name).onSuccess { SessionStore.selectSpace(it.spaceId) }
+                repository.createSpace(name).onSuccess { SessionStore.selectSpace(it.spaceId, it.name) }
                     .onFailure { error = it.message }
                 loading = false
             }

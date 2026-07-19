@@ -149,7 +149,9 @@ class PersonRepository(
         SessionStore.saveSession(
             auth.accessToken,
             auth.refreshToken,
-            auth.user.userId
+            auth.user.userId,
+            auth.user.displayName,
+            auth.user.email
         )
     }
 
@@ -278,6 +280,9 @@ class PersonRepository(
 
     fun observeOfflineMutations(personId: String): Flow<List<OfflineMutationEntity>> =
         mutationDao?.observeForPerson(personId) ?: flowOf(emptyList())
+
+    fun observeOfflineMutationCount(spaceId: String): Flow<Int> =
+        mutationDao?.observeCountForSpace(spaceId) ?: flowOf(0)
 
     suspend fun queueLifeStatusUpdate(
         spaceId: String,
@@ -1117,7 +1122,9 @@ class PersonRepository(
                 SessionStore.updateSession(
                     auth.accessToken,
                     auth.refreshToken,
-                    auth.user.userId
+                    auth.user.userId,
+                    auth.user.displayName,
+                    auth.user.email
                 )
                 true
             } else {

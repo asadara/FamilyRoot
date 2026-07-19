@@ -39,6 +39,76 @@ class TreeGraphViewModelTest {
     }
 
     @Test
+    fun `selecting a person opens inspector state without changing graph center`() {
+        val initial = TreeGraphUiState(
+            centerPersonId = "self",
+            selectedPersonId = "self"
+        )
+
+        val selected = selectGraphPerson(initial, "relative")
+
+        assertEquals("self", selected.centerPersonId)
+        assertEquals("relative", selected.selectedPersonId)
+        assertEquals(null, clearGraphSelection(selected).selectedPersonId)
+        assertEquals("self", clearGraphSelection(selected).centerPersonId)
+    }
+
+    @Test
+    fun `shortest relationship path is directional and works from cached graph data`() {
+        val people = listOf(
+            person("parent", "Hadi", "2026-01-01"),
+            person("child", "Budi", "2026-01-01"),
+            person("spouse", "Siti", "2026-01-01")
+        )
+        val relationships = listOf(
+            relationship("parent-child", "PARENT_CHILD", "parent", "child"),
+            relationship("child-spouse", "SPOUSE", "child", "spouse")
+        )
+
+        val forward = findShortestRelationshipPath("parent", "spouse", people, relationships)
+        val reverse = findShortestRelationshipPath("spouse", "parent", people, relationships)
+
+        assertTrue(forward.found)
+        assertEquals(listOf("parent", "child", "spouse"), forward.people.map { it.personId })
+        assertEquals(listOf("FORWARD", "FORWARD"), forward.edges.map { it.direction })
+        assertEquals(listOf("REVERSE", "REVERSE"), reverse.edges.map { it.direction })
+    }
+
+    @Test
+    fun `search result advances exploration focus without showing graph path automatically`() {
+        val state = TreeGraphUiState(
+            centerPersonId = "parent",
+            persons = listOf(
+                person("parent", "Hadi", "2026-01-01"),
+                person("child", "Budi", "2026-01-01")
+            ),
+            relationships = listOf(
+                relationship("parent-child", "PARENT_CHILD", "parent", "child")
+            ),
+            explorationHistory = listOf("parent")
+        )
+
+        val result = selectGraphSearchResult(state, "child")
+
+        assertEquals("parent", result.centerPersonId)
+        assertEquals("child", result.selectedPersonId)
+        assertEquals(listOf("parent", "child"), result.explorationHistory)
+        assertTrue(result.explorationBreadcrumbVisible)
+        assertTrue(result.relationshipPath?.found == true)
+        assertEquals(false, result.showRelationshipPathInGraph)
+    }
+
+    @Test
+    fun `disconnected people return a not found path`() {
+        val people = listOf(
+            person("a", "A", "2026-01-01"),
+            person("b", "B", "2026-01-01")
+        )
+
+        assertEquals(false, findShortestRelationshipPath("a", "b", people, emptyList()).found)
+    }
+
+    @Test
     fun `graph center selection stays within large-family CI budget`() {
         val people = (0 until 10_000).map { index ->
             person("person-$index", "Person $index", "2026-07-18T00:00:00Z")

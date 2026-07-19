@@ -20,6 +20,9 @@ interface OfflineMutationDao {
     @Query("SELECT COUNT(*) FROM offline_mutations WHERE spaceId = :spaceId")
     suspend fun countForSpace(spaceId: String): Int
 
+    @Query("SELECT COUNT(*) FROM offline_mutations WHERE spaceId = :spaceId")
+    fun observeCountForSpace(spaceId: String): Flow<Int>
+
     @Query("SELECT * FROM offline_mutations WHERE mutationId = :mutationId LIMIT 1")
     suspend fun getById(mutationId: String): OfflineMutationEntity?
 

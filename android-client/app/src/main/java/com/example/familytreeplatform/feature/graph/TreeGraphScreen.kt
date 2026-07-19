@@ -2,17 +2,20 @@ package com.example.familytreeplatform.feature.graph
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.Alignment
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -21,16 +24,21 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.familytreeplatform.GraphScreen
 import com.example.familytreeplatform.R
 import com.example.familytreeplatform.export.FamilyGraphExporter
+import com.example.familytreeplatform.navigation.GraphShellAction
 
 @Composable
 fun TreeGraphScreen(
     viewModel: TreeGraphViewModel,
     onBack: () -> Unit,
+    onOpenPerson: (String) -> Unit,
+    shellAction: GraphShellAction? = null,
+    onShellActionConsumed: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val centerPersonId = state.centerPersonId
     val context = LocalContext.current
+    var resetViewRequest by rememberSaveable { mutableIntStateOf(0) }
     val pdfWriter = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri ->
@@ -48,37 +56,54 @@ fun TreeGraphScreen(
         }
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
-        if (state.loading) {
-            CircularProgressIndicator(modifier = Modifier.padding(16.dp))
+    LaunchedEffect(shellAction) {
+        when (shellAction) {
+            GraphShellAction.EXPORT_PDF -> pdfWriter.launch("familyroot-tree.pdf")
+            GraphShellAction.EXPORT_PNG -> pngWriter.launch("familyroot-tree.png")
+            GraphShellAction.RESET_VIEW -> resetViewRequest++
+            null -> return@LaunchedEffect
         }
-        state.error?.let { error ->
-            Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(16.dp))
-        }
+        onShellActionConsumed()
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
         if (centerPersonId == null) {
-            Button(onClick = onBack, modifier = Modifier.padding(16.dp)) {
-                Text(stringResource(R.string.back))
+            if (state.loading) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            } else {
+                Button(onClick = onBack, modifier = Modifier.padding(16.dp)) {
+                    Text(stringResource(R.string.back))
+                }
+                Text(
+                    stringResource(R.string.no_family_members),
+                    modifier = Modifier.align(Alignment.Center)
+                )
             }
-            Text(stringResource(R.string.no_family_members), modifier = Modifier.padding(horizontal = 16.dp))
         } else {
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-            ) {
-                Button(onClick = { pdfWriter.launch("familyroot-tree.pdf") }) {
-                    Text("Export PDF")
-                }
-                Button(onClick = { pngWriter.launch("familyroot-tree.png") }) {
-                    Text("Export image")
-                }
-            }
             GraphScreen(
                 centerPersonId = centerPersonId,
+                selectedPersonId = state.selectedPersonId,
                 persons = state.persons,
                 relations = state.relations,
                 allRelationships = state.relationships,
+                explorationHistory = state.explorationHistory,
+                explorationBreadcrumbVisible = state.explorationBreadcrumbVisible,
+                relationshipPath = state.relationshipPath,
+                showRelationshipPathInGraph = state.showRelationshipPathInGraph,
+                resetViewRequest = resetViewRequest,
                 onSelectPerson = viewModel::selectPerson,
-                onBack = onBack
+                onClearSelection = viewModel::clearSelection,
+                onOpenPerson = onOpenPerson,
+                onShowRelationshipPath = viewModel::showRelationshipPathInGraph,
+                onHideExplorationBreadcrumb = viewModel::hideExplorationBreadcrumb,
+                onBack = onBack,
+            )
+        }
+        state.error?.let { error ->
+            Text(
+                error,
+                color = MaterialTheme.colorScheme.error,
+                modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)
             )
         }
     }
