@@ -260,7 +260,10 @@ class PersonRepository(
                 response.body()?.let { list ->
                     personDao?.replaceSpace(spaceId, list.map { it.toEntity(spaceId) })
                     reapplyQueuedMutations(spaceId)
-                    Result.success(list)
+                    val mergedLocal = personDao
+                        ?.listBySpace(spaceId)
+                        ?.map { entity -> entity.toModel() }
+                    Result.success(mergedLocal ?: list)
                 } ?: Result.failure(Exception("Empty response"))
             } else {
                 Result.failure(Exception(parseError(response)))

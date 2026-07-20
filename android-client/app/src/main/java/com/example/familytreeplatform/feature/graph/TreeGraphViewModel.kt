@@ -14,6 +14,7 @@ import com.example.familytreeplatform.repository.PersonRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -39,6 +40,11 @@ class TreeGraphViewModel(
     val uiState: StateFlow<TreeGraphUiState> = _uiState.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            repository.observePersons(spaceId).collectLatest { people ->
+                _uiState.update { state -> updateGraphPersons(state, people) }
+            }
+        }
         refresh()
     }
 
@@ -147,6 +153,11 @@ class TreeGraphViewModel(
         }
     }
 }
+
+internal fun updateGraphPersons(
+    state: TreeGraphUiState,
+    people: List<PersonListItem>
+): TreeGraphUiState = state.copy(persons = people)
 
 internal fun selectGraphPerson(state: TreeGraphUiState, personId: String): TreeGraphUiState =
     state.copy(

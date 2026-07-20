@@ -551,11 +551,12 @@ Aturan kerja repository:
 Hal berikut diketahui pada snapshot dan belum boleh disalahartikan sebagai pekerjaan
 yang sudah selesai:
 
-- backend production belum di-host;
-- database production, migration pipeline, backup server, dan disaster-recovery
-  operation belum ditetapkan;
-- binary media upload/object storage belum ada;
-- media saat ini hanya metadata/URI sehingga tidak otomatis portabel lintas perangkat;
+- backend pilot sudah di-host di Cloud Run, tetapi platform production final, SLA,
+  observability, dan disaster-recovery operation belum ditetapkan;
+- database/storage pilot tersedia di Supabase Free dan migration awal sudah
+  diterapkan, tetapi automated backup/PITR production belum tersedia;
+- binary media upload pilot sudah tersedia melalui private Supabase Storage, tetapi
+  lifecycle, retention, portability provider, dan kebijakan data nyata belum ditutup;
 - field-level privacy untuk orang hidup dan model provenance penuh masih target;
 - beberapa target domain Blueprint lebih kaya dari entity aktual;
 - Blueprint v1 menyatakan empat fase selesai, tetapi kualitas UI/UX produk masih akan
@@ -671,8 +672,36 @@ yang sudah selesai:
 > pada limit 2 MB dan MIME JPEG/PNG/WebP. Upload PNG dummy, pencatatan metadata,
 > signed URL 60 detik, dan download HTTP 200 juga berhasil. Seed lama yang semula
 > selalu menargetkan SQLite diperbaiki agar mengikuti `DATABASE_URL` tanpa pernah
-> mengaktifkan synchronize pada PostgreSQL. Provisioning dan acceptance Cloud Run
-> masih terbuka.
+> mengaktifkan synchronize pada PostgreSQL.
+> Cloud Run kemudian berhasil dideploy di region Singapore melalui continuous
+> deployment GitHub. GitHub Actions memvalidasi backend, production container, dan
+> Android. Acceptance remote membuktikan health HTTPS, proteksi JWT, login/refresh/
+> logout, dua session membaca enam profil yang sama, private media upload/signed read,
+> expiry signed URL setelah 70 detik, serta backup dan GEDCOM cloud. APK debug
+> ber-endpoint Cloud Run juga lulus unit test,
+> lint, assemble, install/cold-launch tanpa crash, dan seluruh 20 connected
+> instrumentation test pada Samsung SM-T225 Android 14. Tahap 7 belum CLOSED karena
+> smoke test data cloud pada dua perangkat, mutation
+> queue offline-online beserta conflict/idempotent retry, persistensi setelah
+> scale-to-zero/restart, penyimpanan file backup oleh pemilik, audit log/secret, serta
+> billing dan usage review masih wajib.
+> Acceptance offline pertama pada Samsung menemukan workspace graph menampilkan
+> snapshot seed lama setelah worker sebenarnya sukses melakukan PATCH 200; PostgreSQL
+> sudah menyimpan catatan dan menaikkan version. Android diperbaiki agar graph
+> mengamati Room dan `listPersons` mengembalikan hasil lokal setelah reapply queue.
+> Regression/unit test, lint, assemble, dan 20 instrumentation test lulus. Retest
+> manual offline-online kemudian berhasil mempertahankan teks tambahan. Halaman profil
+> juga mendapat pull-to-refresh dengan indikator agar data dapat dimuat ulang tanpa
+> menutup halaman; build dan 20 instrumentation test kembali lulus, sedangkan gesture
+> pada APK terbaru menunggu konfirmasi visual pemilik.
+> Karena perangkat kedua tidak tersedia, acceptance kolaborasi backend dilanjutkan
+> dengan smoke dua session reusable. Test membuktikan snapshot enam profil identik,
+> stale-version conflict 409, rebase/retry, idempotency tanpa kenaikan version ganda,
+> visibilitas lintas session, pemulihan profil dummy, dan logout kedua session.
+> Audit juga menemukan E2E lama pernah memuat `.env` cloud: akun dummy
+> `owner@example.test` mempunyai empat Family Space test. `ConfigModule` kini
+> mengabaikan `.env` saat `NODE_ENV=test`, dan 8/8 E2E lulus dengan SQLite `:memory:`.
+> Artefak dummy lama belum dihapus karena cleanup destruktif menunggu persetujuan.
 > Handoff PC pengembangan kemudian distandardisasi melalui `docs/NEW_PC_HANDOFF.md`.
 > Keyword `familyroot` diatur oleh root `AGENTS.md` untuk meminta Codex membaca
 > `PROJECT_MEMORY.md` seluruhnya, memeriksa Git, mengonfirmasi konteks, dan menunggu

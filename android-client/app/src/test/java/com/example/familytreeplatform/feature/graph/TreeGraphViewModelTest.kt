@@ -54,6 +54,31 @@ class TreeGraphViewModelTest {
     }
 
     @Test
+    fun `room profile update replaces stale workspace person without resetting graph state`() {
+        val stalePerson = person("self", "Budi", "2026-01-01").copy(
+            notes = "Demo seed profile",
+            version = 1
+        )
+        val syncedPerson = stalePerson.copy(notes = "Uji offline Step 7", version = 2)
+        val initial = TreeGraphUiState(
+            centerPersonId = "self",
+            selectedPersonId = "self",
+            persons = listOf(stalePerson),
+            explorationHistory = listOf("self"),
+            explorationBreadcrumbVisible = true
+        )
+
+        val updated = updateGraphPersons(initial, listOf(syncedPerson))
+
+        assertEquals("Uji offline Step 7", updated.persons.single().notes)
+        assertEquals(2, updated.persons.single().version)
+        assertEquals("self", updated.centerPersonId)
+        assertEquals("self", updated.selectedPersonId)
+        assertEquals(listOf("self"), updated.explorationHistory)
+        assertTrue(updated.explorationBreadcrumbVisible)
+    }
+
+    @Test
     fun `shortest relationship path is directional and works from cached graph data`() {
         val people = listOf(
             person("parent", "Hadi", "2026-01-01"),

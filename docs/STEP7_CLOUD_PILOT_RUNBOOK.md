@@ -1,9 +1,11 @@
 # Tahap 7 — Runbook Cloud Pilot
 
-> **Status:** Repository dan Supabase Free terverifikasi; provisioning Cloud Run
-> menunggu tindakan pemilik akun.
+> **Status:** Repository, Supabase Free, CI, dan deployment Cloud Run terverifikasi;
+> penutupan menunggu acceptance pada perangkat serta pemeriksaan operasional pemilik.
 > **Batas data:** Hanya seed/dummy. Jangan unggah data atau foto keluarga nyata.
 > **Target awal:** Cloud Run dan Supabase Free di Singapore.
+> **Endpoint pilot:**
+> `https://familyroot-api-pilot-441927816740.asia-southeast1.run.app`
 
 ## 1. Yang Sudah Disiapkan di Repository
 
@@ -175,6 +177,85 @@ hasil. Kesiapan source code saja belum cukup.
 - satu pixel PNG dummy berhasil di-upload, metadata media tercatat, signed URL 60
   detik dibuat, dan download menghasilkan HTTP 200.
 
-Checkpoint yang masih terbuka: build container oleh CI/Cloud Build, deployment Cloud
-Run, persistensi setelah scale-to-zero, sinkronisasi dua session/perangkat, offline
-queue, pemeriksaan log/secret, export cloud, dan billing/usage review.
+### Bukti checkpoint Cloud Run — 20 Juli 2026
+
+- GitHub Actions run `29721825385` lulus untuk backend, production container build,
+  dan Android;
+- Cloud Run berhasil men-deploy revision dari root `Dockerfile` dan `/health`
+  mengembalikan `200` dengan status `ok` melalui HTTPS;
+- endpoint yang dilindungi mengembalikan `401` tanpa FamilyRoot JWT;
+- login, rotating refresh token, logout, penolakan reuse refresh token, dan login
+  kembali berhasil terhadap deployment cloud;
+- dua session akun demo terpisah melihat Family Space dan enam person ID yang sama;
+- upload media dummy ke bucket privat dan download terotorisasi menghasilkan `200`;
+  URL yang sama terkonfirmasi ditolak dengan `400` setelah 70 detik;
+- export backup cloud menghasilkan format `familyroot-backup` schema 1 berisi enam
+  person dan enam relationship; export GEDCOM memiliki header dan trailer valid;
+- APK debug berhasil melewati unit test, lint, dan assemble dengan endpoint Cloud Run
+  tertanam sebagai `API_BASE_URL`; `local.properties` tetap diabaikan Git.
+- APK tersebut berhasil dipasang dan cold-launch pada Samsung SM-T225 Android 14
+  tanpa crash; seluruh 20 connected instrumentation test lulus.
+
+Checkpoint yang masih terbuka sebelum Tahap 7 dapat ditutup:
+
+- selesaikan smoke test login/data cloud pada Samsung dan satu perangkat kedua melalui
+  USB (install/cold-launch serta instrumentation Samsung sudah lulus);
+- buat mutation saat perangkat offline dan pastikan queue tersinkron setelah online,
+  termasuk verifikasi conflict/idempotent retry;
+- biarkan service scale-to-zero atau buat revision restart, kemudian pastikan enam
+  profil PostgreSQL tetap tersedia;
+- simpan file backup dummy di lokasi aman milik pemilik project;
+- periksa Cloud Run revision (`min=0`, `max=1`), secret reference, build/runtime log,
+  APK, dan repository untuk memastikan tidak ada secret;
+- periksa Google Cloud billing report/budget alert serta Supabase usage.
+
+Jika perangkat kedua tidak tersedia, kontrak kolaborasi, conflict, dan idempotency
+dapat diuji sementara melalui dua session independen. Script hanya menerima akun
+dummy `example.test`, memerlukan Family Space `Keluarga Demo`, harus diberi izin
+mutation dummy secara eksplisit, memulihkan nilai profil awal, dan logout kedua sesi:
+
+```powershell
+Set-Location D:\FamilyRoot\backend
+$env:PILOT_API_URL='https://SERVICE_URL'
+$env:PILOT_DEMO_PASSWORD='<password-akun-dummy>'
+$env:PILOT_ALLOW_DUMMY_MUTATION='true'
+npm run smoke:step7:cloud
+Remove-Item Env:PILOT_API_URL,Env:PILOT_DEMO_PASSWORD,Env:PILOT_ALLOW_DUMMY_MUTATION
+```
+
+Smoke ini membuktikan kontrak backend/cloud, tetapi bukti UI lintas perangkat tetap
+ditunda sampai perangkat kedua tersedia.
+
+### Bukti smoke dua session — 20 Juli 2026
+
+Smoke terhadap deployment Cloud Run lulus untuk seluruh checkpoint berikut:
+
+- dua login independen dan snapshot enam profil yang identik;
+- retry mutation sukses dengan `clientMutationId` yang sama tidak menaikkan version
+  dua kali;
+- session dengan version lama menerima conflict `409` beserta version server;
+- mutation yang direbase berhasil dan terlihat dari session pertama;
+- profil dummy dikembalikan ke nilai awal dan kedua refresh session di-logout.
+
+Perangkat kedua tetap diperlukan nanti untuk validasi UI/device-specific, tetapi tidak
+lagi memblokir pembuktian kontrak kolaborasi backend pada pilot ini.
+
+Audit sesudah smoke menemukan E2E lokal lama pernah memuat `backend/.env` dan menyentuh
+Supabase pilot. Akun dummy `owner@example.test` memiliki empat Family Space test:
+`Secure Family`, `Other Family`, `GEDCOM Restore`, dan `Backup Restore`. Setup test
+telah diperbaiki agar `NODE_ENV=test` mengabaikan `.env` dan selalu memakai SQLite
+`:memory:`; 8/8 E2E kemudian lulus secara hermetic. Artefak cloud lama belum dihapus
+karena cleanup destruktif memerlukan persetujuan pemilik.
+
+Catatan acceptance Samsung: pengujian pertama membuktikan worker mengirim mutation
+offline dan Cloud Run membalas `200`; PostgreSQL menyimpan catatan serta menaikkan
+versi person. Namun workspace graph tetap menampilkan snapshot seed lama. Akar masalah
+berada pada state Android, bukan pada queue atau backend: graph belum mengamati Room
+dan refresh masih dapat mengembalikan respons mentah sebelum hasil reapply queue.
+Perbaikan membuat graph mengamati Room serta mengembalikan hasil lokal gabungan.
+Retest manual kemudian berhasil: teks tambahan tetap tersedia setelah worker sync dan
+muncul kembali saat halaman dibuka. Agar pengguna tidak perlu menutup halaman untuk
+meminta data terbaru, halaman profil juga mendapat pull-to-refresh dari posisi paling
+atas beserta indikator dan refresh person/relationship/source/media. Regression/unit
+test, lint, assemble, dan seluruh 20 instrumentation test lulus; gesture refresh pada
+APK terbaru menunggu konfirmasi visual pemilik.

@@ -2,8 +2,9 @@
 
 > **Status:** Disepakati sebagai arah pengujian awal
 > **Tanggal keputusan:** 18 Juli 2026
-> **Status implementasi:** Tahap 7 berjalan; fondasi repository siap, provisioning
-> dan verifikasi cloud menunggu tindakan pemilik akun
+> **Status implementasi:** Tahap 7 berjalan; fondasi repository, Supabase, CI, dan
+> deployment Cloud Run siap, sedangkan acceptance perangkat dan operasional belum
+> ditutup
 > **Penjadwalan:** Ditetapkan sebagai arah Tahap 7 setelah kompleksitas lineage
 > Tahap 6 ditutup
 > **Ruang lingkup:** Hosting backend, database cloud, dan penyimpanan media untuk pilot

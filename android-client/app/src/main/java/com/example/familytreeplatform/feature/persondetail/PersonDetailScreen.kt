@@ -33,6 +33,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material.ExperimentalMaterialApi
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -57,6 +61,7 @@ import com.example.familytreeplatform.models.PersonListItem
 import com.example.familytreeplatform.models.RelationsResponse
 import com.example.familytreeplatform.models.SourceItem
 
+@OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun PersonDetailScreen(
     viewModel: PersonDetailViewModel,
@@ -107,9 +112,16 @@ fun PersonDetailScreen(
             .take(if (relationQuery.isBlank()) 6 else 20)
             .toList()
     }
+    val pullRefreshState = rememberPullRefreshState(
+        refreshing = state.refreshing,
+        onRefresh = viewModel::refresh
+    )
 
     Box(
-        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .pullRefresh(pullRefreshState),
         contentAlignment = Alignment.TopCenter
     ) {
         LazyColumn(
@@ -266,6 +278,13 @@ fun PersonDetailScreen(
             }
             item { Spacer(Modifier.height(16.dp)) }
         }
+        PullRefreshIndicator(
+            refreshing = state.refreshing,
+            state = pullRefreshState,
+            modifier = Modifier.align(Alignment.TopCenter),
+            backgroundColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.primary
+        )
     }
 }
 

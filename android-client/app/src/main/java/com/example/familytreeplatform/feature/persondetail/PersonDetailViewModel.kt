@@ -32,6 +32,7 @@ data class PersonDetailUiState(
     val media: List<MediaItem> = emptyList(),
     val path: RelationshipPathResponse? = null,
     val loadingRelations: Boolean = false,
+    val refreshing: Boolean = false,
     val claiming: Boolean = false,
     val updating: Boolean = false,
     val claim: ClaimResponse? = null,
@@ -69,6 +70,33 @@ class PersonDetailViewModel(
         }
         refreshRelations()
         refreshArchive()
+    }
+
+    fun refresh() {
+        if (_uiState.value.refreshing) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(refreshing = true, loadingRelations = true, error = null, message = null)
+            }
+            val peopleResult = repository.listPersons(spaceId)
+            val relationsResult = repository.getRelations(spaceId, personId)
+            val sourcesResult = repository.listSources(spaceId, personId)
+            val mediaResult = repository.listMedia(spaceId, personId)
+            _uiState.update { current ->
+                current.copy(
+                    refreshing = false,
+                    loadingRelations = false,
+                    people = peopleResult.getOrNull() ?: current.people,
+                    relations = relationsResult.getOrNull() ?: current.relations,
+                    sources = sourcesResult.getOrNull() ?: current.sources,
+                    media = mediaResult.getOrNull() ?: current.media,
+                    error = peopleResult.exceptionOrNull()?.message
+                        ?: relationsResult.exceptionOrNull()?.message
+                        ?: sourcesResult.exceptionOrNull()?.message
+                        ?: mediaResult.exceptionOrNull()?.message
+                )
+            }
+        }
     }
 
     fun refreshRelations() {
