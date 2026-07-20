@@ -10,6 +10,9 @@ copy .env.example .env
 npm run start:dev
 ```
 
+Untuk menyiapkan akun dan Family Space demo yang sama pada PC baru, lihat
+[`DEMO_DATA.md`](DEMO_DATA.md) lalu jalankan `npm run seed:dev`.
+
 The server listens on `http://localhost:3001`. Interactive OpenAPI documentation is available at `http://localhost:3001/api/docs`.
 
 Set a strong, private `JWT_SECRET`. The application refuses to start in production without it. SQLite is currently used for development; `DB_DATABASE` controls its path.

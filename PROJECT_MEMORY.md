@@ -640,6 +640,14 @@ yang sudah selesai:
 > Quality gate Android terakhir mencatat unit test, lint, assemble, dan 19 connected
 > instrumentation tests lulus pada
 > Samsung SM-T225 Android 14 melalui USB.
+> Handoff PC pengembangan kemudian distandardisasi melalui `docs/NEW_PC_HANDOFF.md`.
+> Keyword `familyroot` diatur oleh root `AGENTS.md` untuk meminta Codex membaca
+> `PROJECT_MEMORY.md` seluruhnya, memeriksa Git, mengonfirmasi konteks, dan menunggu
+> izin sebelum perubahan. Akun dan Family Space demo berada dalam manifest ter-track
+> `backend/src/dev/demo-data.ts`, dipulihkan oleh `backend/src/dev/seed-dev.ts`, dan
+> dijelaskan dalam `backend/DEMO_DATA.md`; database runtime
+> `backend/dev.sqlite` tetap dilarang masuk Git karena selain demo dapat mengandung
+> akun lokal, refresh session, mutation/e2e data, dan log operasional.
 > Daftar di bawah tetap berguna sebagai konteks awal, tetapi keputusan terbaru dalam
 > kedua risalah tersebut mengalahkan item agenda yang sudah diselesaikan.
 
