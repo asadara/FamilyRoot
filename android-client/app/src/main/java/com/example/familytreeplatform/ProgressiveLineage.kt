@@ -15,65 +15,46 @@ internal fun planProgressiveLineage(
     baseVisiblePersonIds: Set<String>,
     expandedParentPersonIds: Set<String>,
     expandedChildPersonIds: Set<String>,
+    expandedPartnershipPersonIds: Set<String> = emptySet(),
     relationships: List<ExportRelationship>
 ): ProgressiveLineagePlan {
     if (baseVisiblePersonIds.isEmpty() || relationships.isEmpty()) {
         return ProgressiveLineagePlan(baseVisiblePersonIds, emptyList())
     }
 
-    val parentRelationships = relationships.filter { it.type == "PARENT_CHILD" }
-    val spouseRelationships = relationships.filter { it.type == "SPOUSE" }
-    val parentsByChild = parentRelationships.groupBy { it.toPersonId }
-    val childrenByParent = parentRelationships.groupBy { it.fromPersonId }
-    val spousesByPerson = buildMap<String, List<ExportRelationship>> {
-        spouseRelationships.forEach { relationship ->
-            put(
-                relationship.fromPersonId,
-                get(relationship.fromPersonId).orEmpty() + relationship
-            )
-            put(
-                relationship.toPersonId,
-                get(relationship.toPersonId).orEmpty() + relationship
-            )
-        }
+    val index = LineageRelationshipIndex.from(relationships)
+    val visible = linkedSetOf<String>().apply { addAll(baseVisiblePersonIds) }
+    val queue = ArrayDeque<String>().apply { addAll(baseVisiblePersonIds) }
+
+    fun reveal(personId: String) {
+        if (visible.add(personId)) queue.addLast(personId)
     }
 
-    val visible = baseVisiblePersonIds.toMutableSet()
-    var changed: Boolean
-    do {
-        changed = false
-        val currentVisible = visible.toList()
-        currentVisible.forEach { personId ->
-            if (personId in expandedParentPersonIds) {
-                parentsByChild[personId].orEmpty().forEach { relationship ->
-                    changed = visible.add(relationship.fromPersonId) || changed
-                }
-            }
-
-            if (personId in expandedChildPersonIds) {
-                val childIds = childrenByParent[personId]
-                    .orEmpty()
-                    .map { it.toPersonId }
-                    .toSet()
-                childIds.forEach { childId ->
-                    changed = visible.add(childId) || changed
-                    // A child is attached to every recorded parent in this space. This
-                    // reveals the co-parent card without inferring anyone from another room.
-                    parentsByChild[childId].orEmpty().forEach { relationship ->
-                        changed = visible.add(relationship.fromPersonId) || changed
-                    }
-                }
-
-                spousesByPerson[personId]
-                    .orEmpty()
-                    .filter(::isCurrentPartnership)
-                    .forEach { relationship ->
-                        val spouseId = relationship.otherPersonId(personId)
-                        changed = visible.add(spouseId) || changed
-                    }
-            }
+    while (queue.isNotEmpty()) {
+        val personId = queue.removeFirst()
+        if (personId in expandedParentPersonIds) {
+            index.parentRelationships(personId).forEach { reveal(it.fromPersonId) }
         }
-    } while (changed)
+
+        if (personId in expandedChildPersonIds) {
+            index.childRelationships(personId)
+                .map { it.toPersonId }
+                .distinct()
+                .forEach { childId ->
+                    reveal(childId)
+                    // Reveal every explicitly recorded co-parent, regardless of parentage
+                    // type, without inferring a partnership or another Family Space.
+                    index.parentRelationships(childId).forEach { reveal(it.fromPersonId) }
+                }
+            index.partnerships(personId)
+                .filter(::isCurrentPartnership)
+                .forEach { reveal(it.otherPersonId(personId)) }
+        }
+
+        if (personId in expandedPartnershipPersonIds) {
+            index.partnerships(personId).forEach { reveal(it.otherPersonId(personId)) }
+        }
+    }
 
     return ProgressiveLineagePlan(
         visiblePersonIds = visible,
@@ -96,40 +77,11 @@ internal fun hasRecordedChildren(
 internal fun recordedParentPersonIds(
     personId: String,
     relationships: List<ExportRelationship>
-): Set<String> = relationships
-    .asSequence()
-    .filter { it.type == "PARENT_CHILD" && it.toPersonId == personId }
-    .mapTo(mutableSetOf()) { it.fromPersonId }
+): Set<String> = LineageRelationshipIndex.from(relationships)
+    .recordedParentPersonIds(personId)
 
 internal fun recordedChildFamilyPersonIds(
     personId: String,
     relationships: List<ExportRelationship>
-): Set<String> {
-    val childIds = relationships
-        .asSequence()
-        .filter { it.type == "PARENT_CHILD" && it.fromPersonId == personId }
-        .mapTo(mutableSetOf()) { it.toPersonId }
-    if (childIds.isEmpty()) return emptySet()
-
-    val familyIds = childIds.toMutableSet()
-    relationships
-        .asSequence()
-        .filter { it.type == "PARENT_CHILD" && it.toPersonId in childIds }
-        .mapTo(familyIds) { it.fromPersonId }
-    relationships
-        .asSequence()
-        .filter {
-            it.type == "SPOUSE" &&
-                isCurrentPartnership(it) &&
-                (it.fromPersonId == personId || it.toPersonId == personId)
-        }
-        .mapTo(familyIds) { it.otherPersonId(personId) }
-    familyIds.remove(personId)
-    return familyIds
-}
-
-private fun isCurrentPartnership(relationship: ExportRelationship): Boolean =
-    relationship.meta == "MARRIED" && relationship.endDate == null
-
-private fun ExportRelationship.otherPersonId(personId: String): String =
-    if (fromPersonId == personId) toPersonId else fromPersonId
+): Set<String> = LineageRelationshipIndex.from(relationships)
+    .recordedChildFamilyPersonIds(personId)

@@ -207,7 +207,7 @@ private data class LineageEdge(
     val type: String = "PARENT_CHILD"
 )
 
-private enum class BranchDirection { PARENTS, CHILDREN }
+private enum class BranchDirection { PARENTS, CHILDREN, PARTNERSHIPS }
 
 private data class BranchControl(
     val personId: String,
@@ -289,6 +289,13 @@ fun GraphScreen(
         centerPersonId,
         stateSaver = PersonIdSetSaver
     ) { mutableStateOf(emptySet()) }
+    var expandedPartnershipPersonIds by rememberSaveable(
+        centerPersonId,
+        stateSaver = PersonIdSetSaver
+    ) { mutableStateOf(emptySet()) }
+    val relationshipIndex = remember(allRelationships) {
+        LineageRelationshipIndex.from(allRelationships)
+    }
 
     val layout by remember(
         centerPersonId,
@@ -300,6 +307,7 @@ fun GraphScreen(
         siblingsCollapsed,
         expandedParentPersonIds,
         expandedChildPersonIds,
+        expandedPartnershipPersonIds,
         relationshipPath,
         showRelationshipPathInGraph
     ) {
@@ -325,6 +333,7 @@ fun GraphScreen(
                 relationships = allRelationships,
                 expandedParentPersonIds = expandedParentPersonIds,
                 expandedChildPersonIds = expandedChildPersonIds,
+                expandedPartnershipPersonIds = expandedPartnershipPersonIds,
                 displayName = displayName,
                 tileW = tileW,
                 tileH = tileH,
@@ -364,32 +373,32 @@ fun GraphScreen(
         centerMemberIds,
         allRelationships,
         expandedParentPersonIds,
-        expandedChildPersonIds
+        expandedChildPersonIds,
+        expandedPartnershipPersonIds
     ) {
         buildList {
             val visiblePersonIds = tiles.mapTo(mutableSetOf()) { it.id }
             tiles
                 .distinctBy { it.id }
-                .filterNot { it.id in centerMemberIds }
                 .forEach { tile ->
-                    val parentPersonIds = recordedParentPersonIds(tile.id, allRelationships)
-                    if (
-                        tile.id in expandedParentPersonIds ||
-                        parentPersonIds.any { it !in visiblePersonIds }
-                    ) {
-                        add(
-                            BranchControl(
-                                personId = tile.id,
-                                direction = BranchDirection.PARENTS,
-                                point = PointDp(tile.rect.topCenter().x, tile.rect.top - 22.dp),
-                                expanded = tile.id in expandedParentPersonIds
+                    if (tile.id !in centerMemberIds) {
+                        val parentPersonIds = relationshipIndex.recordedParentPersonIds(tile.id)
+                        if (
+                            tile.id in expandedParentPersonIds ||
+                            parentPersonIds.any { it !in visiblePersonIds }
+                        ) {
+                            add(
+                                BranchControl(
+                                    personId = tile.id,
+                                    direction = BranchDirection.PARENTS,
+                                    point = PointDp(tile.rect.topCenter().x, tile.rect.top - 22.dp),
+                                    expanded = tile.id in expandedParentPersonIds
+                                )
                             )
-                        )
+                        }
                     }
-                    val childFamilyPersonIds = recordedChildFamilyPersonIds(
-                        tile.id,
-                        allRelationships
-                    )
+                    val childFamilyPersonIds =
+                        relationshipIndex.recordedChildFamilyPersonIds(tile.id)
                     if (
                         tile.id in expandedChildPersonIds ||
                         childFamilyPersonIds.any { it !in visiblePersonIds }
@@ -398,8 +407,27 @@ fun GraphScreen(
                             BranchControl(
                                 personId = tile.id,
                                 direction = BranchDirection.CHILDREN,
-                                point = PointDp(tile.rect.bottomCenter().x, tile.rect.bottom + 22.dp),
+                                point = PointDp(
+                                    tile.rect.bottomCenter().x,
+                                    tile.rect.bottom +
+                                        if (tile.id in centerMemberIds) 52.dp else 22.dp
+                                ),
                                 expanded = tile.id in expandedChildPersonIds
+                            )
+                        )
+                    }
+                    val partnershipPersonIds =
+                        relationshipIndex.recordedPartnershipPersonIds(tile.id)
+                    if (
+                        tile.id in expandedPartnershipPersonIds ||
+                        partnershipPersonIds.any { it !in visiblePersonIds }
+                    ) {
+                        add(
+                            BranchControl(
+                                personId = tile.id,
+                                direction = BranchDirection.PARTNERSHIPS,
+                                point = PointDp(tile.rect.right + 22.dp, tile.rect.top + 56.dp),
+                                expanded = tile.id in expandedPartnershipPersonIds
                             )
                         )
                     }
@@ -422,6 +450,14 @@ fun GraphScreen(
                     expandedChildPersonIds + control.personId
                 }
             }
+            BranchDirection.PARTNERSHIPS -> {
+                expandedPartnershipPersonIds =
+                    if (control.personId in expandedPartnershipPersonIds) {
+                        expandedPartnershipPersonIds - control.personId
+                    } else {
+                        expandedPartnershipPersonIds + control.personId
+                    }
+            }
         }
     }
     val hasParents = remember(centerMemberIds, relations, allRelationships) {
@@ -432,10 +468,8 @@ fun GraphScreen(
         }
     }
     val hasChildren = remember(centerPersonId, activeSpouseId, relations, allRelationships) {
-        collectChildrenForCouple(
-            coupleId = canonicalCoupleId(centerPersonId, activeSpouseId),
-            centerPersonId = centerPersonId,
-            activeSpouseId = activeSpouseId,
+        collectChildrenForParentGroup(
+            parentPersonIds = setOfNotNull(centerPersonId, activeSpouseId),
             relations = relations,
             allRelationships = allRelationships
         ).isNotEmpty()
@@ -750,15 +784,24 @@ fun GraphScreen(
                                 y = (start.y + end.y) / 2f
                             )
                             val radius = 7.dp.toPx()
-                            val separation = 5.dp.toPx()
+                            val separation = if (edge.meta == "DIVORCED") {
+                                10.dp.toPx()
+                            } else {
+                                5.dp.toPx()
+                            }
+                            val relationshipColor = when {
+                                highlighted -> pathAccentColor
+                                edge.meta == "WIDOWED" -> coupleRingColor.copy(alpha = 0.48f)
+                                else -> coupleRingColor
+                            }
                             drawCircle(
-                                color = if (highlighted) pathAccentColor else coupleRingColor,
+                                color = relationshipColor,
                                 radius = radius,
                                 center = center.copy(x = center.x - separation),
                                 style = Stroke(width = if (highlighted) 3.dp.toPx() else 1.5.dp.toPx())
                             )
                             drawCircle(
-                                color = if (highlighted) pathAccentColor else coupleRingColor,
+                                color = relationshipColor,
                                 radius = radius,
                                 center = center.copy(x = center.x + separation),
                                 style = Stroke(width = if (highlighted) 3.dp.toPx() else 1.5.dp.toPx())
@@ -896,13 +939,20 @@ fun GraphScreen(
                     }
 
                     branchControls.forEach { control ->
-                        drawControl(
-                            point = control.point,
-                            pointsUp = when (control.direction) {
-                                BranchDirection.PARENTS -> !control.expanded
-                                BranchDirection.CHILDREN -> control.expanded
-                            }
-                        )
+                        when (control.direction) {
+                            BranchDirection.PARENTS -> drawControl(
+                                point = control.point,
+                                pointsUp = !control.expanded
+                            )
+                            BranchDirection.CHILDREN -> drawControl(
+                                point = control.point,
+                                pointsUp = control.expanded
+                            )
+                            BranchDirection.PARTNERSHIPS -> drawHorizontalControl(
+                                point = control.point,
+                                pointsLeft = control.expanded
+                            )
+                        }
                     }
 
                     if (hasParents) {
@@ -978,6 +1028,7 @@ fun GraphScreen(
                     val branch = when (control.direction) {
                         BranchDirection.PARENTS -> "orang tua"
                         BranchDirection.CHILDREN -> "anak"
+                        BranchDirection.PARTNERSHIPS -> "riwayat pasangan"
                     }
                     Box(
                         modifier = Modifier
@@ -1262,14 +1313,30 @@ private fun PersonInspector(
     val childNames = relationships
         .filter { it.type == "PARENT_CHILD" && it.fromPersonId == person.personId }
         .mapNotNull { people[it.toPersonId]?.fullName }
-    val spouseNames = relationships
-        .filter {
-            it.type == "SPOUSE" &&
-                (it.fromPersonId == person.personId || it.toPersonId == person.personId)
-        }
-        .mapNotNull {
-            val otherId = if (it.fromPersonId == person.personId) it.toPersonId else it.fromPersonId
-            people[otherId]?.fullName
+    val partnershipHistory = recordedPartnerships(person.personId, relationships)
+        .mapNotNull { relationship ->
+            val otherName = people[relationship.otherPersonId(person.personId)]?.fullName
+                ?: return@mapNotNull null
+            val status = when (relationship.meta) {
+                "DIVORCED" -> "bercerai"
+                "WIDOWED" -> "berakhir karena meninggal"
+                "MARRIED" -> if (isCurrentPartnership(relationship)) {
+                    "berlangsung"
+                } else {
+                    "berakhir"
+                }
+                else -> "tercatat"
+            }
+            val period = when {
+                relationship.startDate != null && relationship.endDate != null ->
+                    "${relationship.startDate}–${relationship.endDate}"
+                relationship.startDate != null && isCurrentPartnership(relationship) ->
+                    "sejak ${relationship.startDate}"
+                relationship.startDate != null -> relationship.startDate
+                relationship.endDate != null -> "hingga ${relationship.endDate}"
+                else -> null
+            }
+            listOfNotNull(otherName, status, period).joinToString(" · ")
         }
     val age = if (person.lifeStatus == "ALIVE") calculateAge(person.birthDate) else null
 
@@ -1339,7 +1406,10 @@ private fun PersonInspector(
                     onToggle = { expanded["family"] = expanded["family"] != true }
                 ) {
                     InspectorValue("Orang tua", parentNames.takeIf { it.isNotEmpty() }?.joinToString())
-                    InspectorValue("Pasangan", spouseNames.takeIf { it.isNotEmpty() }?.joinToString())
+                    InspectorValue(
+                        "Riwayat pasangan",
+                        partnershipHistory.takeIf { it.isNotEmpty() }?.joinToString("\n")
+                    )
                     InspectorValue("Anak", childNames.takeIf { it.isNotEmpty() }?.joinToString())
                 }
                 if (person.birthDate != null || person.deceasedAt != null) {
@@ -1785,20 +1855,37 @@ private fun buildCoupleGraphLayout(
             LineageEdge(setOf(relationship.relationshipId), from, to, relationship.meta)
         } else null
     }
-    val childLineageEdges = completeTree.children.mapNotNull { child ->
-        val to = shiftedNodes.tileRect(child.id)?.topCenter() ?: return@mapNotNull null
+    val childLineageEdges = completeTree.children.flatMap { child ->
+        val to = shiftedNodes.tileRect(child.id)?.topCenter() ?: return@flatMap emptyList()
         val matchingRelationships = allRelationships.filter {
             it.type == "PARENT_CHILD" &&
                 it.toPersonId == child.id &&
                 it.fromPersonId in centerMemberIds
         }
-        LineageEdge(
-            relationshipIds = matchingRelationships.mapTo(mutableSetOf()) { it.relationshipId }
-                .ifEmpty { setOf("child:${child.id}") },
-            from = shiftedCenter.anchorBottom(),
-            to = to,
-            meta = matchingRelationships.firstOrNull()?.meta
-        )
+        val parentageTypes = matchingRelationships.map { it.meta }.distinct()
+        if (matchingRelationships.isNotEmpty() && parentageTypes.size > 1) {
+            matchingRelationships.mapNotNull { relationship ->
+                val from = shiftedNodes.tileRect(relationship.fromPersonId)
+                    ?.bottomCenter() ?: return@mapNotNull null
+                LineageEdge(
+                    relationshipIds = setOf(relationship.relationshipId),
+                    from = from,
+                    to = to,
+                    meta = relationship.meta
+                )
+            }
+        } else {
+            listOf(
+                LineageEdge(
+                    relationshipIds = matchingRelationships
+                        .mapTo(mutableSetOf()) { it.relationshipId }
+                        .ifEmpty { setOf("child:${child.id}") },
+                    from = shiftedCenter.anchorBottom(),
+                    to = to,
+                    meta = parentageTypes.singleOrNull()
+                )
+            )
+        }
     }
     val siblingLineageEdges = allRelationships.mapNotNull { relationship ->
         if (
@@ -1831,6 +1918,7 @@ private fun augmentLayoutWithProgressiveLineage(
     relationships: List<ExportRelationship>,
     expandedParentPersonIds: Set<String>,
     expandedChildPersonIds: Set<String>,
+    expandedPartnershipPersonIds: Set<String>,
     displayName: (String) -> String,
     tileW: Dp,
     tileH: Dp,
@@ -1841,7 +1929,11 @@ private fun augmentLayoutWithProgressiveLineage(
 ): GraphLayout {
     if (
         relationships.isEmpty() ||
-        (expandedParentPersonIds.isEmpty() && expandedChildPersonIds.isEmpty())
+        (
+            expandedParentPersonIds.isEmpty() &&
+                expandedChildPersonIds.isEmpty() &&
+                expandedPartnershipPersonIds.isEmpty()
+            )
     ) return base
 
     val basePersonIds = base.nodes
@@ -1851,123 +1943,80 @@ private fun augmentLayoutWithProgressiveLineage(
         baseVisiblePersonIds = basePersonIds,
         expandedParentPersonIds = expandedParentPersonIds,
         expandedChildPersonIds = expandedChildPersonIds,
+        expandedPartnershipPersonIds = expandedPartnershipPersonIds,
         relationships = relationships
     )
-    val missingPersonIds = (plan.visiblePersonIds - basePersonIds).toMutableSet()
-    if (missingPersonIds.isEmpty()) return base
-
-    val positions = base.nodes
+    val basePositions = base.nodes
         .flatMap(GraphNode::tiles)
-        .associate { it.id to it.rect }
-        .toMutableMap()
-    val occupied = positions.values.toMutableList()
-    val extraNodes = mutableListOf<GraphNode>()
-    val horizontalStep = tileW + siblingGapX
-    val verticalStep = tileH + rankGapY
-
-    fun RectDp.overlaps(other: RectDp, padding: Dp = 10.dp): Boolean =
-        left < other.right + padding &&
-            right + padding > other.left &&
-            top < other.bottom + padding &&
-            bottom + padding > other.top
-
-    fun findFreeRect(proposed: RectDp): RectDp {
-        repeat(48) { index ->
-            val step = when {
-                index == 0 -> 0
-                index % 2 == 1 -> (index + 1) / 2
-                else -> -(index / 2)
-            }
-            val candidate = proposed.shift(horizontalStep * step.toFloat(), 0.dp)
-            if (occupied.none { candidate.overlaps(it) }) return candidate
-        }
-        return proposed.shift(horizontalStep * 48f, 0.dp)
-    }
-
-    fun addPerson(personId: String, proposed: RectDp) {
-        val rect = findFreeRect(proposed)
-        extraNodes += personNode(
-            id = personId,
-            label = displayName(personId),
-            role = "BRANCH",
-            x = rect.x,
-            y = rect.y,
-            tileW = tileW,
-            tileH = tileH
-        )
-        positions[personId] = rect
-        occupied += rect
-        missingPersonIds.remove(personId)
-    }
-
-    while (missingPersonIds.isNotEmpty()) {
-        var placedInPass = false
-        missingPersonIds.toList().forEach { personId ->
-            val connected = plan.visibleRelationships
-                .asSequence()
-                .filter {
-                    (it.fromPersonId == personId && it.toPersonId in positions) ||
-                        (it.toPersonId == personId && it.fromPersonId in positions)
-                }
-                .sortedBy { if (it.type == "SPOUSE") 0 else 1 }
-                .firstOrNull() ?: return@forEach
-            val knownPersonId = if (connected.fromPersonId == personId) {
-                connected.toPersonId
-            } else {
-                connected.fromPersonId
-            }
-            val knownRect = positions.getValue(knownPersonId)
-            val proposed = when {
-                connected.type == "SPOUSE" -> RectDp(
-                    x = knownRect.right + spouseGapX,
-                    y = knownRect.y,
-                    w = tileW,
-                    h = tileH
-                )
-                connected.fromPersonId == personId -> RectDp(
-                    x = knownRect.x,
-                    y = knownRect.y - verticalStep,
-                    w = tileW,
-                    h = tileH
-                )
-                else -> RectDp(
-                    x = knownRect.x,
-                    y = knownRect.y + verticalStep,
-                    w = tileW,
-                    h = tileH
-                )
-            }
-            addPerson(personId, proposed)
-            placedInPass = true
-        }
-
-        if (!placedInPass) {
-            // Defensive fallback for malformed cached data. Keep the graph usable and
-            // deterministic without inventing any relationship or hidden branch.
-            val personId = missingPersonIds.first()
-            val rightEdge = occupied.maxOf { it.right.value }.dp
-            addPerson(
-                personId,
-                RectDp(rightEdge + siblingGapX, base.center.bounds().y, tileW, tileH)
+        .associate { tile ->
+            tile.id to LineagePlacementRect(
+                x = tile.rect.x.value,
+                y = tile.rect.y.value,
+                width = tile.rect.w.value,
+                height = tile.rect.h.value
             )
         }
+    val plannedPositions = planProgressivePlacements(
+        basePositions = basePositions,
+        visiblePersonIds = plan.visiblePersonIds,
+        visibleRelationships = plan.visibleRelationships,
+        allRelationships = relationships,
+        tileWidth = tileW.value,
+        tileHeight = tileH.value,
+        siblingGap = siblingGapX.value,
+        partnershipGap = spouseGapX.value,
+        rankGap = rankGapY.value,
+        fallbackY = base.center.bounds().y.value
+    )
+    val positions = plannedPositions.mapValues { (_, rect) ->
+        RectDp(rect.x.dp, rect.y.dp, rect.width.dp, rect.height.dp)
     }
+    val extraNodes = plan.visiblePersonIds
+        .filterNot { it in basePersonIds }
+        .mapNotNull { personId ->
+            val rect = positions[personId] ?: return@mapNotNull null
+            personNode(
+                id = personId,
+                label = displayName(personId),
+                role = "BRANCH",
+                x = rect.x,
+                y = rect.y,
+                tileW = tileW,
+                tileH = tileH
+            )
+        }
+    if (extraNodes.isEmpty()) return base
 
     val existingRelationshipIds = base.lineageEdges
         .flatMapTo(mutableSetOf()) { it.relationshipIds }
     val supplementalParentEdges = plan.visibleRelationships
         .filter { it.type == "PARENT_CHILD" }
         .groupBy { it.toPersonId }
-        .mapNotNull { (childId, childRelationships) ->
-            if (childRelationships.all { it.relationshipId in existingRelationshipIds }) {
-                return@mapNotNull null
+        .flatMap { (childId, childRelationships) ->
+            val childRect = positions[childId] ?: return@flatMap emptyList()
+            val pendingRelationships = childRelationships.filter {
+                it.relationshipId !in existingRelationshipIds &&
+                    positions[it.fromPersonId] != null
             }
-            val childRect = positions[childId] ?: return@mapNotNull null
-            val parentRects = childRelationships
-                .mapNotNull { positions[it.fromPersonId] }
-            if (parentRects.isEmpty()) return@mapNotNull null
+            if (pendingRelationships.isEmpty()) return@flatMap emptyList()
+            val parentageTypes = pendingRelationships.map { it.meta }.distinct()
+            if (parentageTypes.size > 1) {
+                return@flatMap pendingRelationships.mapNotNull { relationship ->
+                    val parentRect = positions[relationship.fromPersonId]
+                        ?: return@mapNotNull null
+                    LineageEdge(
+                        relationshipIds = setOf(relationship.relationshipId),
+                        from = parentRect.bottomCenter(),
+                        to = childRect.topCenter(),
+                        meta = relationship.meta
+                    )
+                }
+            }
+            val parentRects = pendingRelationships.mapNotNull {
+                positions[it.fromPersonId]
+            }
             val parentAnchor = if (parentRects.size == 1) {
-                parentRects.first().bottomCenter()
+                parentRects.single().bottomCenter()
             } else {
                 PointDp(
                     x = (
@@ -1977,13 +2026,13 @@ private fun augmentLayoutWithProgressiveLineage(
                     y = parentRects.maxOf { it.bottom.value }.dp
                 )
             }
-            LineageEdge(
-                relationshipIds = childRelationships
+            listOf(LineageEdge(
+                relationshipIds = pendingRelationships
                     .mapTo(mutableSetOf()) { it.relationshipId },
                 from = parentAnchor,
                 to = childRect.topCenter(),
-                meta = childRelationships.map { it.meta }.distinct().singleOrNull()
-            )
+                meta = parentageTypes.singleOrNull()
+            ))
         }
     val supplementalSpouseEdges = plan.visibleRelationships.mapNotNull { relationship ->
         if (relationship.type != "SPOUSE") return@mapNotNull null
@@ -2279,17 +2328,15 @@ private fun preprocessTree(
     persons: List<PersonListItem>,
     displayName: (String) -> String
 ): VisibleTree {
-    val coupleId = canonicalCoupleId(centerPersonId, activeSpouseId)
-    val children = collectChildrenForCouple(
-        coupleId = coupleId,
-        centerPersonId = centerPersonId,
-        activeSpouseId = activeSpouseId,
+    val children = collectChildrenForParentGroup(
+        parentPersonIds = setOfNotNull(centerPersonId, activeSpouseId),
         relations = relations,
         allRelationships = allRelationships
     )
 
     val orderedChildren = orderChildren(children, persons)
-    // TODO: integrate subtreeWidth/layout phases once available.
+    // Direct children use a stable birth order; progressively opened descendants
+    // are positioned by the collision-aware planner.
     return VisibleTree(
         children = orderedChildren.map { id ->
             val spouseId = findActiveSpouseId(id, allRelationships)
@@ -2304,37 +2351,18 @@ private fun preprocessTree(
     )
 }
 
-private fun collectChildrenForCouple(
-    coupleId: String,
-    centerPersonId: String,
-    activeSpouseId: String?,
+private fun collectChildrenForParentGroup(
+    parentPersonIds: Set<String>,
     relations: RelationsResponse,
     allRelationships: List<ExportRelationship>
 ): List<String> {
     if (allRelationships.isEmpty()) {
-        // TODO: feed full relationship cache to avoid fallback path.
+        // Compatibility path while the full relationship cache is still loading.
         return relations.children.map { it.toPersonId }.distinct()
     }
 
-    val parentMap = mutableMapOf<String, MutableList<String>>()
-    allRelationships
-        .filter { it.type == "PARENT_CHILD" }
-        .forEach { rel ->
-            parentMap.getOrPut(rel.toPersonId) { mutableListOf() }.add(rel.fromPersonId)
-        }
-
-    val grouped = mutableMapOf<String, MutableList<String>>()
-    parentMap.forEach { (childId, parents) ->
-        val uniqueParents = parents.distinct().sorted()
-        val key = when {
-            uniqueParents.size >= 2 -> canonicalCoupleId(uniqueParents[0], uniqueParents[1])
-            uniqueParents.isNotEmpty() -> canonicalCoupleId(uniqueParents[0], null)
-            else -> canonicalCoupleId(centerPersonId, activeSpouseId)
-        }
-        grouped.getOrPut(key) { mutableListOf() }.add(childId)
-    }
-
-    return grouped[coupleId]?.distinct() ?: emptyList()
+    val index = LineageRelationshipIndex.from(allRelationships)
+    return recordedChildrenForParentGroup(parentPersonIds, index)
 }
 
 private fun orderChildren(children: List<String>, persons: List<PersonListItem>): List<String> {
@@ -2376,12 +2404,6 @@ private fun parseApproxBirthYear(createdAt: String?): Int? {
     return yearPart.toIntOrNull()
 }
 
-private fun canonicalCoupleId(a: String, b: String?): String {
-    if (b.isNullOrBlank()) return "virtual:$a"
-    val (left, right) = if (a <= b) a to b else b to a
-    return "couple:$left:$right"
-}
-
 private fun findActiveSpouseId(
     personId: String,
     relations: RelationsResponse,
@@ -2403,14 +2425,9 @@ private fun findActiveSpouseId(
     personId: String,
     allRelationships: List<ExportRelationship>
 ): String? {
-    val relationship = allRelationships.firstOrNull {
-        it.type == "SPOUSE" &&
-            it.meta == "MARRIED" &&
-            it.endDate == null &&
-            (it.fromPersonId == personId || it.toPersonId == personId)
-    } ?: return null
+    val relationship = latestCurrentPartnership(personId, allRelationships) ?: return null
 
-    return if (relationship.fromPersonId == personId) relationship.toPersonId else relationship.fromPersonId
+    return relationship.otherPersonId(personId)
 }
 
 private fun isActiveSpouseBetween(

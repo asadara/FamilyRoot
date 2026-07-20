@@ -1094,7 +1094,7 @@ deployment tidak diubah.
 ## 31. Keputusan Tahap 6 — Kompleksitas Lineage
 
 > **Tanggal keputusan:** 19 Juli 2026
-> **Status:** Disepakati sebagai ruang lingkup Tahap 6; baseline Tahap 6.1 selesai
+> **Status:** CLOSED pada 20 Juli 2026; seluruh ruang lingkup Tahap 6 selesai
 > **Tidak termasuk:** deployment cloud, perubahan kontrak backend, cross-space
 > relationship, foto binary, atau privacy role × scope
 
@@ -1228,6 +1228,54 @@ backend:
   tanpa mengubah card pusat.
 
 Quality gate baseline: unit test, lint, assemble debug, dan seluruh 19 instrumentation
-test lulus pada Samsung SM-T225 Android 14. Tahap 6 belum ditutup; multiple historical
-partnership, parentage kompleks, layout stabilization lanjutan, dan performance graph
-besar tetap menjadi pekerjaan berikutnya.
+test lulus pada Samsung SM-T225 Android 14. Pada titik baseline ini, multiple
+historical partnership, parentage kompleks, layout stabilization lanjutan, dan
+performance graph besar masih menjadi pekerjaan berikutnya; penyelesaiannya dicatat
+pada bagian 31.5.
+
+### 31.5 Penutupan Tahap 6
+
+Tahap 6 resmi CLOSED pada 20 Juli 2026. Penyelesaian tetap terbatas pada frontend
+Android dan tidak mengubah kontrak API, backend, database, Family Space boundary,
+atau deployment:
+
+- relationship diindeks satu kali untuk traversal orang tua, anak, dan partnership
+  yang deterministik pada graph besar;
+- setiap card yang mempunyai data tercatat dapat membuka orang tua, keluarga anak,
+  atau partnership historis secara progresif tanpa mengganti center person;
+- partnership diurutkan kronologis, partnership aktif diprioritaskan secara
+  deterministik, dan status `DIVORCED` serta `WIDOWED` mempunyai pembeda visual;
+- anak tetap ditempatkan berdasarkan pasangan parent yang benar-benar tercatat;
+  biological, adoptive, dan step-parent tidak diratakan atau diinferensikan menjadi
+  pasangan yang tidak ada;
+- satu `personId` tetap menghasilkan satu card meskipun dicapai dari beberapa jalur;
+- placement breadth-first yang deterministik memakai pemeriksaan spasial untuk
+  menghindari collision, mempertahankan state expand/collapse, dan menjaga posisi
+  center saat ukuran graph berubah;
+- inspector menampilkan riwayat partnership, status, dan tanggal secara kronologis;
+- regression test mencakup sibling family, recursive expansion, historical
+  partnership, pernikahan ulang, parentage campuran, collapse/restore state,
+  deduplikasi, dan non-inference lintas Family Space;
+- performance test memakai 10.000 person dan 9.999 relationship dengan budget
+  masing-masing paling lama 1.500 ms untuk planner dan placement.
+
+Quality gate penutupan:
+
+- 45 unit test lulus tanpa failure, error, atau skip;
+- `lintDebug` lulus tanpa error; laporan menyimpan 121 warning non-fatal, terutama
+  106 `UnusedResources` yang sudah berada di luar acceptance gate Tahap 6;
+- `assembleDebug` dan `assembleDebugAndroidTest` lulus;
+- seluruh 20 connected instrumentation test lulus pada Samsung SM-T225 Android 14
+  melalui USB dalam 2 menit 28 detik;
+- smoke test backend `/health`, ADB reverse `tcp:3001`, instalasi APK, dan cold launch
+  `MainActivity` lulus; cold launch tercatat 4.918 ms dan tidak ada
+  `AndroidRuntime` crash;
+- `git diff --check` lulus tanpa whitespace error.
+
+Saat menjalankan pengujian perangkat, pastikan `Developer options > Select debug
+app` tidak menunjuk FamilyRoot. Target debug aktif menyebabkan Android melakukan
+force-stop dengan alasan `set debug app` dan dapat terlihat sebagai instrumentation
+process crash walaupun tidak ada exception aplikasi.
+
+Pekerjaan berikutnya adalah Tahap 7 sesuai bagian 31.3. Tahap 7 belum dimulai oleh
+penutupan ini.

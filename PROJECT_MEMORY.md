@@ -635,11 +635,27 @@ yang sudah selesai:
 > saveable, collision dihindari, dan viewport menjaga posisi center. Relationship yang
 > tidak diterima dari ruang aktif tidak menghasilkan arrow, placeholder, maupun
 > inference. Unit test, lint, assemble debug, serta seluruh 19 instrumentation test
-> lulus pada Samsung SM-T225 Android 14. Ini menyelesaikan baseline 6.1, bukan menutup
-> Tahap 6; historical partnership dan kompleksitas berikutnya masih menunggu.
-> Quality gate Android terakhir mencatat unit test, lint, assemble, dan 19 connected
-> instrumentation tests lulus pada
-> Samsung SM-T225 Android 14 melalui USB.
+> lulus pada Samsung SM-T225 Android 14. Status tersebut menyelesaikan baseline 6.1.
+> Pada 20 Juli 2026, sisa Tahap 6 diselesaikan dan Tahap 6 resmi CLOSED. Frontend
+> Android sekarang mendukung partnership historis yang diurutkan kronologis,
+> pembukaan partnership/orang tua/keluarga anak secara progresif, status
+> divorced/widowed, pengelompokan anak berdasarkan parentage tercatat, pembeda
+> biological/adoptive/step, satu card per person ID, placement deterministik dengan
+> spatial collision avoidance, state collapse/restore, dan inspector riwayat
+> partnership. Tidak ada kontrak backend, database, deployment, ACL, atau batas
+> Family Space yang diubah.
+> Quality gate penutupan Tahap 6 mencatat 45 unit test, lint tanpa error (121 warning
+> non-fatal, terutama 106 `UnusedResources`),
+> assemble debug dan androidTest, serta seluruh 20 connected instrumentation test
+> lulus pada Samsung SM-T225 Android 14 melalui USB. Planner dan placement diuji
+> terhadap 10.000 person/9.999 relationship dengan budget masing-masing 1.500 ms.
+> Smoke test backend sehat, ADB reverse `tcp:3001` aktif, APK berhasil dipasang,
+> cold launch `MainActivity` 4.918 ms, dan tidak ada `AndroidRuntime` crash. Bila
+> instrumentation tiba-tiba mati dengan `SIGKILL`, periksa `Developer options >
+> Select debug app`; FamilyRoot yang masih dipilih sebagai debug app terbukti memicu
+> force-stop `set debug app` pada perangkat referensi.
+> Tahap berikutnya adalah Tahap 7 sesuai `docs/CLOUD_PILOT_DECISION.md`; Tahap 7 belum
+> dimulai.
 > Handoff PC pengembangan kemudian distandardisasi melalui `docs/NEW_PC_HANDOFF.md`.
 > Keyword `familyroot` diatur oleh root `AGENTS.md` untuk meminta Codex membaca
 > `PROJECT_MEMORY.md` seluruhnya, memeriksa Git, mengonfirmasi konteks, dan menunggu

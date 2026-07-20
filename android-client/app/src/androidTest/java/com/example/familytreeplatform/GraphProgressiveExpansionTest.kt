@@ -13,6 +13,7 @@ import com.example.familytreeplatform.models.RelationItem
 import com.example.familytreeplatform.models.RelationsResponse
 import com.example.familytreeplatform.ui.theme.FamilyTreePlatformTheme
 import org.junit.Rule
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class GraphProgressiveExpansionTest {
@@ -95,6 +96,105 @@ class GraphProgressiveExpansionTest {
         composeRule.onAllNodes(hasContentDescription("Nara", substring = true)).assertCountEquals(0)
     }
 
+    @Test
+    fun historicalPartnershipKeepsItsOwnChildBranchAndRestoresExpansionState() {
+        val relationships = listOf(
+            spouse(
+                id = "old-partnership",
+                personId = "center",
+                spouseId = "old-partner",
+                meta = "DIVORCED",
+                startDate = "2000-01-01",
+                endDate = "2008-01-01"
+            ),
+            spouse(
+                id = "current-partnership",
+                personId = "center",
+                spouseId = "current-partner",
+                meta = "MARRIED",
+                startDate = "2015-01-01"
+            ),
+            parentChild("old-child-a", "center", "old-child"),
+            parentChild("old-child-b", "old-partner", "old-child"),
+            parentChild("current-child-a", "center", "current-child"),
+            parentChild("current-child-b", "current-partner", "current-child")
+        )
+        composeRule.setContent {
+            FamilyTreePlatformTheme(dynamicColor = false) {
+                GraphScreen(
+                    centerPersonId = "center",
+                    selectedPersonId = null,
+                    persons = listOf(
+                        person("center", "Bima"),
+                        person("old-partner", "Ayu"),
+                        person("old-child", "Citra"),
+                        person("current-partner", "Dewi"),
+                        person("current-child", "Eka")
+                    ),
+                    relations = RelationsResponse(
+                        personId = "center",
+                        parents = emptyList(),
+                        children = relationships
+                            .filter { it.fromPersonId == "center" && it.type == "PARENT_CHILD" }
+                            .map { it.toRelationItem() },
+                        spouses = relationships
+                            .filter { it.type == "SPOUSE" }
+                            .map { it.toRelationItem() }
+                    ),
+                    allRelationships = relationships,
+                    onSelectPerson = {},
+                    onClearSelection = {},
+                    onOpenPerson = {},
+                    onBack = {}
+                )
+            }
+        }
+
+        composeRule.onAllNodes(hasContentDescription("Bima", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasContentDescription("Dewi", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasContentDescription("Eka", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasContentDescription("Ayu", substring = true)).assertCountEquals(0)
+        composeRule.onAllNodes(hasContentDescription("Citra", substring = true)).assertCountEquals(0)
+
+        composeRule.onNodeWithTag("lineage-partnerships-center").performTouchInput { click(center) }
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasContentDescription("Ayu", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasContentDescription("Citra", substring = true)).assertCountEquals(0)
+        composeRule.onNodeWithTag("lineage-children-old-partner").performTouchInput { click(center) }
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasContentDescription("Citra", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasContentDescription("Bima", substring = true)).assertCountEquals(1)
+
+        composeRule.onNodeWithTag("lineage-partnerships-center").performTouchInput { click(center) }
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasContentDescription("Ayu", substring = true)).assertCountEquals(0)
+        composeRule.onAllNodes(hasContentDescription("Citra", substring = true)).assertCountEquals(0)
+
+        composeRule.onNodeWithTag("lineage-partnerships-center").performTouchInput { click(center) }
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasContentDescription("Ayu", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasContentDescription("Citra", substring = true)).assertCountEquals(1)
+        assertPersonCardsDoNotOverlap("Bima", "Ayu", "Citra", "Dewi", "Eka")
+    }
+
+    private fun assertPersonCardsDoNotOverlap(vararg names: String) {
+        val cards = names.map { name ->
+            name to composeRule
+                .onAllNodes(hasContentDescription(name, substring = true))
+                .fetchSemanticsNodes()
+                .single()
+                .boundsInRoot
+        }
+        cards.forEachIndexed { index, (firstName, firstBounds) ->
+            cards.drop(index + 1).forEach { (secondName, secondBounds) ->
+                assertFalse(
+                    "$firstName overlaps $secondName",
+                    firstBounds.overlaps(secondBounds)
+                )
+            }
+        }
+    }
+
     private fun person(id: String, name: String) = PersonListItem(
         personId = id,
         fullName = name,
@@ -112,12 +212,21 @@ class GraphProgressiveExpansionTest {
         createdAt = "2026-07-19"
     )
 
-    private fun spouse(id: String, personId: String, spouseId: String) = ExportRelationship(
+    private fun spouse(
+        id: String,
+        personId: String,
+        spouseId: String,
+        meta: String = "MARRIED",
+        startDate: String? = null,
+        endDate: String? = null
+    ) = ExportRelationship(
         relationshipId = id,
         type = "SPOUSE",
         fromPersonId = personId,
         toPersonId = spouseId,
-        meta = "MARRIED",
+        meta = meta,
+        startDate = startDate,
+        endDate = endDate,
         createdAt = "2026-07-19"
     )
 
