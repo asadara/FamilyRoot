@@ -7,7 +7,7 @@ import org.junit.Test
 class SpaceSelectionScreenTest {
     @Test
     fun familySpaceLabelsHideBackendCodes() {
-        assertEquals("Pemilik ruang", familySpaceRoleLabel("OWNER"))
+        assertEquals("Pemilik silsilah", familySpaceRoleLabel("OWNER"))
         assertEquals("Kontributor", familySpaceRoleLabel("EDITOR"))
         assertFalse(familySpaceRoleLabel("VIEWER").contains("VIEWER"))
     }
@@ -15,6 +15,6 @@ class SpaceSelectionScreenTest {
     @Test
     fun initialsUseAtMostTwoWords() {
         assertEquals("KD", familySpaceInitials("Keluarga Demo Besar"))
-        assertEquals("FR", familySpaceInitials(""))
+        assertEquals("TR", familySpaceInitials(""))
     }
 }

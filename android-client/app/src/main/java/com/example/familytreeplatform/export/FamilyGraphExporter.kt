@@ -115,7 +115,7 @@ object FamilyGraphExporter {
             color = Color.DKGRAY
             textSize = 22f
         }
-        canvas.drawText("FamilyRoot family tree", 60f, 70f, titlePaint)
+        canvas.drawText("Silsilah TRêdhAH", 60f, 70f, titlePaint)
         canvas.drawText("${people.size} people • ${relationships.size} relationships", 60f, 108f, subtitlePaint)
 
         if (people.isEmpty()) {

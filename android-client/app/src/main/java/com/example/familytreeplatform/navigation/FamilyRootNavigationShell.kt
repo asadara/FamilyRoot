@@ -59,6 +59,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupProperties
 import com.example.familytreeplatform.models.PersonListItem
+import com.example.familytreeplatform.ui.branding.TredhahBrand
+import com.example.familytreeplatform.ui.branding.TredhahLogo
 
 internal data class TopLevelDestination(
     val route: String,
@@ -113,12 +115,7 @@ internal fun FamilyRootNavigationShell(
         if (useNavigationRail) {
             Row(modifier = Modifier.fillMaxSize()) {
                 NavigationRail {
-                    Text(
-                        text = "FR",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.padding(vertical = 18.dp)
-                    )
+                    TredhahLogo(Modifier.size(48.dp).padding(vertical = 6.dp))
                     topLevelDestinations.forEach { destination ->
                         NavigationRailItem(
                             selected = currentRoute == destination.route,
@@ -246,9 +243,10 @@ private fun FamilyRootGlobalAppBar(
             modifier = Modifier.fillMaxSize().padding(horizontal = 12.dp)
         ) {
             if (!compact || !searchExpanded) {
-                Column(modifier = Modifier.weight(1f)) {
+                TredhahLogo(Modifier.size(40.dp))
+                Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
                     Text(
-                        "FamilyRoot",
+                        TredhahBrand.NAME,
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.SemiBold
                     )
@@ -437,7 +435,7 @@ private fun FamilyRootGlobalAppBar(
                                 Column {
                                     Text("Lihat profil akun")
                                     Text(
-                                        "Identitas dan sesi FamilyRoot",
+                                        "Identitas dan sesi TRêdhAH",
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -449,7 +447,7 @@ private fun FamilyRootGlobalAppBar(
                             }
                         )
                         DropdownMenuItem(
-                            text = { Text("Pengaturan Family Space") },
+                            text = { Text("Pengaturan silsilah") },
                             onClick = {
                                 accountMenuExpanded = false
                                 onOpenSettings()

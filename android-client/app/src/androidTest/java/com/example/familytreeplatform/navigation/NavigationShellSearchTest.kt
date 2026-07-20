@@ -93,7 +93,7 @@ class NavigationShellSearchTest {
         composeRule.runOnIdle { assertTrue(profileOpened) }
 
         composeRule.onNodeWithContentDescription("Akun Budi Santoso").performClick()
-        composeRule.onNodeWithText("Pengaturan Family Space").performClick()
+        composeRule.onNodeWithText("Pengaturan silsilah").performClick()
         composeRule.runOnIdle {
             assertTrue(settingsOpened)
             assertFalse(signedOut)

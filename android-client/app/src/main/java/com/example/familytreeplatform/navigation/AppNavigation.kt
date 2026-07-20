@@ -143,7 +143,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
             FamilyRootNavigationShell(
                 currentRoute = Routes.PEOPLE,
                 onNavigate = navigateTopLevel,
-                spaceName = spaceName ?: "Family Space",
+                spaceName = spaceName ?: "Silsilah",
                 userDisplayName = userDisplayName ?: "Akun",
                 userEmail = userEmail,
                 people = shellPeople,
@@ -173,7 +173,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
             FamilyRootNavigationShell(
                 currentRoute = Routes.GRAPH,
                 onNavigate = navigateTopLevel,
-                spaceName = spaceName ?: "Family Space",
+                spaceName = spaceName ?: "Silsilah",
                 userDisplayName = userDisplayName ?: "Akun",
                 userEmail = userEmail,
                 people = shellPeople,
@@ -202,7 +202,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
             FamilyRootNavigationShell(
                 currentRoute = Routes.HOME,
                 onNavigate = navigateTopLevel,
-                spaceName = spaceName ?: "Family Space",
+                spaceName = spaceName ?: "Silsilah",
                 userDisplayName = userDisplayName ?: "Akun",
                 userEmail = userEmail,
                 people = shellPeople,
@@ -215,7 +215,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 HomeScreen(
                     viewModel = homeViewModel,
                     displayName = userDisplayName ?: "Keluarga",
-                    spaceName = spaceName ?: "Family Space",
+                    spaceName = spaceName ?: "Silsilah",
                     pendingSyncCount = pendingSyncCount,
                     onOpenTree = { navigateTopLevel(Routes.GRAPH) },
                     onOpenFamily = { navigateTopLevel(Routes.PEOPLE) },
@@ -232,7 +232,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
             FamilyRootNavigationShell(
                 currentRoute = Routes.SPACE_SETTINGS,
                 onNavigate = navigateTopLevel,
-                spaceName = spaceName ?: "Family Space",
+                spaceName = spaceName ?: "Silsilah",
                 userDisplayName = userDisplayName ?: "Akun",
                 userEmail = userEmail,
                 people = shellPeople,
@@ -253,7 +253,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
             FamilyRootNavigationShell(
                 currentRoute = Routes.PROFILE,
                 onNavigate = navigateTopLevel,
-                spaceName = spaceName ?: "Family Space",
+                spaceName = spaceName ?: "Silsilah",
                 userDisplayName = userDisplayName ?: "Akun",
                 userEmail = userEmail,
                 people = shellPeople,
@@ -264,10 +264,10 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 onSignOut = { scope.launch { repository.logout() } }
             ) { shellModifier ->
                 ProfileScreen(
-                    displayName = userDisplayName ?: "Akun FamilyRoot",
+                    displayName = userDisplayName ?: "Akun TRêdhAH",
                     email = userEmail,
                     userId = userId,
-                    spaceName = spaceName ?: "Family Space",
+                    spaceName = spaceName ?: "Silsilah",
                     pendingSyncCount = pendingSyncCount,
                     onOpenSpaceSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
                     onSignOut = { scope.launch { repository.logout() } },
@@ -283,7 +283,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
             FamilyRootNavigationShell(
                 currentRoute = Routes.ACTIVITY,
                 onNavigate = navigateTopLevel,
-                spaceName = spaceName ?: "Family Space",
+                spaceName = spaceName ?: "Silsilah",
                 userDisplayName = userDisplayName ?: "Akun",
                 userEmail = userEmail,
                 people = shellPeople,
@@ -312,7 +312,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
             FamilyRootNavigationShell(
                 currentRoute = Routes.PERSON_DETAIL,
                 onNavigate = navigateTopLevel,
-                spaceName = spaceName ?: "Family Space",
+                spaceName = spaceName ?: "Silsilah",
                 userDisplayName = userDisplayName ?: "Akun",
                 userEmail = userEmail,
                 people = shellPeople,

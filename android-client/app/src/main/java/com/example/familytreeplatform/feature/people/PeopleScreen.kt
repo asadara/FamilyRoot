@@ -164,7 +164,7 @@ private fun CompactPeopleContent(
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Tambah person", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "Masukkan anggota baru ke Family Space",
+                            "Tambahkan profil anggota ke silsilah",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.76f)
                         )
@@ -319,7 +319,7 @@ private fun FamilyDirectoryHeader(stats: FamilyDirectoryStats, modifier: Modifie
                         modifier = Modifier.semantics { heading() }
                     )
                     Text(
-                        "Temukan, tinjau, dan tambahkan person dalam ruang keluarga.",
+                        "Temukan, tinjau, dan tambahkan profil anggota dalam silsilah.",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.76f),
                         maxLines = 1,
@@ -349,7 +349,7 @@ private fun FamilyDirectoryHeader(stats: FamilyDirectoryStats, modifier: Modifie
                             modifier = Modifier.semantics { heading() }
                         )
                         Text(
-                            "Temukan, tinjau, dan tambahkan person dalam ruang keluarga.",
+                            "Temukan, tinjau, dan tambahkan profil anggota dalam silsilah.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.76f),
                             modifier = Modifier.padding(top = 2.dp)

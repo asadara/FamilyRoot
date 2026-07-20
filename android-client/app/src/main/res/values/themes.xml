@@ -1,4 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <style name="Theme.FamilyTreePlatform" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.Tredhah.Starting" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/tredhah_ivory</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/tredhah_splash_icon</item>
+        <item name="postSplashScreenTheme">@style/Theme.FamilyTreePlatform</item>
+    </style>
 </resources>

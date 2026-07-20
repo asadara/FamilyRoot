@@ -222,7 +222,7 @@ private fun FamilySpaceCard(
     onOpenSpaceSettings: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    ProfileSectionCard("Family Space aktif", "Ruang kolaborasi yang sedang dibuka", modifier) {
+    ProfileSectionCard("Silsilah aktif", "Silsilah kolaboratif yang sedang dibuka", modifier) {
         Text(spaceName, style = MaterialTheme.typography.titleLarge)
         Text(
             if (pendingSyncCount == 0) "Semua perubahan telah tersinkron" else "$pendingSyncCount perubahan menunggu sinkronisasi",
@@ -240,7 +240,7 @@ private fun FamilySpaceCard(
                 modifier = Modifier.padding(14.dp)
             ) {
                 Column(modifier = Modifier.weight(1f)) {
-                    Text("Pengaturan Family Space", style = MaterialTheme.typography.titleMedium)
+                    Text("Pengaturan silsilah", style = MaterialTheme.typography.titleMedium)
                     Text(
                         "Anggota, undangan, klaim, dan ekspor data",
                         style = MaterialTheme.typography.labelMedium,
@@ -273,7 +273,7 @@ private fun PrivacyCard(modifier: Modifier = Modifier) {
             Column(modifier = Modifier.padding(start = 14.dp)) {
                 Text("Akun bukan profil person", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Halaman ini hanya menampilkan identitas akun FamilyRoot. Nama, umur, cerita, dan hubungan keluarga tetap dikelola pada profil person di pohon.",
+                    "Halaman ini hanya menampilkan identitas akun TRêdhAH. Nama, umur, cerita, dan hubungan keluarga tetap dikelola pada profil anggota di pohon.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                     modifier = Modifier.padding(top = 4.dp)

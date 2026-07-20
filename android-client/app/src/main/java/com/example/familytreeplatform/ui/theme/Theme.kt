@@ -21,43 +21,43 @@ import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Color(0xFFBFC3FF),
-    onPrimary = Color(0xFF252A57),
-    primaryContainer = Color(0xFF3A3F6B),
-    onPrimaryContainer = Color(0xFFE2E3FF),
+    primary = Color(0xFFFFC96B),
+    onPrimary = Color(0xFF3D2B00),
+    primaryContainer = Color(0xFF573F08),
+    onPrimaryContainer = Color(0xFFFFE3A5),
     secondary = Color(0xFFE3BD61),
     onSecondary = Color(0xFF3E2E00),
-    secondaryContainer = Color(0xFF584400),
+    secondaryContainer = Color(0xFF594500),
     onSecondaryContainer = Color(0xFFFFE8A7),
-    tertiary = Color(0xFFFFB36B),
-    onTertiary = Color(0xFF4C2500),
-    background = Color(0xFF171822),
-    onBackground = Color(0xFFE8E6EC),
-    surface = Color(0xFF20212D),
-    onSurface = Color(0xFFE8E6EC),
-    surfaceVariant = Color(0xFF2B2D3B),
-    onSurfaceVariant = Color(0xFFC9C6D0),
-    outline = Color(0xFF92909B)
+    tertiary = Color(0xFFD9B878),
+    onTertiary = Color(0xFF3B2F18),
+    background = Color(0xFF1B1710),
+    onBackground = Color(0xFFF0E7D8),
+    surface = Color(0xFF241F17),
+    onSurface = Color(0xFFF0E7D8),
+    surfaceVariant = Color(0xFF332C21),
+    onSurfaceVariant = Color(0xFFD4C7B5),
+    outline = Color(0xFF9D8E7A)
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Color(0xFF434875),
+    primary = Color(0xFF6B4A18),
     onPrimary = Color.White,
-    primaryContainer = Color(0xFFE2E3F2),
-    onPrimaryContainer = Color(0xFF2C315F),
-    secondary = Color(0xFF8A650E),
+    primaryContainer = Color(0xFFFFE9BE),
+    onPrimaryContainer = Color(0xFF281A05),
+    secondary = Color(0xFF805B12),
     onSecondary = Color.White,
-    secondaryContainer = Color(0xFFF2E6BC),
-    onSecondaryContainer = Color(0xFF322500),
-    tertiary = Color(0xFFE66A00),
+    secondaryContainer = Color(0xFFFFE7B0),
+    onSecondaryContainer = Color(0xFF2B1D00),
+    tertiary = Color(0xFF705A2D),
     onTertiary = Color.White,
-    background = Color(0xFFF7F5EF),
-    onBackground = Color(0xFF24242A),
-    surface = Color(0xFFFFFBF4),
-    onSurface = Color(0xFF24242A),
-    surfaceVariant = Color(0xFFECE9E2),
-    onSurfaceVariant = Color(0xFF4A494F),
-    outline = Color(0xFF77767E)
+    background = Color(0xFFFFF8ED),
+    onBackground = Color(0xFF2A2116),
+    surface = Color(0xFFFFFBF5),
+    onSurface = Color(0xFF2A2116),
+    surfaceVariant = Color(0xFFF3E8D7),
+    onSurfaceVariant = Color(0xFF554A3B),
+    outline = Color(0xFF837567)
 )
 
 private val FamilyRootTypography = androidx.compose.material3.Typography(

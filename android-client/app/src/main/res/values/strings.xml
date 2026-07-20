@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Family Tree Platform</string>
+    <string name="app_name">TRêdhAH</string>
     <string name="sign_in">Sign in</string>
     <string name="create_account">Create account</string>
     <string name="display_name">Display name</string>
@@ -14,16 +14,16 @@
     <string name="demo_mother">Mother</string>
     <string name="demo_child">Child</string>
     <string name="demo_grandfather">Grandfather</string>
-    <string name="choose_family_space">Choose Family Space</string>
-    <string name="new_family_space">New Family Space</string>
-    <string name="create_space">Create space</string>
+    <string name="choose_family_space">Pilih silsilah</string>
+    <string name="new_family_space">Silsilah baru</string>
+    <string name="create_space">Buat silsilah</string>
     <string name="space_item_format">%1$s - %2$s</string>
     <string name="join_with_invitation">Join with invitation</string>
     <string name="invitation_code">Invitation code</string>
     <string name="preview_invitation">Preview invitation</string>
     <string name="invitation_preview_format">%1$s - role %2$s</string>
-    <string name="join_family_space">Join Family Space</string>
-    <string name="create_new_family_space">Create new Family Space</string>
+    <string name="join_family_space">Bergabung ke silsilah</string>
+    <string name="create_new_family_space">Buat silsilah baru</string>
     <string name="sign_out">Sign out</string>
     <string name="add_person">Add person</string>
     <string name="first_name">First name</string>
@@ -32,7 +32,7 @@
     <string name="saving">Saving…</string>
     <string name="activity">Activity</string>
     <string name="graph">Graph</string>
-    <string name="space_settings">Space settings</string>
+    <string name="space_settings">Pengaturan silsilah</string>
     <string name="create_invitation">Create invitation</string>
     <string name="expires_in_days">Expires in days</string>
     <string name="generate_invitation_code">Generate invitation code</string>

@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -43,6 +44,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.familytreeplatform.models.FamilySpace
+import com.example.familytreeplatform.ui.branding.TredhahBrand
+import com.example.familytreeplatform.ui.branding.TredhahLogo
 
 @Composable
 fun SpaceSelectionScreen(viewModel: SpaceSelectionViewModel, modifier: Modifier = Modifier) {
@@ -76,8 +79,8 @@ fun SpaceSelectionScreen(viewModel: SpaceSelectionViewModel, modifier: Modifier 
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                         Column(Modifier.weight(1f)) {
-                            Text("Ruang keluarga Anda", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
-                            Text("Pilih ruang untuk melanjutkan.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text("Silsilah Anda", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { heading() })
+                            Text("Pilih silsilah untuk melanjutkan.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                         if (!state.loadingSpaces) TextButton(onClick = viewModel::refresh) { Text("Perbarui") }
                     }
@@ -93,7 +96,7 @@ fun SpaceSelectionScreen(viewModel: SpaceSelectionViewModel, modifier: Modifier 
                                 modifier = Modifier.padding(18.dp)
                             ) {
                                 CircularProgressIndicator()
-                                Text("Memuat ruang keluarga…")
+                                Text("Memuat silsilah…")
                             }
                         }
                     } else if (state.spaces.isEmpty()) {
@@ -121,7 +124,7 @@ fun SpaceSelectionScreen(viewModel: SpaceSelectionViewModel, modifier: Modifier 
             }
             item {
                 Text(
-                    "Family Space bersifat privat. Akses hanya diberikan melalui keanggotaan atau undangan yang disetujui.",
+                    "Setiap silsilah bersifat privat. Akses hanya diberikan melalui keanggotaan atau undangan yang disetujui.",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.fillMaxWidth().widthIn(max = 980.dp).padding(vertical = 10.dp)
@@ -134,12 +137,10 @@ fun SpaceSelectionScreen(viewModel: SpaceSelectionViewModel, modifier: Modifier 
 @Composable
 private fun SpaceSelectionHeader(onSignOut: () -> Unit, modifier: Modifier = Modifier) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
-        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = CircleShape) {
-            Text("FR", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold, modifier = Modifier.padding(11.dp))
-        }
+        TredhahLogo(Modifier.size(50.dp))
         Column(Modifier.weight(1f).padding(start = 10.dp)) {
-            Text("FamilyRoot", style = MaterialTheme.typography.titleMedium)
-            Text("Pilih ruang privat keluarga", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(TredhahBrand.NAME, style = MaterialTheme.typography.titleMedium)
+            Text(TredhahBrand.TAGLINE, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         TextButton(onClick = onSignOut) { Text("Keluar") }
     }
@@ -153,10 +154,10 @@ private fun SpaceSelectionHero(spaceCount: Int, modifier: Modifier = Modifier) {
         modifier = modifier
     ) {
         Column(Modifier.padding(22.dp)) {
-            Text("Di keluarga mana Anda ingin bekerja?", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Text("Silsilah mana yang ingin Anda buka?", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
             Text(
-                if (spaceCount > 0) "Anda terhubung dengan $spaceCount ruang keluarga. Setiap ruang memiliki anggota dan aksesnya sendiri."
-                else "Bergabung melalui undangan keluarga atau buat ruang baru untuk memulai.",
+                if (spaceCount > 0) "Anda memiliki akses ke $spaceCount silsilah. Setiap silsilah memiliki anggota dan pengaturan akses tersendiri."
+                else "Bergabunglah melalui undangan keluarga atau buat silsilah baru untuk memulai.",
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f),
                 modifier = Modifier.padding(top = 6.dp)
             )
@@ -194,8 +195,8 @@ private fun EmptySpaces() {
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(22.dp)) {
-            Text("Belum ada ruang keluarga", style = MaterialTheme.typography.titleMedium)
-            Text("Gunakan undangan atau buat Family Space baru di bawah.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text("Belum ada silsilah", style = MaterialTheme.typography.titleMedium)
+            Text("Gunakan undangan atau buat silsilah baru di bawah.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 }
@@ -257,8 +258,8 @@ private fun CreateFamilyCard(
     modifier: Modifier = Modifier
 ) {
     SpaceActionCard(
-        title = "Buat ruang keluarga",
-        subtitle = "Mulai ruang privat yang dapat dikembangkan bersama.",
+        title = "Buat silsilah baru",
+        subtitle = "Mulai silsilah privat yang dapat dirawat bersama.",
         expanded = expanded,
         onToggle = onToggle,
         modifier = modifier
@@ -266,7 +267,7 @@ private fun CreateFamilyCard(
         OutlinedTextField(
             value = state.newSpaceName,
             onValueChange = viewModel::setNewSpaceName,
-            label = { Text("Nama keluarga atau ruang") },
+            label = { Text("Nama silsilah") },
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
@@ -274,7 +275,7 @@ private fun CreateFamilyCard(
             enabled = !state.processing && state.newSpaceName.isNotBlank(),
             onClick = viewModel::createSpace,
             modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
-        ) { Text(if (state.processing) "Membuat ruang…" else "Buat Family Space") }
+        ) { Text(if (state.processing) "Membuat silsilah…" else "Buat silsilah") }
     }
 }
 
@@ -317,7 +318,7 @@ private fun SpaceError(message: String, modifier: Modifier = Modifier) {
 }
 
 internal fun familySpaceRoleLabel(role: String?): String = when (role) {
-    "OWNER" -> "Pemilik ruang"
+    "OWNER" -> "Pemilik silsilah"
     "ADMIN" -> "Pengelola"
     "EDITOR" -> "Kontributor"
     "VIEWER" -> "Pembaca"
@@ -330,7 +331,7 @@ internal fun familySpaceInitials(name: String): String = name
     .filter(String::isNotBlank)
     .take(2)
     .joinToString("") { it.take(1).uppercase() }
-    .ifBlank { "FR" }
+    .ifBlank { "TR" }
 
 internal fun spaceSelectionErrorMessage(message: String?): String {
     val value = message.orEmpty()
@@ -339,7 +340,7 @@ internal fun spaceSelectionErrorMessage(message: String?): String {
             "Kode undangan tidak valid atau sudah tidak berlaku."
         value.contains("connect", ignoreCase = true) || value.contains("failed", ignoreCase = true) ||
             value.contains("127.0.0.1") || value.contains("localhost") ->
-            "Ruang keluarga belum dapat dimuat. Periksa koneksi lalu coba kembali."
+            "Silsilah belum dapat dimuat. Periksa koneksi lalu coba kembali."
         else -> "Tindakan belum dapat diselesaikan. Coba kembali."
     }
 }

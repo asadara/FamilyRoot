@@ -166,7 +166,7 @@ fun SpaceSettingsScreen(
                     onToggle = { portabilityOpen = !portabilityOpen }
                 ) {
                     Text(
-                        "Impor hanya dapat dilakukan ketika Family Space belum memiliki person. " +
+                        "Impor hanya dapat dilakukan ketika silsilah belum memiliki profil anggota. " +
                             "Berkas ini adalah salinan data keluarga, bukan dokumen administratif formal.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -209,7 +209,7 @@ fun SpaceSettingsScreen(
                 ) {
                     Text(
                         "Data keluarga tidak disertakan dalam backup cloud Android. Berkas ekspor " +
-                            "disimpan di lokasi yang Anda pilih dan tidak dienkripsi otomatis oleh FamilyRoot.",
+                            "disimpan di lokasi yang Anda pilih dan tidak dienkripsi otomatis oleh TRêdhAH.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     OutlinedButton(

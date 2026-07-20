@@ -504,48 +504,57 @@ pengguna dan Family Space mempunyai state workspace tersendiri.
 
 ## 19. Identitas Visual
 
-Karakter merek FamilyRoot adalah:
+Nama produk yang tampil kepada pengguna adalah **TRêdhAH**. Kapitalisasi wajib
+dipertahankan karena huruf kapitalnya membentuk `TRAH`, sedangkan `dh` mempertahankan
+pembedaan bunyi dalam bahasa Jawa. Nama teknis `FamilyRoot` tetap boleh dipakai pada
+package, class, database, dan dokumentasi arsitektur sampai ada keputusan migrasi
+terpisah.
+
+Tagline resmi:
+
+> Merangkai jejak, menyatukan trah
+
+Karakter merek TRêdhAH adalah:
 
 > Arsip keluarga modern yang hangat, tenang, tepercaya, dan kolaboratif.
 
 Kolaboratif berarti kerja bersama dalam ruang keluarga privat, bukan feed atau
 jejaring sosial publik.
 
-Palet awal:
+Palet utama mengikuti logo emas-gading pada `images/main_logo.png`:
 
-- muted/deep indigo sebagai warna utama;
-- honey gold sebagai aksen hangat;
-- soft periwinkle sebagai aksen kolaborasi;
+- deep warm brown sebagai warna aksi utama dan teks berkarakter;
+- honey gold sebagai aksen identitas;
 - soft ivory sebagai background;
-- cool gray untuk informasi historis/deceased.
+- warm neutral untuk surface, informasi sekunder, dan data historis;
+- off-white dan muted gold untuk mode gelap.
 
-Nilai warna eksplorasi awal adalah Deep Indigo `#434875`, Muted Indigo `#646A9B`,
-Soft Periwinkle `#858CC7`, Honey `#D1A43C`, Pale Honey `#F2E6BC`, Soft Ivory
-`#F7F5EF`, dan Cool Gray `#8A8D95`. Nilai tersebut belum menjadi token produksi;
-contrast light/dark mode dan pemeriksaan pada perangkat fisik dapat mengubahnya.
-Deep teal dan terracotta tidak digunakan sebagai arah tema utama.
+Baseline implementasi memakai Deep Warm Brown `#6B4A18`, Honey Gold `#805B12`,
+Pale Honey `#FFE9BE`, dan Soft Ivory `#FFF8ED`. Nilai dapat disesuaikan setelah
+pemeriksaan contrast dan validasi pada perangkat fisik, tetapi arah emas-gading-cokelat
+tetap menjadi identitas utama.
 
 Tipografi:
 
 - Source Sans 3 untuk UI, navigation, card, form, dan data;
 - Source Serif 4 secara terbatas untuk cerita, memorial, editorial, atau wordmark;
-- nama memakai semibold dan tidak memakai all caps;
+- wordmark memakai ejaan `TRêdhAH` secara konsisten dan tidak diubah menjadi all caps;
 - font scaling sistem dan kebutuhan aksesibilitas harus tetap bekerja.
 
 Bentuk dan elevation:
 
 - rounded rectangle moderat, bukan pill berlebihan;
 - card putih lembut di atas ivory dengan border tipis dan elevation ringan;
-- selected state berupa outline indigo tanpa perubahan ukuran;
+- selected state berupa outline warm brown/gold tanpa perubahan ukuran;
 - inspector memakai permukaan tonal datar dan divider ringan;
 - glassmorphism, gradient berat, shadow besar, serta pure black/white dihindari.
 
-Ikon memakai rounded outline style. Ikon pasangan adalah aset FamilyRoot berupa dua
-cincin yang jelas pada ukuran kecil. Connector normal netral, path aktif indigo, dan
-endpoint pencarian dapat memakai honey. Dark mode memakai canvas deep
-indigo-charcoal, card muted indigo-slate, aksi light periwinkle, honey yang diredupkan,
-connector gray-lavender, dan teks off-white. Tema mengikuti sistem dengan pilihan
-manual.
+Logo master dipakai untuk splash, autentikasi, dan header. Launcher icon memakai
+turunan teroptimasi dari logo yang sama; penyederhanaan khusus ukuran kecil dilakukan
+setelah validasi perangkat. Ikon UI lain tetap memakai rounded outline style. Connector
+normal netral, path aktif warm brown, dan endpoint pencarian dapat memakai honey.
+Dark mode memakai canvas warm charcoal, surface brown-charcoal, aksi muted gold,
+connector warm gray, dan teks off-white. Tema mengikuti sistem dengan pilihan manual.
 
 ## 20. Baseline Design Tokens
 

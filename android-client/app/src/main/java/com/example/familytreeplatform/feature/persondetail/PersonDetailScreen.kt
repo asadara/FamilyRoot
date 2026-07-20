@@ -250,7 +250,7 @@ fun PersonDetailScreen(
             item {
                 PersonProfileSection(
                     title = "Keluarga & hubungan",
-                    subtitle = "Tinjau dan hubungkan person dalam Family Space",
+                    subtitle = "Tinjau dan hubungkan profil anggota dalam silsilah",
                     badge = relationCount.toString(),
                     expanded = relationsExpanded,
                     onToggle = { relationsExpanded = !relationsExpanded }
@@ -586,7 +586,7 @@ private fun SourcesSection(
     onAdd: () -> Unit
 ) {
     Text(
-        "FamilyRoot menyimpan catatan referensi, bukan berkas administrasi negara atau bukti formal.",
+        "TRêdhAH menyimpan catatan referensi, bukan berkas administrasi negara atau bukti formal.",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
@@ -622,7 +622,7 @@ private fun MediaSection(
     onAdd: () -> Unit
 ) {
     Text(
-        "Gunakan tautan Google Drive, album keluarga, atau media sosial. FamilyRoot tidak menjadi galeri penyimpanan foto.",
+        "Gunakan tautan Google Drive, album keluarga, atau media sosial. TRêdhAH tidak menjadi galeri penyimpanan foto.",
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )

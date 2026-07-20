@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -41,6 +42,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.familytreeplatform.BuildConfig
+import com.example.familytreeplatform.ui.branding.TredhahBrand
+import com.example.familytreeplatform.ui.branding.TredhahLogo
 
 @Composable
 fun AuthScreen(viewModel: AuthViewModel, modifier: Modifier = Modifier) {
@@ -87,17 +90,15 @@ private fun WelcomePanel(modifier: Modifier = Modifier) {
         modifier = modifier
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.padding(28.dp)) {
-            Surface(color = MaterialTheme.colorScheme.primary, shape = CircleShape) {
-                Text(
-                    "FR",
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(16.dp)
-                )
-            }
-            Text("FamilyRoot", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            TredhahLogo(Modifier.size(116.dp))
+            Text(TredhahBrand.NAME, style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
             Text(
-                "Satu ruang privat untuk menyusun silsilah, menjaga cerita, dan memvalidasi informasi bersama keluarga.",
+                TredhahBrand.TAGLINE,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.secondary
+            )
+            Text(
+                "Satu ruang privat untuk menyusun silsilah, menjaga cerita, dan merawat informasi bersama keluarga.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.82f)
             )
@@ -121,11 +122,9 @@ private fun WelcomePoint(text: String) {
 @Composable
 private fun CompactWordmark() {
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-        Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = CircleShape) {
-            Text("FR", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(14.dp))
-        }
-        Text("FamilyRoot", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 8.dp))
-        Text("Arsip keluarga yang hangat dan kolaboratif", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TredhahLogo(Modifier.size(96.dp))
+        Text(TredhahBrand.NAME, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(top = 8.dp))
+        Text(TredhahBrand.TAGLINE, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -139,12 +138,12 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, modifier: Mod
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Text(
-                if (state.mode == AuthMode.SIGN_IN) "Selamat datang kembali" else "Mulai ruang keluarga Anda",
+                if (state.mode == AuthMode.SIGN_IN) "Selamat datang kembali" else "Mulai silsilah keluarga Anda",
                 style = MaterialTheme.typography.titleLarge
             )
             Text(
                 if (state.mode == AuthMode.SIGN_IN) "Masuk untuk melanjutkan penjelajahan keluarga."
-                else "Buat akun pribadi sebelum bergabung atau membuat Family Space.",
+                else "Buat akun pribadi sebelum bergabung atau membuat silsilah.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp)
             )

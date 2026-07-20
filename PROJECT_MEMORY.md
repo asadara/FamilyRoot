@@ -710,6 +710,18 @@ yang sudah selesai:
 > dijelaskan dalam `backend/DEMO_DATA.md`; database runtime
 > `backend/dev.sqlite` tetap dilarang masuk Git karena selain demo dapat mengandung
 > akun lokal, refresh session, mutation/e2e data, dan log operasional.
+> Pada 20 Juli 2026 identitas produk resmi diputuskan menjadi **TRêdhAH** dengan
+> tagline **“Merangkai jejak, menyatukan trah”**. Kapitalisasi tersebut wajib karena
+> huruf kapital membentuk `TRAH`, sementara `dh` mempertahankan pembedaan bunyi Jawa.
+> Nama `FamilyRoot` tetap menjadi nama teknis internal sampai ada migrasi terpisah.
+> Android kini memakai logo `images/main_logo.png` sebagai sumber launcher icon,
+> splash, autentikasi, dan header; palet berubah menjadi emas-gading-cokelat, serta
+> istilah pengguna `Family Space` diganti menjadi `silsilah` tanpa mengubah tenant/API.
+> Unit test 46/46, lint, assemble debug, install/cold launch, pemeriksaan visual header,
+> dan 20/20 connected instrumentation test lulus pada Samsung SM-T225 Android 14.
+> Koreksi visual berikutnya memberi splash drawable khusus berukuran 96 dp agar logo
+> penuh aman pada mask splash Android/Samsung dan aksara Jawa tidak terpotong; logo
+> launcher/header tetap memakai aset penuh tanpa inset tambahan.
 > Daftar di bawah tetap berguna sebagai konteks awal, tetapi keputusan terbaru dalam
 > kedua risalah tersebut mengalahkan item agenda yang sudah diselesaikan.
 
