@@ -628,7 +628,16 @@ yang sudah selesai:
 > `docs/CLOUD_PILOT_DECISION.md`: NestJS di Cloud Run dan PostgreSQL/private storage
 > Supabase untuk pilot, dengan setiap perubahan kontrak atau cross-space identity
 > memerlukan keputusan tersendiri.
-> Quality gate Android terakhir mencatat unit test, lint, assemble, dan 18 connected
+> Baseline Tahap 6.1 kemudian diterapkan hanya pada frontend Android: setiap card
+> non-pusat dapat membuka orang tua atau keluarga anak secara progresif berdasarkan
+> relationship yang sudah ada dalam Family Space aktif; co-parent tercatat ikut
+> terlihat, person tidak diduplikasi, collapse tidak mengganti center, state ekspansi
+> saveable, collision dihindari, dan viewport menjaga posisi center. Relationship yang
+> tidak diterima dari ruang aktif tidak menghasilkan arrow, placeholder, maupun
+> inference. Unit test, lint, assemble debug, serta seluruh 19 instrumentation test
+> lulus pada Samsung SM-T225 Android 14. Ini menyelesaikan baseline 6.1, bukan menutup
+> Tahap 6; historical partnership dan kompleksitas berikutnya masih menunggu.
+> Quality gate Android terakhir mencatat unit test, lint, assemble, dan 19 connected
 > instrumentation tests lulus pada
 > Samsung SM-T225 Android 14 melalui USB.
 > Daftar di bawah tetap berguna sebagai konteks awal, tetapi keputusan terbaru dalam

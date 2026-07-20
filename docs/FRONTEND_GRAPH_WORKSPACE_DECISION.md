@@ -1094,7 +1094,7 @@ deployment tidak diubah.
 ## 31. Keputusan Tahap 6 — Kompleksitas Lineage
 
 > **Tanggal keputusan:** 19 Juli 2026
-> **Status:** Disepakati sebagai ruang lingkup Tahap 6; implementasi belum dimulai
+> **Status:** Disepakati sebagai ruang lingkup Tahap 6; baseline Tahap 6.1 selesai
 > **Tidak termasuk:** deployment cloud, perubahan kontrak backend, cross-space
 > relationship, foto binary, atau privacy role × scope
 
@@ -1204,3 +1204,30 @@ mengikuti `docs/CLOUD_PILOT_DECISION.md`. Arah pilot tetap Cloud Run untuk NestJ
 Supabase Free untuk PostgreSQL serta private object storage di Singapore. Tahap 6
 tidak boleh mendahului keputusan kontrak, izin, migrasi, secret, deployment, atau
 cross-space identity yang menjadi tanggung jawab pembahasan Tahap 7.
+
+### 31.4 Status implementasi Tahap 6.1
+
+Baseline progressive lineage telah diterapkan pada frontend Android tanpa perubahan
+backend:
+
+- card non-pusat menampilkan kontrol orang tua atau anak hanya ketika relationship
+  tersebut benar-benar tersedia dalam cache Family Space aktif;
+- satu aksi membuka satu keluarga langsung, termasuk co-parent yang memang tercatat,
+  dan ekspansi berikutnya dapat dilanjutkan dari card yang baru terlihat;
+- collapse menutup cabang terkait tanpa mengganti center person, selection, atau
+  state cabang lain;
+- person ID yang sama tetap dirender satu kali walaupun dapat dicapai dari lebih dari
+  satu relationship;
+- node tambahan ditempatkan dengan collision avoidance sederhana dan posisi center
+  dipertahankan saat ukuran graph berubah;
+- state ekspansi disimpan per center person melalui state saveable;
+- tidak ada arrow, placeholder, jumlah, atau inference untuk relationship keluarga
+  asal pasangan yang tidak diterima dari ruang aktif;
+- unit test mencakup keluarga kakak-adik, recursive expansion, collapse, deduplikasi,
+  dan batas data aktif; instrumentation test memverifikasi buka/tutup keluarga Adik
+  tanpa mengubah card pusat.
+
+Quality gate baseline: unit test, lint, assemble debug, dan seluruh 19 instrumentation
+test lulus pada Samsung SM-T225 Android 14. Tahap 6 belum ditutup; multiple historical
+partnership, parentage kompleks, layout stabilization lanjutan, dan performance graph
+besar tetap menjadi pekerjaan berikutnya.
