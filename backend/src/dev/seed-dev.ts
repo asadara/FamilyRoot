@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import 'dotenv/config';
 import { DataSource, Repository } from 'typeorm';
 import * as bcrypt from 'bcryptjs';
 import { UserEntity } from '../users/user.entity';
@@ -21,27 +22,38 @@ import {
   demoRelatives,
   demoUsers,
 } from './demo-data';
+import { postgresUrlWithRequiredSsl } from '../config/environment';
 
-const dataSource = new DataSource({
-  type: 'sqlite',
-  database: process.env.DB_DATABASE ?? 'dev.sqlite',
-  entities: [
-    UserEntity,
-    FamilySpaceEntity,
-    SpaceMemberEntity,
-    PersonEntity,
-    RelationshipEntity,
-    UserPersonClaimEntity,
-    ChangeLogEntity,
-    SpaceInvitationEntity,
-    FactSourceEntity,
-    MediaItemEntity,
-    EditProposalEntity,
-    ClientMutationEntity,
-    RefreshSessionEntity,
-  ],
-  synchronize: process.env.NODE_ENV !== 'production',
-});
+const entities = [
+  UserEntity,
+  FamilySpaceEntity,
+  SpaceMemberEntity,
+  PersonEntity,
+  RelationshipEntity,
+  UserPersonClaimEntity,
+  ChangeLogEntity,
+  SpaceInvitationEntity,
+  FactSourceEntity,
+  MediaItemEntity,
+  EditProposalEntity,
+  ClientMutationEntity,
+  RefreshSessionEntity,
+];
+
+const dataSource = process.env.DATABASE_URL
+  ? new DataSource({
+      type: 'postgres',
+      url: postgresUrlWithRequiredSsl(process.env.DATABASE_URL),
+      entities,
+      synchronize: false,
+      extra: { max: 1 },
+    })
+  : new DataSource({
+      type: 'sqlite',
+      database: process.env.DB_DATABASE ?? 'dev.sqlite',
+      entities,
+      synchronize: true,
+    });
 
 async function findOrCreateUser(
   usersRepo: Repository<UserEntity>,

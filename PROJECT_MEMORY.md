@@ -654,8 +654,25 @@ yang sudah selesai:
 > instrumentation tiba-tiba mati dengan `SIGKILL`, periksa `Developer options >
 > Select debug app`; FamilyRoot yang masih dipilih sebagai debug app terbukti memicu
 > force-stop `set debug app` pada perangkat referensi.
-> Tahap berikutnya adalah Tahap 7 sesuai `docs/CLOUD_PILOT_DECISION.md`; Tahap 7 belum
-> dimulai.
+> Tahap 7 dimulai pada 20 Juli 2026 sesuai `docs/CLOUD_PILOT_DECISION.md`. Repository
+> kini mempunyai konfigurasi PostgreSQL Supabase dengan SSL dan pool kecil, migration
+> awal eksplisit, Dockerfile production Node.js 22 untuk Cloud Run, validasi environment,
+> soft-delete timestamp, serta adapter private storage. Upload foto dibatasi 2 MB,
+> divalidasi melalui magic bytes, di-re-encode untuk kompresi/penghapusan EXIF, dan
+> hanya dibaca melalui signed URL singkat setelah pemeriksaan role. Development lokal
+> tetap SQLite dan backend tetap NestJS; tidak ada rewrite Kotlin. Unit/e2e/build/lint
+> lokal lulus, tetapi Docker tidak tersedia di PC. Provisioning Supabase/GCP,
+> migration cloud, deployment, dan acceptance test lintas perangkat masih wajib
+> sebelum Tahap 7 dapat ditutup; panduannya berada di
+> `docs/STEP7_CLOUD_PILOT_RUNBOOK.md`.
+> Checkpoint Supabase pada hari yang sama kemudian lulus: migration PostgreSQL awal
+> diterapkan dengan RLS pada 13 tabel, seed cloud menghasilkan satu Family Space dan
+> enam profil, login/read API berhasil, serta private bucket `family-media` tervalidasi
+> pada limit 2 MB dan MIME JPEG/PNG/WebP. Upload PNG dummy, pencatatan metadata,
+> signed URL 60 detik, dan download HTTP 200 juga berhasil. Seed lama yang semula
+> selalu menargetkan SQLite diperbaiki agar mengikuti `DATABASE_URL` tanpa pernah
+> mengaktifkan synchronize pada PostgreSQL. Provisioning dan acceptance Cloud Run
+> masih terbuka.
 > Handoff PC pengembangan kemudian distandardisasi melalui `docs/NEW_PC_HANDOFF.md`.
 > Keyword `familyroot` diatur oleh root `AGENTS.md` untuk meminta Codex membaca
 > `PROJECT_MEMORY.md` seluruhnya, memeriksa Git, mengonfirmasi konteks, dan menunggu

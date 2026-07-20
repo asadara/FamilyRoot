@@ -6,7 +6,10 @@ import {
   Param,
   Post,
   Query,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { isUUID } from 'class-validator';
 import { ActorUserId } from '../common/actor-user-id.decorator';
 import { SpaceRoles } from '../common/space-roles.decorator';
@@ -15,6 +18,8 @@ import { CreateMediaDto } from './dto/create-media.dto';
 import { CreateProposalDto } from './dto/create-proposal.dto';
 import { CreateSourceDto } from './dto/create-source.dto';
 import { ReviewProposalDto } from './dto/review-proposal.dto';
+import { UploadImageDto } from './dto/upload-image.dto';
+import { MAX_IMAGE_UPLOAD_BYTES } from './image-processor';
 
 @Controller()
 export class ArchiveController {
@@ -70,6 +75,43 @@ export class ArchiveController {
       dto,
       actorUserId,
     );
+  }
+
+  @Post('persons/:personId/media/upload')
+  @SpaceRoles('OWNER', 'ADMIN', 'EDITOR')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { files: 1, fileSize: MAX_IMAGE_UPLOAD_BYTES },
+    }),
+  )
+  uploadImage(
+    @Param('personId') personId: string,
+    @ActorUserId() actorUserId: string,
+    @Query('spaceId') spaceId: string,
+    @Body() dto: UploadImageDto,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    this.validateIds(spaceId, personId);
+    if (!file) throw new BadRequestException('Image file is required');
+    return this.archiveService.uploadImage(
+      spaceId,
+      personId,
+      dto,
+      file.buffer,
+      actorUserId,
+    );
+  }
+
+  @Get('persons/:personId/media/:mediaId/access')
+  @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
+  getMediaAccess(
+    @Param('personId') personId: string,
+    @Param('mediaId') mediaId: string,
+    @Query('spaceId') spaceId: string,
+  ) {
+    this.validateIds(spaceId, personId);
+    if (!isUUID(mediaId)) throw new BadRequestException('Invalid mediaId');
+    return this.archiveService.getMediaAccess(spaceId, personId, mediaId);
   }
 
   @Get('proposals')

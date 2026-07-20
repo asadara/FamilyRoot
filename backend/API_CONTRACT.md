@@ -78,6 +78,12 @@ Phase 3 core endpoints:
 - `GET /relationships/path?spaceId=...&fromPersonId=...&toPersonId=...` — returns the shortest relationship path.
 - `GET|POST /persons/:personId/sources` — reads or creates source/citation records for facts.
 - `GET|POST /persons/:personId/media` — reads or creates media metadata/URI records.
+- `POST /persons/:personId/media/upload?spaceId=...` — OWNER/ADMIN/EDITOR uploads one private
+  JPEG, PNG, or WebP image. The backend enforces a 2 MB limit, validates magic bytes,
+  re-encodes the image without EXIF metadata, and stores only an object reference in
+  `media_items`.
+- `GET /persons/:personId/media/:mediaId/access?spaceId=...` — any authorized member
+  of the matching Family Space receives a private read URL valid for 60 seconds.
 - `GET|POST /proposals` — reads or creates edit proposals.
 - `POST /proposals/approve` and `POST /proposals/reject` — OWNER/ADMIN review proposal changes.
 

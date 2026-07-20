@@ -26,6 +26,9 @@ jobs:
         env:
           DB_DATABASE: phase1-ci.sqlite
           JWT_SECRET: phase1-ci-secret-at-least-32-characters
+      - name: Build production container
+        working-directory: .
+        run: docker build --tag familyroot-backend:ci .
 
   android:
     runs-on: ubuntu-latest

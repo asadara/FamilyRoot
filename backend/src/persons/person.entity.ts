@@ -66,6 +66,9 @@ export class PersonEntity {
   @Column({ type: 'boolean', default: false })
   isDeleted!: boolean;
 
+  @Column({ name: 'deleted_at', type: Date, nullable: true })
+  deletedAt!: Date | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

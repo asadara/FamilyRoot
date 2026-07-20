@@ -1,0 +1,14 @@
+.git
+.github
+.idea
+.vscode
+**/node_modules
+**/dist
+**/coverage
+**/*.sqlite
+**/*.sqlite-shm
+**/*.sqlite-wal
+**/.env
+android
+docs
+*.md

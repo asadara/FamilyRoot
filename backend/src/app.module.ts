@@ -17,16 +17,13 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ApiExceptionFilter } from './common/api-exception.filter';
 import { RequestObservabilityInterceptor } from './common/request-observability.interceptor';
+import { validateEnvironment } from './config/environment';
+import { createDatabaseOptions } from './config/database.config';
 
 @Module({
   imports: [
-    ConfigModule.forRoot({ isGlobal: true }),
-    TypeOrmModule.forRoot({
-      type: 'sqlite',
-      database: process.env.DB_DATABASE ?? 'dev.sqlite',
-      autoLoadEntities: true,
-      synchronize: process.env.NODE_ENV !== 'production',
-    }),
+    ConfigModule.forRoot({ isGlobal: true, validate: validateEnvironment }),
+    TypeOrmModule.forRoot(createDatabaseOptions()),
     UsersModule,
     SpacesModule,
     PersonsModule,

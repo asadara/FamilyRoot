@@ -4,9 +4,9 @@ NestJS API and source of truth for Family Tree Platform. Product direction and r
 
 ## Setup
 
-```bash
-npm install
-copy .env.example .env
+```powershell
+npm ci
+Copy-Item .env.example .env
 npm run start:dev
 ```
 
@@ -15,7 +15,17 @@ Untuk menyiapkan akun dan Family Space demo yang sama pada PC baru, lihat
 
 The server listens on `http://localhost:3001`. Interactive OpenAPI documentation is available at `http://localhost:3001/api/docs`.
 
-Set a strong, private `JWT_SECRET`. The application refuses to start in production without it. SQLite is currently used for development; `DB_DATABASE` controls its path.
+Set a strong, private `JWT_SECRET`. SQLite remains the local development database;
+`DB_DATABASE` controls its path. Production requires a PostgreSQL `DATABASE_URL`,
+keeps schema synchronization disabled, and uses explicit TypeORM migrations:
+
+```powershell
+npm run migration:show
+npm run migration:run
+```
+
+The production container and the complete Cloud Run + Supabase Free pilot procedure
+are documented in [`../docs/STEP7_CLOUD_PILOT_RUNBOOK.md`](../docs/STEP7_CLOUD_PILOT_RUNBOOK.md).
 
 ## Verification
 

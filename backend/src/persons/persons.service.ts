@@ -257,6 +257,7 @@ export class PersonsService {
 
       const beforeSource = JSON.stringify(source);
       source.isDeleted = true;
+      source.deletedAt = new Date();
       source.notes = [
         source.notes,
         `Merged into ${target.fullName} (${target.personId})`,
@@ -400,6 +401,7 @@ export class PersonsService {
     return this.personsRepo.manager.transaction(async (manager) => {
       const before = { ...person };
       person.isDeleted = true;
+      person.deletedAt = new Date();
       const saved = await manager.save(person);
       await manager.save(
         manager.create(ChangeLogEntity, {

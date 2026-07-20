@@ -22,10 +22,10 @@ export class RefreshSessionEntity {
   @Column({ type: 'text', unique: true, select: false })
   tokenHash!: string;
 
-  @Column({ type: 'datetime' })
+  @Column({ type: Date })
   expiresAt!: Date;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: Date, nullable: true })
   revokedAt!: Date | null;
 
   @Column({ type: 'uuid', nullable: true })

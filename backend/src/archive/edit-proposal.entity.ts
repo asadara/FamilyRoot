@@ -31,7 +31,7 @@ export class EditProposalEntity {
   @Column({ type: 'uuid', nullable: true })
   reviewedByUserId!: string | null;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: Date, nullable: true })
   reviewedAt!: Date | null;
 
   @CreateDateColumn()

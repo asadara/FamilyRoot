@@ -5,6 +5,7 @@ import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { randomUUID } from 'node:crypto';
+import { OBJECT_STORAGE } from '../src/archive/storage/object-storage';
 
 describe('Phase 1 security contract (e2e)', () => {
   let app: INestApplication<App>;
@@ -17,11 +18,27 @@ describe('Phase 1 security contract (e2e)', () => {
   let adminId: string;
   let inviteeToken: string;
   let spaceId: string;
+  let personId: string;
+  const storedObjects = new Map<string, Buffer>();
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    })
+      .overrideProvider(OBJECT_STORAGE)
+      .useValue({
+        putObject: (object: { path: string; body: Buffer }) => {
+          storedObjects.set(object.path, object.body);
+          return Promise.resolve();
+        },
+        deleteObject: (path: string) => {
+          storedObjects.delete(path);
+          return Promise.resolve();
+        },
+        createSignedReadUrl: (path: string) =>
+          Promise.resolve(`https://storage.example.test/signed/${path}`),
+      })
+      .compile();
     app = moduleFixture.createNestApplication();
     app.useGlobalPipes(
       new ValidationPipe({
@@ -315,6 +332,7 @@ describe('Phase 1 security contract (e2e)', () => {
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ spaceId, firstName: 'Budi', nickName: 'Budi', gender: 'MALE' })
       .expect(201);
+    personId = firstPerson.body.personId as string;
 
     const mutationId = randomUUID();
     const lifeMutation = {
@@ -572,5 +590,53 @@ describe('Phase 1 security contract (e2e)', () => {
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ spaceId: backupTarget.body.spaceId, backup: backup.body })
       .expect(400);
+  });
+
+  it('validates, stores, and authorizes private image access', async () => {
+    const onePixelPng = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      'base64',
+    );
+
+    await request(app.getHttpServer())
+      .post(`/persons/${personId}/media/upload`)
+      .set('Authorization', `Bearer ${viewerToken}`)
+      .query({ spaceId })
+      .field('label', 'Private family photo')
+      .attach('file', onePixelPng, {
+        filename: 'misleading.txt',
+        contentType: 'text/plain',
+      })
+      .expect(403);
+
+    const uploaded = await request(app.getHttpServer())
+      .post(`/persons/${personId}/media/upload`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .query({ spaceId })
+      .field('label', 'Private family photo')
+      .attach('file', onePixelPng, {
+        filename: 'misleading.txt',
+        contentType: 'text/plain',
+      })
+      .expect(201);
+
+    expect(uploaded.body).toEqual(
+      expect.objectContaining({
+        personId,
+        kind: 'PHOTO',
+        uri: expect.stringMatching(/^object:\/\//),
+      }),
+    );
+    expect(storedObjects.size).toBe(1);
+
+    await request(app.getHttpServer())
+      .get(`/persons/${personId}/media/${uploaded.body.mediaId}/access`)
+      .set('Authorization', `Bearer ${viewerToken}`)
+      .query({ spaceId })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.url).toMatch(/^https:\/\/storage\.example\.test\/signed\//);
+        expect(body.expiresIn).toBe(60);
+      });
   });
 });

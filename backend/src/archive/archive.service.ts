@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -10,6 +11,10 @@ import { PersonEntity } from '../persons/person.entity';
 import { EditProposalEntity } from './edit-proposal.entity';
 import { FactSourceEntity } from './fact-source.entity';
 import { MediaItemEntity } from './media-item.entity';
+import { processUploadedImage } from './image-processor';
+import { OBJECT_STORAGE } from './storage/object-storage';
+import type { ObjectStorage } from './storage/object-storage';
+import { randomUUID } from 'node:crypto';
 
 @Injectable()
 export class ArchiveService {
@@ -24,6 +29,8 @@ export class ArchiveService {
     private readonly personsRepo: Repository<PersonEntity>,
     @InjectRepository(ChangeLogEntity)
     private readonly changeRepo: Repository<ChangeLogEntity>,
+    @Inject(OBJECT_STORAGE)
+    private readonly objectStorage: ObjectStorage,
   ) {}
 
   private async assertPerson(spaceId: string, personId: string) {
@@ -133,6 +140,63 @@ export class ArchiveService {
       );
       return saved;
     });
+  }
+
+  async uploadImage(
+    spaceId: string,
+    personId: string,
+    input: { label: string; sourceId?: string | null },
+    file: Buffer,
+    actorUserId: string,
+  ) {
+    await this.assertPerson(spaceId, personId);
+    const image = await processUploadedImage(file);
+    const objectPath = `${spaceId}/${personId}/${randomUUID()}.${image.extension}`;
+
+    await this.objectStorage.putObject({
+      path: objectPath,
+      contentType: image.contentType,
+      body: image.body,
+    });
+
+    try {
+      return await this.createMedia(
+        spaceId,
+        personId,
+        {
+          label: input.label,
+          kind: 'PHOTO',
+          uri: `object://${objectPath}`,
+          sourceId: input.sourceId,
+        },
+        actorUserId,
+      );
+    } catch (error) {
+      await this.objectStorage.deleteObject(objectPath).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async getMediaAccess(spaceId: string, personId: string, mediaId: string) {
+    await this.assertPerson(spaceId, personId);
+    const media = await this.mediaRepo.findOneBy({
+      spaceId,
+      personId,
+      mediaId,
+    });
+    if (!media) throw new NotFoundException('Media not found');
+    if (!media.uri.startsWith('object://')) {
+      throw new BadRequestException('Media is not managed by private storage');
+    }
+
+    const expiresIn = 60;
+    return {
+      url: await this.objectStorage.createSignedReadUrl(
+        media.uri.slice('object://'.length),
+        expiresIn,
+      ),
+      expiresIn,
+    };
   }
 
   listProposals(spaceId: string) {

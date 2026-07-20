@@ -2,7 +2,8 @@
 
 > **Status:** Disepakati sebagai arah pengujian awal
 > **Tanggal keputusan:** 18 Juli 2026
-> **Status implementasi:** Belum dimulai
+> **Status implementasi:** Tahap 7 berjalan; fondasi repository siap, provisioning
+> dan verifikasi cloud menunggu tindakan pemilik akun
 > **Penjadwalan:** Ditetapkan sebagai arah Tahap 7 setelah kompleksitas lineage
 > Tahap 6 ditutup
 > **Ruang lingkup:** Hosting backend, database cloud, dan penyimpanan media untuk pilot
@@ -151,7 +152,6 @@ Referensi batas layanan saat keputusan dibuat:
 
 ## 9. Hal yang Belum Diputuskan
 
-- tanggal mulai implementasi pilot;
 - Google Cloud project dan Supabase organization yang akan digunakan;
 - batas anggaran dan billing alert;
 - domain/subdomain API pilot;
@@ -165,3 +165,6 @@ Referensi batas layanan saat keputusan dibuat:
 
 Setiap implementasi, perubahan Blueprint, deployment, atau penggunaan data keluarga
 nyata memerlukan persetujuan lanjutan.
+
+Runbook implementasi dan checklist penutupan berada di
+[`STEP7_CLOUD_PILOT_RUNBOOK.md`](STEP7_CLOUD_PILOT_RUNBOOK.md).

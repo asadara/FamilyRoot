@@ -24,16 +24,16 @@ export class SpaceInvitationEntity {
   @Column({ type: 'uuid' })
   createdBy!: string;
 
-  @Column({ type: 'datetime' })
+  @Column({ type: Date })
   expiresAt!: Date;
 
   @Column({ type: 'uuid', nullable: true })
   acceptedBy?: string | null;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: Date, nullable: true })
   acceptedAt?: Date | null;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: Date, nullable: true })
   revokedAt?: Date | null;
 
   @CreateDateColumn()
