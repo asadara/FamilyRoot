@@ -41,6 +41,7 @@ class GraphRelationshipPathTest {
                 GraphScreen(
                     centerPersonId = "parent",
                     selectedPersonId = "child",
+                    inspectedPersonId = "child",
                     persons = listOf(person("parent", "Hadi"), person("child", "Budi")),
                     relations = RelationsResponse(
                         personId = "parent",
@@ -95,6 +96,7 @@ class GraphRelationshipPathTest {
                 GraphScreen(
                     centerPersonId = "center",
                     selectedPersonId = "grandparent",
+                    inspectedPersonId = "grandparent",
                     persons = listOf(
                         person("center", "Budi"),
                         person("parent", "Hadi"),

@@ -2,11 +2,17 @@ package com.example.familytreeplatform
 
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertContentDescriptionEquals
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.hasContentDescription
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.click
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import com.example.familytreeplatform.models.ExportRelationship
 import com.example.familytreeplatform.models.PersonListItem
 import com.example.familytreeplatform.models.RelationItem
@@ -35,10 +41,11 @@ class GraphProgressiveExpansionTest {
             parentChild("younger-child-b", "younger-wife", "younger-child")
         )
         composeRule.setContent {
+            var selectedPersonId by remember { mutableStateOf<String?>(null) }
             FamilyTreePlatformTheme(dynamicColor = false) {
                 GraphScreen(
                     centerPersonId = "older",
-                    selectedPersonId = null,
+                    selectedPersonId = selectedPersonId,
                     persons = listOf(
                         person("father", "Ayah"),
                         person("mother", "Ibu"),
@@ -62,8 +69,8 @@ class GraphProgressiveExpansionTest {
                             .map { it.toRelationItem() }
                     ),
                     allRelationships = relationships,
-                    onSelectPerson = {},
-                    onClearSelection = {},
+                    onSelectPerson = { selectedPersonId = it },
+                    onClearSelection = { selectedPersonId = null },
                     onOpenPerson = {},
                     onBack = {}
                 )
@@ -75,6 +82,10 @@ class GraphProgressiveExpansionTest {
         composeRule.onAllNodes(hasContentDescription("Dewi", substring = true)).assertCountEquals(0)
         composeRule.onAllNodes(hasContentDescription("Nara", substring = true)).assertCountEquals(0)
 
+        composeRule.onNode(hasContentDescription("Adik", substring = true))
+            .performClick()
+        composeRule.waitForIdle()
+        composeRule.onNode(hasContentDescription("Adik", substring = true)).assertIsSelected()
         composeRule.onNodeWithTag("lineage-children-younger")
             .performTouchInput { click(center) }
         composeRule.waitForIdle()
@@ -120,10 +131,11 @@ class GraphProgressiveExpansionTest {
             parentChild("current-child-b", "current-partner", "current-child")
         )
         composeRule.setContent {
+            var selectedPersonId by remember { mutableStateOf<String?>(null) }
             FamilyTreePlatformTheme(dynamicColor = false) {
                 GraphScreen(
                     centerPersonId = "center",
-                    selectedPersonId = null,
+                    selectedPersonId = selectedPersonId,
                     persons = listOf(
                         person("center", "Bima"),
                         person("old-partner", "Ayu"),
@@ -142,8 +154,8 @@ class GraphProgressiveExpansionTest {
                             .map { it.toRelationItem() }
                     ),
                     allRelationships = relationships,
-                    onSelectPerson = {},
-                    onClearSelection = {},
+                    onSelectPerson = { selectedPersonId = it },
+                    onClearSelection = { selectedPersonId = null },
                     onOpenPerson = {},
                     onBack = {}
                 )
@@ -156,20 +168,33 @@ class GraphProgressiveExpansionTest {
         composeRule.onAllNodes(hasContentDescription("Ayu", substring = true)).assertCountEquals(0)
         composeRule.onAllNodes(hasContentDescription("Citra", substring = true)).assertCountEquals(0)
 
+        composeRule.onNode(hasContentDescription("Bima", substring = true))
+            .performClick()
+        composeRule.waitForIdle()
+        composeRule.onNode(hasContentDescription("Bima", substring = true)).assertIsSelected()
         composeRule.onNodeWithTag("lineage-partnerships-center").performTouchInput { click(center) }
         composeRule.waitForIdle()
         composeRule.onAllNodes(hasContentDescription("Ayu", substring = true)).assertCountEquals(1)
         composeRule.onAllNodes(hasContentDescription("Citra", substring = true)).assertCountEquals(0)
+        composeRule.onNode(hasContentDescription("Ayu", substring = true))
+            .performClick()
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag("lineage-children-old-partner").performTouchInput { click(center) }
         composeRule.waitForIdle()
         composeRule.onAllNodes(hasContentDescription("Citra", substring = true)).assertCountEquals(1)
         composeRule.onAllNodes(hasContentDescription("Bima", substring = true)).assertCountEquals(1)
 
+        composeRule.onNode(hasContentDescription("Bima", substring = true))
+            .performClick()
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag("lineage-partnerships-center").performTouchInput { click(center) }
         composeRule.waitForIdle()
         composeRule.onAllNodes(hasContentDescription("Ayu", substring = true)).assertCountEquals(0)
         composeRule.onAllNodes(hasContentDescription("Citra", substring = true)).assertCountEquals(0)
 
+        composeRule.onNode(hasContentDescription("Bima", substring = true))
+            .performClick()
+        composeRule.waitForIdle()
         composeRule.onNodeWithTag("lineage-partnerships-center").performTouchInput { click(center) }
         composeRule.waitForIdle()
         composeRule.onAllNodes(hasContentDescription("Ayu", substring = true)).assertCountEquals(1)

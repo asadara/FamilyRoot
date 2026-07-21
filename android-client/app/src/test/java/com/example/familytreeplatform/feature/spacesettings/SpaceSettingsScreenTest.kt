@@ -20,4 +20,10 @@ class SpaceSettingsScreenTest {
         assertTrue(message.contains("Periksa koneksi"))
         assertFalse(message.contains("127.0.0.1"))
     }
+
+    @Test
+    fun permissionFailuresAreActionable() {
+        assertTrue(settingsErrorMessage("HTTP 403 FORBIDDEN: Role VIEWER is not allowed").contains("tidak memiliki izin"))
+        assertTrue(settingsErrorMessage("HTTP 500 INTERNAL_ERROR: database unavailable").contains("Server sedang"))
+    }
 }

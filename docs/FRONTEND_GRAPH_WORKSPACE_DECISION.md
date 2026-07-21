@@ -138,16 +138,23 @@ ruang antargenerasi yang sudah tersedia.
 
 ## 5. Selection dan System State
 
-Ketika card diketuk:
+Ketika card diketuk satu kali:
 
 - card mendapat border aksen;
 - ukuran dan posisi card tidak berubah;
-- inspector terbuka;
+- inspector belum terbuka;
 - graph tidak bergerak atau disusun ulang;
-- tombol tambah hubungan muncul pada node shell terpilih.
+- kontrol arah dan tambah kontekstual hanya muncul pada node shell terpilih.
 
-Mengetuk card lain memindahkan selection dan memperbarui inspector. Mengetuk area
-kosong menutup inspector dan melepaskan selection tanpa mengubah workspace.
+Ketukan kedua pada card yang sudah dipilih atau double-tap membuka inspector tanpa
+menyusun ulang graph. Kedua jalur dipertahankan agar aksi tidak bergantung pada
+kecepatan gesture. Pencarian global boleh langsung memilih card sekaligus membuka
+inspector karena intent pengguna sudah eksplisit. Mengetuk area kosong menutup
+inspector, melepaskan selection, dan mengembalikan workspace ke state awal.
+
+Inspector tetap menyediakan `Lihat profil lengkap`. Penambahan person dan hubungan
+melalui Inspector/Profil serta menu Keluarga tidak boleh dihapus; jalur tersebut
+menjadi fallback saat graph padat, card terlalu banyak, atau kontrol node bertumpuk.
 
 Pending sync dan conflict dapat memakai ikon kecil pada node shell. Detail status
 dan penyelesaiannya berada di inspector. Critical action tidak boleh bergantung pada
@@ -259,12 +266,19 @@ Keduanya tidak boleh saling mengasumsikan.
 - Panah atas person membuka orang tua person tersebut.
 - Panah bawah partnership membuka anak dari partnership tersebut.
 - Person tanpa pasangan yang mempunyai anak dapat memiliki kontrol anak sendiri.
-- Side control dapat membuka partnership historis tambahan secara kronologis.
+- Side control kiri/kanan membuka partnership historis tambahan secara kronologis.
 - Panah hanya membuka data yang sudah ada.
-- Tombol tambah hubungan digunakan untuk membuat data atau relationship baru.
+- Jika data pada arah yang relevan belum ada, panah berubah menjadi `+`: atas untuk
+  orang tua, bawah untuk anak, dan sisi untuk pasangan. Satu `+` pasangan cukup saat
+  belum ada partnership; sisi kedua tidak menampilkan aksi duplikat.
+- `+` membuka form ringkas untuk membuat person sekaligus relationship. Form juga
+  menyediakan jalur menuju Profil lengkap untuk data kompleks atau menghubungkan
+  person yang sudah ada.
 - Satu tindakan pertama membuka satu generasi langsung.
 - Panah hanya muncul bila ada relasi tersembunyi pada arah tersebut.
 - Kontrol dapat menampilkan jumlah relasi langsung yang tersembunyi.
+- Kontrol hanya muncul pada card terpilih. Saudara tetap diturunkan dari orang tua
+  bersama dan tidak pernah dibuat sebagai relationship `SIBLING` langsung.
 
 Collapse menyembunyikan seluruh cabang turunannya tetapi tidak mengubah data. Struktur
 internal cabang diingat selama sesi workspace dan dipulihkan ketika dibuka kembali.
@@ -1288,3 +1302,26 @@ process crash walaupun tidak ada exception aplikasi.
 
 Pekerjaan berikutnya adalah Tahap 7 sesuai bagian 31.3. Tahap 7 belum dimulai oleh
 penutupan ini.
+
+### 31.6 Penguncian interaksi card pasca-pilot
+
+Pada 20 Juli 2026 interaksi node shell dikunci sebagai revisi terhadap perilaku
+selection Tahap 6, tanpa membuka kembali status penutupan tahap tersebut:
+
+- tap pertama memilih card dan menampilkan kontrol kontekstual pada shell transparan;
+- tap kedua pada card terpilih atau double-tap membuka inspector;
+- tap area kosong menutup inspector dan menghapus selection;
+- double-tap tidak lagi dipakai untuk reset viewport; reset tetap tersedia melalui
+  toolbar graph;
+- arrow hanya menavigasi data yang tercatat, sedangkan `+` menambah person sekaligus
+  hubungan pada arah yang belum mempunyai data;
+- anak bersama pasangan memakai junction cincin; satu parent tanpa pasangan memakai
+  anchor bawah card dan tidak menghasilkan pasangan dummy;
+- jalur tambah atau hubungkan person melalui Inspector/Profil dan menu Keluarga tetap
+  menjadi fallback resmi ketika kepadatan graph membuat kontrol card kurang nyaman;
+- pencarian global tetap boleh membuka inspector langsung;
+- gesture pan, pinch zoom, aksesibilitas, Family Space boundary, dan aturan tidak
+  menginferensikan hubungan tetap berlaku.
+
+Perubahan ini adalah penyempurnaan frontend Android. Ia tidak mengubah kontrak API,
+database, deployment Cloud Run, atau keputusan keamanan Tahap 7.

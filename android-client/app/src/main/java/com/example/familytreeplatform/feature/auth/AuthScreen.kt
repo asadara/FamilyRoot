@@ -248,10 +248,18 @@ private fun DemoButton(label: String, email: String, loading: Boolean, onDemo: (
 internal fun authErrorMessage(message: String?): String {
     val value = message.orEmpty()
     return when {
-        value.contains("401") || value.contains("credential", ignoreCase = true) || value.contains("password", ignoreCase = true) ->
+        value.contains("401") || value.contains("UNAUTHENTICATED", ignoreCase = true) ||
+            (!value.contains("400") && (value.contains("credential", ignoreCase = true) ||
+                value.contains("password", ignoreCase = true))) ->
             "Email atau kata sandi tidak sesuai."
-        value.contains("409") || value.contains("already", ignoreCase = true) ->
+        value.contains("409") || value.contains("CONFLICT", ignoreCase = true) ||
+            value.contains("already", ignoreCase = true) ->
             "Email tersebut sudah digunakan. Silakan masuk."
+        value.contains("400") || value.contains("VALIDATION_ERROR", ignoreCase = true) ->
+            "Periksa nama, email, dan kata sandi lalu coba kembali."
+        value.contains("500") || value.contains("INTERNAL_ERROR", ignoreCase = true) ||
+            value.contains("502") || value.contains("503") || value.contains("504") ->
+            "Server sedang bermasalah. Coba lagi beberapa saat."
         value.contains("connect", ignoreCase = true) || value.contains("failed", ignoreCase = true) ||
             value.contains("127.0.0.1") || value.contains("localhost") ->
             "Server belum dapat dijangkau. Periksa koneksi lalu coba kembali."

@@ -32,10 +32,10 @@ import com.example.familytreeplatform.models.ReviewProposalRequest
 import com.example.familytreeplatform.models.SourceItem
 import com.example.familytreeplatform.models.SourceRequest
 import com.example.familytreeplatform.network.ApiService
+import com.example.familytreeplatform.network.ApiException
 import com.google.gson.Gson
 import com.google.gson.GsonBuilder
 import com.google.gson.reflect.TypeToken
-import com.google.gson.JsonSyntaxException
 import okhttp3.Interceptor
 import okhttp3.Authenticator
 import okhttp3.Request
@@ -224,19 +224,26 @@ class PersonRepository(
     private fun parseError(response: Response<*>): String {
         val raw = response.errorBody()?.string()
         if (raw.isNullOrBlank()) {
-            return "${response.code()} ${response.message()}"
+            return ApiException(
+                statusCode = response.code(),
+                errorCode = null,
+                serverMessage = response.message().ifBlank { "Request failed" }
+            ).message.orEmpty()
         }
 
         return try {
             val json = Gson().fromJson(raw, Map::class.java)
             val message = json["message"]
-            when (message) {
+            val serverMessage = when (message) {
                 is String -> message
                 is List<*> -> message.filterIsInstance<String>().joinToString(", ")
                 else -> raw
             }
-        } catch (_: JsonSyntaxException) {
-            raw
+            val code = json["code"] as? String
+            val status = (json["statusCode"] as? Number)?.toInt() ?: response.code()
+            ApiException(status, code, serverMessage).message.orEmpty()
+        } catch (_: Exception) {
+            ApiException(response.code(), null, raw).message.orEmpty()
         }
     }
 
@@ -244,7 +251,10 @@ class PersonRepository(
         return try {
             val response = apiService.createPerson(request)
             if (response.isSuccessful) {
-                response.body()?.let { Result.success(it) } ?: Result.failure(Exception("Empty response"))
+                response.body()?.let { person ->
+                    personDao?.upsertAll(listOf(person.toEntity()))
+                    Result.success(person)
+                } ?: Result.failure(Exception("Empty response"))
             } else {
                 Result.failure(Exception(parseError(response)))
             }
@@ -277,6 +287,9 @@ class PersonRepository(
 
     fun observePersons(spaceId: String): Flow<List<PersonListItem>> =
         personDao?.observeBySpace(spaceId)?.map { list -> list.map { it.toModel() } } ?: emptyFlow()
+
+    fun observeRelationships(spaceId: String): Flow<List<RelationItem>> =
+        relationshipDao?.observeBySpace(spaceId)?.map { list -> list.map { it.toModel() } } ?: emptyFlow()
 
     fun observePerson(personId: String): Flow<PersonListItem?> =
         personDao?.observeById(personId)?.map { it?.toModel() } ?: emptyFlow()

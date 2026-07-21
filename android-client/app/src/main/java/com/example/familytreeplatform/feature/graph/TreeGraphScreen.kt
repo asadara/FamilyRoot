@@ -14,6 +14,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -39,6 +41,7 @@ fun TreeGraphScreen(
     val centerPersonId = state.centerPersonId
     val context = LocalContext.current
     var resetViewRequest by rememberSaveable { mutableIntStateOf(0) }
+    var quickAddRequest by remember { mutableStateOf<GraphQuickAddRequest?>(null) }
     val pdfWriter = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri ->
@@ -66,6 +69,13 @@ fun TreeGraphScreen(
         onShellActionConsumed()
     }
 
+    LaunchedEffect(state.quickAddCompletedPersonId) {
+        if (state.quickAddCompletedPersonId != null) {
+            quickAddRequest = null
+            viewModel.clearQuickAddFeedback()
+        }
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
         if (centerPersonId == null) {
             if (state.loading) {
@@ -83,6 +93,7 @@ fun TreeGraphScreen(
             GraphScreen(
                 centerPersonId = centerPersonId,
                 selectedPersonId = state.selectedPersonId,
+                inspectedPersonId = state.inspectedPersonId,
                 persons = state.persons,
                 relations = state.relations,
                 allRelationships = state.relationships,
@@ -92,11 +103,41 @@ fun TreeGraphScreen(
                 showRelationshipPathInGraph = state.showRelationshipPathInGraph,
                 resetViewRequest = resetViewRequest,
                 onSelectPerson = viewModel::selectPerson,
+                onInspectPerson = viewModel::inspectPerson,
+                onQuickAddRequest = { request ->
+                    viewModel.beginQuickAdd()
+                    quickAddRequest = request
+                },
                 onClearSelection = viewModel::clearSelection,
                 onOpenPerson = onOpenPerson,
                 onShowRelationshipPath = viewModel::showRelationshipPathInGraph,
                 onHideExplorationBreadcrumb = viewModel::hideExplorationBreadcrumb,
                 onBack = onBack,
+            )
+        }
+        quickAddRequest?.let { request ->
+            GraphQuickAddDialog(
+                request = request,
+                saving = state.quickAddSaving,
+                error = state.quickAddError,
+                onDismiss = {
+                    quickAddRequest = null
+                    viewModel.clearQuickAddFeedback()
+                },
+                onOpenProfile = {
+                    quickAddRequest = null
+                    viewModel.clearQuickAddFeedback()
+                    onOpenPerson(request.anchorPersonId)
+                },
+                onSave = { firstName, nickName, gender, startDate ->
+                    viewModel.quickAddRelative(
+                        request,
+                        firstName,
+                        nickName,
+                        gender,
+                        startDate
+                    )
+                }
             )
         }
         state.error?.let { error ->

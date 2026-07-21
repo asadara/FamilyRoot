@@ -336,8 +336,25 @@ internal fun familySpaceInitials(name: String): String = name
 internal fun spaceSelectionErrorMessage(message: String?): String {
     val value = message.orEmpty()
     return when {
+        value.contains("not found", ignoreCase = true) || value.contains("404") ->
+            "Kode undangan tidak ditemukan. Periksa kembali penulisannya."
+        value.contains("expired", ignoreCase = true) ->
+            "Kode undangan sudah kedaluwarsa. Minta kode baru dari pengelola."
+        value.contains("revoked", ignoreCase = true) ->
+            "Kode undangan sudah dicabut oleh pengelola."
+        value.contains("already been accepted", ignoreCase = true) ->
+            "Kode undangan sudah pernah digunakan. Minta kode baru."
+        value.contains("already a member", ignoreCase = true) ->
+            "Anda sudah menjadi anggota silsilah ini."
         value.contains("invite", ignoreCase = true) || value.contains("token", ignoreCase = true) ->
             "Kode undangan tidak valid atau sudah tidak berlaku."
+        value.contains("401") || value.contains("UNAUTHENTICATED", ignoreCase = true) ->
+            "Sesi masuk sudah berakhir. Silakan masuk kembali."
+        value.contains("403") || value.contains("FORBIDDEN", ignoreCase = true) ->
+            "Akun Anda tidak memiliki izin untuk tindakan ini."
+        value.contains("500") || value.contains("INTERNAL_ERROR", ignoreCase = true) ||
+            value.contains("502") || value.contains("503") || value.contains("504") ->
+            "Server sedang bermasalah. Coba lagi beberapa saat."
         value.contains("connect", ignoreCase = true) || value.contains("failed", ignoreCase = true) ||
             value.contains("127.0.0.1") || value.contains("localhost") ->
             "Silsilah belum dapat dimuat. Periksa koneksi lalu coba kembali."

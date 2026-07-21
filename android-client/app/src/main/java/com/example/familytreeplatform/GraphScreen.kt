@@ -55,6 +55,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.testTag
@@ -68,6 +69,8 @@ import com.example.familytreeplatform.models.ExportRelationship
 import com.example.familytreeplatform.models.PersonListItem
 import com.example.familytreeplatform.models.RelationsResponse
 import com.example.familytreeplatform.models.RelationshipPathResponse
+import com.example.familytreeplatform.feature.graph.GraphQuickAddRequest
+import com.example.familytreeplatform.feature.graph.QuickRelationKind
 import java.util.Calendar
 
 private data class PointDp(val x: Dp, val y: Dp)
@@ -213,7 +216,13 @@ private data class BranchControl(
     val personId: String,
     val direction: BranchDirection,
     val point: PointDp,
-    val expanded: Boolean
+    val expanded: Boolean,
+    val horizontalSide: Int = 0
+)
+
+private data class QuickAddControl(
+    val request: GraphQuickAddRequest,
+    val point: PointDp
 )
 
 private data class ChildRender(
@@ -232,6 +241,7 @@ private data class VisibleTree(
 fun GraphScreen(
     centerPersonId: String,
     selectedPersonId: String?,
+    inspectedPersonId: String? = null,
     persons: List<PersonListItem>,
     relations: RelationsResponse?,
     allRelationships: List<ExportRelationship>,
@@ -241,6 +251,8 @@ fun GraphScreen(
     showRelationshipPathInGraph: Boolean = false,
     resetViewRequest: Int = 0,
     onSelectPerson: (String) -> Unit,
+    onInspectPerson: (String) -> Unit = {},
+    onQuickAddRequest: (GraphQuickAddRequest) -> Unit = {},
     onClearSelection: () -> Unit,
     onOpenPerson: (String) -> Unit,
     onShowRelationshipPath: () -> Unit = {},
@@ -280,7 +292,6 @@ fun GraphScreen(
 
     var childrenCollapsed by rememberSaveable(centerPersonId) { mutableStateOf(false) }
     var parentsCollapsed by rememberSaveable(centerPersonId) { mutableStateOf(false) }
-    var siblingsCollapsed by rememberSaveable(centerPersonId) { mutableStateOf(false) }
     var expandedParentPersonIds by rememberSaveable(
         centerPersonId,
         stateSaver = PersonIdSetSaver
@@ -304,7 +315,6 @@ fun GraphScreen(
         allRelationships,
         childrenCollapsed,
         parentsCollapsed,
-        siblingsCollapsed,
         expandedParentPersonIds,
         expandedChildPersonIds,
         expandedPartnershipPersonIds,
@@ -320,7 +330,7 @@ fun GraphScreen(
                 persons = persons,
                 childrenCollapsed = childrenCollapsed,
                 parentsCollapsed = parentsCollapsed,
-                siblingsCollapsed = siblingsCollapsed,
+                siblingsCollapsed = false,
                 tileW = tileW,
                 tileH = tileH,
                 spouseGapX = spouseGapX,
@@ -368,18 +378,21 @@ fun GraphScreen(
     val centerMemberIds = remember(centerPersonId, activeSpouseId) {
         setOfNotNull(centerPersonId, activeSpouseId)
     }
+    val centerControlsVisible = selectedPersonId in centerMemberIds
     val branchControls = remember(
         tiles,
         centerMemberIds,
         allRelationships,
         expandedParentPersonIds,
         expandedChildPersonIds,
-        expandedPartnershipPersonIds
+        expandedPartnershipPersonIds,
+        selectedPersonId
     ) {
         buildList {
             val visiblePersonIds = tiles.mapTo(mutableSetOf()) { it.id }
             tiles
                 .distinctBy { it.id }
+                .filter { it.id == selectedPersonId }
                 .forEach { tile ->
                     if (tile.id !in centerMemberIds) {
                         val parentPersonIds = relationshipIndex.recordedParentPersonIds(tile.id)
@@ -400,8 +413,11 @@ fun GraphScreen(
                     val childFamilyPersonIds =
                         relationshipIndex.recordedChildFamilyPersonIds(tile.id)
                     if (
-                        tile.id in expandedChildPersonIds ||
-                        childFamilyPersonIds.any { it !in visiblePersonIds }
+                        tile.id !in centerMemberIds &&
+                        (
+                            tile.id in expandedChildPersonIds ||
+                                childFamilyPersonIds.any { it !in visiblePersonIds }
+                            )
                     ) {
                         add(
                             BranchControl(
@@ -422,12 +438,30 @@ fun GraphScreen(
                         tile.id in expandedPartnershipPersonIds ||
                         partnershipPersonIds.any { it !in visiblePersonIds }
                     ) {
+                        val partnershipRelationships = relationshipIndex.partnerships(tile.id)
+                        val hiddenRelationships = partnershipRelationships.filter {
+                            it.otherPersonId(tile.id) !in visiblePersonIds
+                        }
+                        val sideSource = hiddenRelationships.ifEmpty { partnershipRelationships }
+                        val horizontalSide = if (sideSource.any {
+                                partnershipHorizontalSlot(
+                                    personId = tile.id,
+                                    relationshipId = it.relationshipId,
+                                    relationships = allRelationships
+                                ) < 0
+                            }
+                        ) -1 else 1
                         add(
                             BranchControl(
                                 personId = tile.id,
                                 direction = BranchDirection.PARTNERSHIPS,
-                                point = PointDp(tile.rect.right + 22.dp, tile.rect.top + 56.dp),
-                                expanded = tile.id in expandedPartnershipPersonIds
+                                point = PointDp(
+                                    if (horizontalSide < 0) tile.rect.left - 22.dp
+                                    else tile.rect.right + 22.dp,
+                                    tile.rect.top + 56.dp
+                                ),
+                                expanded = tile.id in expandedPartnershipPersonIds,
+                                horizontalSide = horizontalSide
                             )
                         )
                     }
@@ -460,6 +494,62 @@ fun GraphScreen(
             }
         }
     }
+    val quickAddControls = remember(
+        selectedPersonId,
+        tiles,
+        layout.nodes,
+        allRelationships,
+        persons
+    ) {
+        val selectedId = selectedPersonId ?: return@remember emptyList()
+        val tile = tiles.firstOrNull { it.id == selectedId } ?: return@remember emptyList()
+        val node = layout.nodes.firstOrNull { graphNode ->
+            graphNode.tiles().any { it.id == selectedId }
+        } ?: return@remember emptyList()
+        val anchorName = persons.firstOrNull { it.personId == selectedId }?.fullName
+            ?: tile.label
+        val parentIds = relationshipIndex.recordedParentPersonIds(selectedId)
+        val childFamilyIds = relationshipIndex.recordedChildFamilyPersonIds(selectedId)
+        val partnerIds = relationshipIndex.recordedPartnershipPersonIds(selectedId)
+        buildList {
+            if (parentIds.isEmpty()) {
+                add(
+                    QuickAddControl(
+                        GraphQuickAddRequest(selectedId, anchorName, QuickRelationKind.PARENT),
+                        PointDp(tile.rect.topCenter().x, tile.rect.top - 22.dp)
+                    )
+                )
+            }
+            if (childFamilyIds.isEmpty()) {
+                val coParentId = (node as? CoupleNode)?.let { couple ->
+                    if (couple.leftId == selectedId) couple.rightId else couple.leftId
+                }
+                val coParentName = coParentId?.let { id ->
+                    persons.firstOrNull { it.personId == id }?.fullName
+                }
+                add(
+                    QuickAddControl(
+                        GraphQuickAddRequest(
+                            anchorPersonId = selectedId,
+                            anchorName = anchorName,
+                            kind = QuickRelationKind.CHILD,
+                            coParentId = coParentId,
+                            coParentName = coParentName
+                        ),
+                        PointDp(node.anchorBottom().x, node.anchorBottom().y + 22.dp)
+                    )
+                )
+            }
+            if (partnerIds.isEmpty()) {
+                add(
+                    QuickAddControl(
+                        GraphQuickAddRequest(selectedId, anchorName, QuickRelationKind.PARTNER),
+                        PointDp(tile.rect.right + 22.dp, tile.rect.center().y)
+                    )
+                )
+            }
+        }
+    }
     val hasParents = remember(centerMemberIds, relations, allRelationships) {
         if (allRelationships.isNotEmpty()) {
             allRelationships.any { it.type == "PARENT_CHILD" && it.toPersonId in centerMemberIds }
@@ -474,8 +564,6 @@ fun GraphScreen(
             allRelationships = allRelationships
         ).isNotEmpty()
     }
-    val hasLeftSiblings = layout.hasLeftSiblings
-    val hasRightSiblings = layout.hasRightSiblings
     LaunchedEffect(showRelationshipPathInGraph, pathPersonIds) {
         if (!showRelationshipPathInGraph) return@LaunchedEffect
         if (allRelationships.any {
@@ -490,9 +578,6 @@ fun GraphScreen(
                     it.toPersonId in pathPersonIds
             }
         ) childrenCollapsed = false
-        if (findSiblingIds(centerPersonId, allRelationships, persons).any { it in pathPersonIds }) {
-            siblingsCollapsed = false
-        }
     }
     val transformState = rememberSaveable(
         centerPersonId,
@@ -537,7 +622,7 @@ fun GraphScreen(
     ) {
         BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
             val useSideInspector = maxWidth >= 720.dp
-            val selectedPerson = selectedPersonId?.let(personById::get)
+            val inspectedPerson = inspectedPersonId?.let(personById::get)
 
             BoxWithConstraints(
             modifier = Modifier
@@ -549,8 +634,8 @@ fun GraphScreen(
                     tiles,
                     layout,
                     selectedPersonId,
+                    centerControlsVisible,
                     parentsCollapsed,
-                    siblingsCollapsed,
                     childrenCollapsed
                 ) {
                     detectTapGestures(
@@ -570,57 +655,25 @@ fun GraphScreen(
                                 return dx * dx + dy * dy <= controlRadiusPx * controlRadiusPx
                             }
 
-                            val parentControl = if (hasParents) {
+                            val parentControl = if (centerControlsVisible && hasParents) {
                                 PointDp(
                                     layout.center.anchorTop().x,
                                     layout.center.anchorTop().y - 24.dp
                                 )
                             } else null
-                            val childControl = if (hasChildren) {
+                            val childControl = if (centerControlsVisible && hasChildren) {
                                 PointDp(
                                     layout.center.anchorBottom().x,
                                     layout.center.anchorBottom().y + 24.dp
                                 )
                             } else null
-                            val leftSiblingControl = if (hasLeftSiblings) {
-                                PointDp(
-                                    layout.center.bounds().left - 24.dp,
-                                    layout.center.bounds().center().y
-                                )
-                            } else null
-                            val rightSiblingControl = if (hasRightSiblings) {
-                                PointDp(
-                                    layout.center.bounds().right + 24.dp,
-                                    layout.center.bounds().center().y
-                                )
-                            } else null
-                            val selectedTile = tiles.firstOrNull { it.id == selectedPersonId }
-                            val selectedNode = layout.nodes.firstOrNull { node ->
-                                node.tiles().any { it.id == selectedPersonId }
-                            }
-                            val addControl = selectedTile?.let { tile ->
-                                val x = when {
-                                    selectedNode is CoupleNode && selectedNode.leftId == tile.id -> tile.rect.left - 12.dp
-                                    else -> tile.rect.right + 12.dp
-                                }
-                                PointDp(x, tile.rect.top + 20.dp)
-                            }
-
                             when {
-                                hits(addControl) && selectedPersonId != null -> {
-                                    onOpenPerson(selectedPersonId)
-                                    return@detectTapGestures
-                                }
                                 hits(parentControl) -> {
                                     parentsCollapsed = !parentsCollapsed
                                     return@detectTapGestures
                                 }
                                 hits(childControl) -> {
                                     childrenCollapsed = !childrenCollapsed
-                                    return@detectTapGestures
-                                }
-                                hits(leftSiblingControl) || hits(rightSiblingControl) -> {
-                                    siblingsCollapsed = !siblingsCollapsed
                                     return@detectTapGestures
                                 }
                             }
@@ -633,14 +686,28 @@ fun GraphScreen(
                                 world.x in left..right && world.y in top..bottom
                             }
                             if (hit != null) {
-                                onSelectPerson(hit.id)
+                                if (selectedPersonId == hit.id) {
+                                    onInspectPerson(hit.id)
+                                } else {
+                                    onSelectPerson(hit.id)
+                                }
                             } else {
                                 onClearSelection()
                             }
                         },
-                        onDoubleTap = {
-                            viewportInitialized = false
-                            resetViewVersion++
+                        onDoubleTap = { tap ->
+                            val transform = transformState.value
+                            val world = (
+                                tap - Offset(transform.offsetX, transform.offsetY)
+                                ) / transform.scale
+                            val hit = tiles.asReversed().firstOrNull { tile ->
+                                val left = with(density) { tile.rect.left.toPx() }
+                                val right = with(density) { tile.rect.right.toPx() }
+                                val top = with(density) { tile.rect.top.toPx() }
+                                val bottom = with(density) { tile.rect.bottom.toPx() }
+                                world.x in left..right && world.y in top..bottom
+                            }
+                            if (hit != null) onInspectPerson(hit.id)
                         }
                     )
                 }
@@ -666,6 +733,21 @@ fun GraphScreen(
             val viewportHeightPx = with(density) { maxHeight.toPx() }
             val graphWidthPx = with(density) { layout.width.toPx() }
             val graphHeightPx = with(density) { layout.height.toPx() }
+
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .testTag("graph-background")
+                    .pointerInput(onClearSelection) {
+                        detectTapGestures(onTap = { onClearSelection() })
+                    }
+                    .semantics {
+                        onClick(label = "Tutup navigasi card") {
+                            onClearSelection()
+                            true
+                        }
+                    }
+            )
 
             LaunchedEffect(centerPersonId, viewportWidthPx, viewportHeightPx, resetViewVersion) {
                 if (viewportInitialized) return@LaunchedEffect
@@ -702,7 +784,7 @@ fun GraphScreen(
                 val minPathY = pathRects.minOf { with(density) { it.top.toPx() } }
                 val maxPathY = pathRects.maxOf { with(density) { it.bottom.toPx() } }
                 val paddingPx = with(density) { 56.dp.toPx() }
-                val inspectorWidthPx = if (useSideInspector && selectedPerson != null) {
+                val inspectorWidthPx = if (useSideInspector && inspectedPerson != null) {
                     with(density) { 360.dp.toPx() }
                 } else 0f
                 val availableWidthPx = (viewportWidthPx - inspectorWidthPx).coerceAtLeast(1f)
@@ -851,6 +933,13 @@ fun GraphScreen(
                             person = person,
                             selected = tile.id == selectedPersonId,
                             highlighted = showRelationshipPathInGraph && tile.id in pathPersonIds,
+                            onActivate = {
+                                if (selectedPersonId == tile.id) {
+                                    onInspectPerson(tile.id)
+                                } else {
+                                    onSelectPerson(tile.id)
+                                }
+                            },
                             modifier = Modifier
                                 .size(tile.rect.w, tile.rect.h)
                                 .offset(tile.rect.x, tile.rect.y)
@@ -950,12 +1039,16 @@ fun GraphScreen(
                             )
                             BranchDirection.PARTNERSHIPS -> drawHorizontalControl(
                                 point = control.point,
-                                pointsLeft = control.expanded
+                                pointsLeft = if (control.horizontalSide < 0) {
+                                    !control.expanded
+                                } else {
+                                    control.expanded
+                                }
                             )
                         }
                     }
 
-                    if (hasParents) {
+                    if (centerControlsVisible && hasParents) {
                         drawControl(
                             PointDp(
                                 layout.center.anchorTop().x,
@@ -964,7 +1057,7 @@ fun GraphScreen(
                             pointsUp = parentsCollapsed
                         )
                     }
-                    if (hasChildren) {
+                    if (centerControlsVisible && hasChildren) {
                         drawControl(
                             PointDp(
                                 layout.center.anchorBottom().x,
@@ -973,38 +1066,11 @@ fun GraphScreen(
                             pointsUp = !childrenCollapsed
                         )
                     }
-                    if (hasLeftSiblings) {
-                        drawHorizontalControl(
-                            PointDp(
-                                layout.center.bounds().left - 24.dp,
-                                layout.center.bounds().center().y
-                            ),
-                            pointsLeft = !siblingsCollapsed
-                        )
-                    }
-                    if (hasRightSiblings) {
-                        drawHorizontalControl(
-                            PointDp(
-                                layout.center.bounds().right + 24.dp,
-                                layout.center.bounds().center().y
-                            ),
-                            pointsLeft = siblingsCollapsed
-                        )
-                    }
-
-                    val selectedTile = tiles.firstOrNull { it.id == selectedPersonId }
-                    val selectedNode = layout.nodes.firstOrNull { node ->
-                        node.tiles().any { it.id == selectedPersonId }
-                    }
-                    selectedTile?.let { tile ->
-                        val x = when {
-                            selectedNode is CoupleNode && selectedNode.leftId == tile.id -> tile.rect.left - 12.dp
-                            else -> tile.rect.right + 12.dp
-                        }
-                        val center = pointOffset(PointDp(x, tile.rect.top + 20.dp))
+                    quickAddControls.forEach { control ->
+                        val center = pointOffset(control.point)
                         drawCircle(
                             color = controlAccentColor,
-                            radius = 16.dp.toPx(),
+                            radius = 14.dp.toPx(),
                             center = center
                         )
                         val arm = 5.dp.toPx()
@@ -1043,6 +1109,23 @@ fun GraphScreen(
                             }
                     )
                 }
+                quickAddControls.forEach { control ->
+                    val relation = when (control.request.kind) {
+                        QuickRelationKind.PARENT -> "orang tua"
+                        QuickRelationKind.CHILD -> "anak"
+                        QuickRelationKind.PARTNER -> "pasangan"
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .offset(control.point.x - 20.dp, control.point.y - 20.dp)
+                            .testTag(
+                                "quick-add-${control.request.kind.name.lowercase()}-${control.request.anchorPersonId}"
+                            )
+                            .clickable { onQuickAddRequest(control.request) }
+                            .semantics { contentDescription = "Tambah $relation" }
+                    )
+                }
             }
 
                 Row(
@@ -1075,7 +1158,7 @@ fun GraphScreen(
                 )
             }
 
-            selectedPerson?.let { person ->
+            inspectedPerson?.let { person ->
                 val inspectorModifier = if (useSideInspector) {
                     Modifier
                         .align(Alignment.CenterEnd)
@@ -1159,6 +1242,7 @@ private fun PersonGraphCard(
     person: PersonListItem,
     selected: Boolean,
     highlighted: Boolean,
+    onActivate: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val deceased = person.lifeStatus == "DECEASED"
@@ -1183,14 +1267,19 @@ private fun PersonGraphCard(
     val shortName = familiarName(person.fullName)
 
     Surface(
-        modifier = modifier.semantics {
-            contentDescription = buildString {
-                append(person.fullName)
-                if (deceased) append(", telah meninggal")
-                age?.let { append(", $it tahun") }
-            }
-            this.selected = selected
-        },
+        modifier = modifier
+            .clickable(
+                onClickLabel = if (selected) "Buka inspector" else "Pilih person",
+                onClick = onActivate
+            )
+            .semantics {
+                contentDescription = buildString {
+                    append(person.fullName)
+                    if (deceased) append(", telah meninggal")
+                    age?.let { append(", $it tahun") }
+                }
+                this.selected = selected
+            },
         shape = RoundedCornerShape(14.dp),
         color = cardColor,
         contentColor = contentColor,

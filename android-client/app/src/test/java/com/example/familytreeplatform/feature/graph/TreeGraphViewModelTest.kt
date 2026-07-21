@@ -39,7 +39,7 @@ class TreeGraphViewModelTest {
     }
 
     @Test
-    fun `selecting a person opens inspector state without changing graph center`() {
+    fun `first selection reveals card controls without opening inspector`() {
         val initial = TreeGraphUiState(
             centerPersonId = "self",
             selectedPersonId = "self"
@@ -49,8 +49,21 @@ class TreeGraphViewModelTest {
 
         assertEquals("self", selected.centerPersonId)
         assertEquals("relative", selected.selectedPersonId)
+        assertEquals(null, selected.inspectedPersonId)
         assertEquals(null, clearGraphSelection(selected).selectedPersonId)
         assertEquals("self", clearGraphSelection(selected).centerPersonId)
+    }
+
+    @Test
+    fun `second activation opens inspector without changing graph center`() {
+        val initial = TreeGraphUiState(centerPersonId = "self", selectedPersonId = "relative")
+
+        val inspected = inspectGraphPerson(initial, "relative")
+
+        assertEquals("self", inspected.centerPersonId)
+        assertEquals("relative", inspected.selectedPersonId)
+        assertEquals("relative", inspected.inspectedPersonId)
+        assertEquals(null, clearGraphSelection(inspected).inspectedPersonId)
     }
 
     @Test
@@ -76,6 +89,34 @@ class TreeGraphViewModelTest {
         assertEquals("self", updated.selectedPersonId)
         assertEquals(listOf("self"), updated.explorationHistory)
         assertTrue(updated.explorationBreadcrumbVisible)
+    }
+
+    @Test
+    fun `room relationship update adds a new child without resetting graph state`() {
+        val initial = TreeGraphUiState(
+            centerPersonId = "budi",
+            selectedPersonId = "budi",
+            persons = listOf(
+                person("budi", "Budi Santoso", "2026-01-01"),
+                person("daughter", "Putri", "2026-07-20")
+            ),
+            explorationHistory = listOf("budi"),
+            relationships = emptyList()
+        )
+        val parentChild = relationship(
+            "budi-daughter",
+            "PARENT_CHILD",
+            "budi",
+            "daughter"
+        )
+
+        val updated = updateGraphRelationships(initial, listOf(parentChild))
+
+        assertEquals(listOf(parentChild), updated.relationships)
+        assertEquals(listOf("daughter"), updated.relations?.children?.map { it.toPersonId })
+        assertEquals("budi", updated.centerPersonId)
+        assertEquals("budi", updated.selectedPersonId)
+        assertEquals(listOf("budi"), updated.explorationHistory)
     }
 
     @Test
@@ -117,6 +158,7 @@ class TreeGraphViewModelTest {
 
         assertEquals("parent", result.centerPersonId)
         assertEquals("child", result.selectedPersonId)
+        assertEquals("child", result.inspectedPersonId)
         assertEquals(listOf("parent", "child"), result.explorationHistory)
         assertTrue(result.explorationBreadcrumbVisible)
         assertTrue(result.relationshipPath?.found == true)

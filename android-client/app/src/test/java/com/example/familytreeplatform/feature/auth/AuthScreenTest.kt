@@ -22,5 +22,7 @@ class AuthScreenTest {
     fun technicalAuthenticationErrorsAreHidden() {
         assertTrue(authErrorMessage("Failed to connect to 127.0.0.1").contains("Server belum dapat dijangkau"))
         assertTrue(authErrorMessage("HTTP 401 invalid credentials").contains("tidak sesuai"))
+        assertTrue(authErrorMessage("HTTP 400 VALIDATION_ERROR: password is too short").contains("Periksa"))
+        assertTrue(authErrorMessage("HTTP 500 INTERNAL_ERROR: database unavailable").contains("Server sedang"))
     }
 }

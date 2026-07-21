@@ -4,7 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.familytreeplatform.models.ExportRelationship
+import com.example.familytreeplatform.models.CreateSpouseRequest
+import com.example.familytreeplatform.models.ParentChildRequest
 import com.example.familytreeplatform.models.PersonListItem
+import com.example.familytreeplatform.models.PersonRequest
 import com.example.familytreeplatform.models.RelationItem
 import com.example.familytreeplatform.models.RelationsResponse
 import com.example.familytreeplatform.models.RelationshipPathEdge
@@ -21,6 +24,7 @@ import kotlinx.coroutines.launch
 data class TreeGraphUiState(
     val centerPersonId: String? = null,
     val selectedPersonId: String? = null,
+    val inspectedPersonId: String? = null,
     val persons: List<PersonListItem> = emptyList(),
     val relations: RelationsResponse? = null,
     val relationships: List<ExportRelationship> = emptyList(),
@@ -29,6 +33,9 @@ data class TreeGraphUiState(
     val relationshipPath: RelationshipPathResponse? = null,
     val showRelationshipPathInGraph: Boolean = false,
     val loading: Boolean = false,
+    val quickAddSaving: Boolean = false,
+    val quickAddError: String? = null,
+    val quickAddCompletedPersonId: String? = null,
     val error: String? = null
 )
 
@@ -45,6 +52,12 @@ class TreeGraphViewModel(
                 _uiState.update { state -> updateGraphPersons(state, people) }
             }
         }
+        viewModelScope.launch {
+            repository.observeRelationships(spaceId).collectLatest { relationships ->
+                val graphRelationships = relationships.map(RelationItem::toExportRelationship)
+                _uiState.update { state -> updateGraphRelationships(state, graphRelationships) }
+            }
+        }
         refresh()
     }
 
@@ -54,18 +67,8 @@ class TreeGraphViewModel(
             val peopleResult = repository.listPersons(spaceId)
             val relationshipsResult = repository.listRelationships(spaceId)
             val people = peopleResult.getOrNull().orEmpty()
-            val relationships = relationshipsResult.getOrNull().orEmpty().map { relationship ->
-                ExportRelationship(
-                    relationshipId = relationship.relationshipId,
-                    type = relationship.type,
-                    fromPersonId = relationship.fromPersonId,
-                    toPersonId = relationship.toPersonId,
-                    meta = relationship.meta,
-                    startDate = relationship.startDate,
-                    endDate = relationship.endDate,
-                    createdAt = relationship.createdAt
-                )
-            }
+            val relationships = relationshipsResult.getOrNull().orEmpty()
+                .map(RelationItem::toExportRelationship)
 
             if (peopleResult.isFailure) {
                 _uiState.update {
@@ -121,6 +124,118 @@ class TreeGraphViewModel(
         _uiState.update { selectGraphPerson(it, personId) }
     }
 
+    fun inspectPerson(personId: String) {
+        _uiState.update { inspectGraphPerson(it, personId) }
+    }
+
+    fun beginQuickAdd() {
+        _uiState.update {
+            it.copy(quickAddError = null, quickAddCompletedPersonId = null)
+        }
+    }
+
+    fun clearQuickAddFeedback() {
+        _uiState.update {
+            it.copy(quickAddError = null, quickAddCompletedPersonId = null)
+        }
+    }
+
+    fun quickAddRelative(
+        request: GraphQuickAddRequest,
+        firstName: String,
+        nickName: String,
+        gender: String,
+        startDate: String?
+    ) {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    quickAddSaving = true,
+                    quickAddError = null,
+                    quickAddCompletedPersonId = null
+                )
+            }
+            val created = repository.createPerson(
+                PersonRequest(
+                    spaceId = spaceId,
+                    firstName = firstName.trim(),
+                    nickName = nickName.trim(),
+                    gender = gender
+                )
+            ).getOrElse { error ->
+                _uiState.update {
+                    it.copy(quickAddSaving = false, quickAddError = error.message)
+                }
+                return@launch
+            }
+
+            val relationResult = runCatching {
+                when (request.kind) {
+                    QuickRelationKind.PARENT -> repository.queueParentChild(
+                        ParentChildRequest(
+                            spaceId = spaceId,
+                            parentId = created.personId,
+                            childId = request.anchorPersonId,
+                            meta = "BIOLOGICAL"
+                        ),
+                        focusPersonId = request.anchorPersonId
+                    ).getOrThrow()
+                    QuickRelationKind.CHILD -> {
+                        repository.queueParentChild(
+                            ParentChildRequest(
+                                spaceId = spaceId,
+                                parentId = request.anchorPersonId,
+                                childId = created.personId,
+                                meta = "BIOLOGICAL"
+                            ),
+                            focusPersonId = request.anchorPersonId
+                        ).getOrThrow()
+                        request.coParentId?.let { coParentId ->
+                            repository.queueParentChild(
+                                ParentChildRequest(
+                                    spaceId = spaceId,
+                                    parentId = coParentId,
+                                    childId = created.personId,
+                                    meta = "BIOLOGICAL"
+                                ),
+                                focusPersonId = request.anchorPersonId
+                            ).getOrThrow()
+                        }
+                    }
+                    QuickRelationKind.PARTNER -> repository.queueSpouse(
+                        CreateSpouseRequest(
+                            spaceId = spaceId,
+                            personAId = request.anchorPersonId,
+                            personBId = created.personId,
+                            meta = "MARRIED",
+                            startDate = requireNotNull(startDate) {
+                                "Tanggal mulai hubungan diperlukan"
+                            }
+                        ),
+                        focusPersonId = request.anchorPersonId
+                    ).getOrThrow()
+                }
+            }
+
+            relationResult.onSuccess {
+                _uiState.update {
+                    it.copy(
+                        quickAddSaving = false,
+                        quickAddCompletedPersonId = created.personId,
+                        quickAddError = null
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(
+                        quickAddSaving = false,
+                        quickAddError = "Person tersimpan, tetapi hubungan belum berhasil: ${error.message}"
+                    )
+                }
+            }
+        }
+    }
+
     fun clearSelection() {
         _uiState.update(::clearGraphSelection)
     }
@@ -159,15 +274,39 @@ internal fun updateGraphPersons(
     people: List<PersonListItem>
 ): TreeGraphUiState = state.copy(persons = people)
 
+internal fun updateGraphRelationships(
+    state: TreeGraphUiState,
+    relationships: List<ExportRelationship>
+): TreeGraphUiState {
+    val center = state.centerPersonId ?: chooseInitialCenterPersonId(state.persons, relationships)
+    return state.copy(
+        centerPersonId = center,
+        relationships = relationships,
+        relations = center?.let { centerId -> relationships.toRelationsResponse(centerId) },
+        explorationHistory = state.explorationHistory.ifEmpty {
+            center?.let(::listOf).orEmpty()
+        }
+    )
+}
+
 internal fun selectGraphPerson(state: TreeGraphUiState, personId: String): TreeGraphUiState =
     state.copy(
         selectedPersonId = personId,
+        inspectedPersonId = null,
+        relationshipPath = null,
+        showRelationshipPathInGraph = false
+    )
+
+internal fun inspectGraphPerson(state: TreeGraphUiState, personId: String): TreeGraphUiState =
+    state.copy(
+        selectedPersonId = personId,
+        inspectedPersonId = personId,
         relationshipPath = null,
         showRelationshipPathInGraph = false
     )
 
 internal fun clearGraphSelection(state: TreeGraphUiState): TreeGraphUiState =
-    state.copy(selectedPersonId = null)
+    state.copy(selectedPersonId = null, inspectedPersonId = null)
 
 internal fun selectGraphSearchResult(
     state: TreeGraphUiState,
@@ -187,6 +326,7 @@ internal fun selectGraphSearchResult(
     }
     return state.copy(
         selectedPersonId = personId,
+        inspectedPersonId = personId,
         explorationHistory = history,
         explorationBreadcrumbVisible = true,
         relationshipPath = path,
@@ -280,6 +420,28 @@ private fun ExportRelationship.toRelationItem() = RelationItem(
     createdAt = createdAt,
     startDate = startDate,
     endDate = endDate
+)
+
+private fun RelationItem.toExportRelationship() = ExportRelationship(
+    relationshipId = relationshipId,
+    type = type,
+    fromPersonId = fromPersonId,
+    toPersonId = toPersonId,
+    meta = meta,
+    createdAt = createdAt,
+    startDate = startDate,
+    endDate = endDate
+)
+
+private fun List<ExportRelationship>.toRelationsResponse(personId: String) = RelationsResponse(
+    personId = personId,
+    parents = filter { it.type == "PARENT_CHILD" && it.toPersonId == personId }
+        .map(ExportRelationship::toRelationItem),
+    children = filter { it.type == "PARENT_CHILD" && it.fromPersonId == personId }
+        .map(ExportRelationship::toRelationItem),
+    spouses = filter {
+        it.type == "SPOUSE" && (it.fromPersonId == personId || it.toPersonId == personId)
+    }.map(ExportRelationship::toRelationItem)
 )
 
 /**
