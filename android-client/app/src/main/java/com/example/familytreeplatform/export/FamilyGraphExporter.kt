@@ -6,6 +6,9 @@ import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
+import com.example.familytreeplatform.GraphExportLine
+import com.example.familytreeplatform.GraphExportSnapshot
+import com.example.familytreeplatform.GraphExportTile
 import com.example.familytreeplatform.models.ExportRelationship
 import com.example.familytreeplatform.models.PersonListItem
 import java.io.ByteArrayOutputStream
@@ -16,6 +19,32 @@ private data class LayoutUnit(val people: List<PersonListItem>)
 
 /** Static export renderer that mirrors the live graph's couple-ring and parent hub language. */
 object FamilyGraphExporter {
+    internal fun renderPng(snapshot: GraphExportSnapshot): ByteArray {
+        val bitmap = Bitmap.createBitmap(1800, 1400, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(bitmap)
+        drawSnapshot(canvas, bitmap.width.toFloat(), bitmap.height.toFloat(), snapshot)
+        return ByteArrayOutputStream().use { output ->
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, output)
+            bitmap.recycle()
+            output.toByteArray()
+        }
+    }
+
+    internal fun renderPdf(snapshot: GraphExportSnapshot): ByteArray {
+        val document = PdfDocument()
+        return try {
+            val page = document.startPage(PdfDocument.PageInfo.Builder(1240, 1754, 1).create())
+            drawSnapshot(page.canvas, 1240f, 1754f, snapshot)
+            document.finishPage(page)
+            ByteArrayOutputStream().use { output ->
+                document.writeTo(output)
+                output.toByteArray()
+            }
+        } finally {
+            document.close()
+        }
+    }
+
     fun renderPng(people: List<PersonListItem>, relationships: List<ExportRelationship>): ByteArray {
         val generations = resolveGenerations(people, relationships)
         val height = max(900, 190 + (generations.values.maxOrNull() ?: 0) * 250 + 300)
@@ -42,6 +71,90 @@ object FamilyGraphExporter {
         } finally {
             document.close()
         }
+    }
+
+    private fun drawSnapshot(
+        canvas: Canvas,
+        width: Float,
+        height: Float,
+        snapshot: GraphExportSnapshot
+    ) {
+        canvas.drawColor(Color.WHITE)
+        val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(25, 45, 70)
+            textSize = 40f
+            isFakeBoldText = true
+        }
+        val subtitlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.DKGRAY
+            textSize = 20f
+        }
+        canvas.drawText("TRêdhAH", 48f, 58f, titlePaint)
+        canvas.drawText("Ekspor workspace pohon keluarga", 48f, 90f, subtitlePaint)
+        if (snapshot.tiles.isEmpty()) return
+
+        val marginX = 42f
+        val top = 120f
+        val availableWidth = width - marginX * 2f
+        val availableHeight = height - top - 42f
+        val scale = min(availableWidth / snapshot.width.coerceAtLeast(1f), availableHeight / snapshot.height.coerceAtLeast(1f))
+        val offsetX = (width - snapshot.width * scale) / 2f
+        canvas.save()
+        canvas.translate(offsetX, top)
+        canvas.scale(scale, scale)
+
+        val connectorPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(100, 108, 105)
+            style = Paint.Style.STROKE
+            strokeWidth = 1.5f / scale
+            strokeCap = Paint.Cap.ROUND
+        }
+        val spousePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(155, 116, 66)
+            style = Paint.Style.STROKE
+            strokeWidth = 1.5f / scale
+        }
+        snapshot.spouseLines.forEach { line ->
+            val centerX = (line.fromX + line.toX) / 2f
+            val centerY = (line.fromY + line.toY) / 2f
+            canvas.drawCircle(centerX - 5f, centerY, 7f, spousePaint)
+            canvas.drawCircle(centerX + 5f, centerY, 7f, spousePaint)
+        }
+        snapshot.lineageLines.forEach { line ->
+            val hubY = line.fromY + (line.toY - line.fromY) / 2f
+            canvas.drawLine(line.fromX, line.fromY, line.fromX, hubY, connectorPaint)
+            canvas.drawLine(line.fromX, hubY, line.toX, hubY, connectorPaint)
+            canvas.drawLine(line.toX, hubY, line.toX, line.toY, connectorPaint)
+        }
+
+        snapshot.tiles.forEach { tile -> drawSnapshotTile(canvas, tile, connectorPaint) }
+        canvas.restore()
+    }
+
+    private fun drawSnapshotTile(canvas: Canvas, tile: GraphExportTile, borderPaint: Paint) {
+        val rect = RectF(tile.x, tile.y, tile.x + tile.width, tile.y + tile.height)
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(250, 249, 246) }
+        canvas.drawRoundRect(rect, 14f, 14f, fillPaint)
+        canvas.drawRoundRect(rect, 14f, 14f, borderPaint)
+        val avatarPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(226, 235, 226) }
+        val avatarTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(52, 82, 62)
+            textSize = 15f
+            isFakeBoldText = true
+            textAlign = Paint.Align.CENTER
+        }
+        val centerX = rect.centerX()
+        canvas.drawCircle(centerX, rect.top + 28f, 14f, avatarPaint)
+        val initials = tile.label.trim().split(Regex("\\s+")).filter { it.isNotBlank() }.take(2)
+            .joinToString("") { it.first().uppercase() }
+        canvas.drawText(initials.ifBlank { "?" }, centerX, rect.top + 33f, avatarTextPaint)
+        val namePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(20, 35, 55)
+            textSize = 17f
+            isFakeBoldText = true
+            textAlign = Paint.Align.CENTER
+        }
+        canvas.drawText(tile.label.take(22), centerX, rect.top + 57f, namePaint)
     }
 
     internal fun resolveGenerations(

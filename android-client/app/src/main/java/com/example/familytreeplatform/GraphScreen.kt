@@ -202,6 +202,33 @@ private data class GraphLayout(
     val height: Dp
 )
 
+internal data class GraphExportTile(
+    val id: String,
+    val label: String,
+    val role: String,
+    val x: Float,
+    val y: Float,
+    val width: Float,
+    val height: Float
+)
+
+internal data class GraphExportLine(
+    val fromX: Float,
+    val fromY: Float,
+    val toX: Float,
+    val toY: Float,
+    val type: String,
+    val meta: String?
+)
+
+internal data class GraphExportSnapshot(
+    val width: Float,
+    val height: Float,
+    val tiles: List<GraphExportTile>,
+    val spouseLines: List<GraphExportLine>,
+    val lineageLines: List<GraphExportLine>
+)
+
 private data class LineageEdge(
     val relationshipIds: Set<String>,
     val from: PointDp,
@@ -1184,6 +1211,73 @@ fun GraphScreen(
             }
         }
     }
+}
+
+internal fun createGraphExportSnapshot(
+    centerPersonId: String,
+    relations: RelationsResponse,
+    persons: List<PersonListItem>,
+    allRelationships: List<ExportRelationship>
+): GraphExportSnapshot {
+    val displayName: (String) -> String = { id ->
+        persons.firstOrNull { it.personId == id }?.fullName ?: "Person"
+    }
+    val layout = buildCoupleGraphLayout(
+        centerPersonId = centerPersonId,
+        relations = relations,
+        allRelationships = allRelationships,
+        displayName = displayName,
+        persons = persons,
+        childrenCollapsed = false,
+        parentsCollapsed = false,
+        siblingsCollapsed = false,
+        tileW = 120.dp,
+        tileH = 152.dp,
+        spouseGapX = 28.dp,
+        siblingGapX = 28.dp,
+        rankGapY = 64.dp,
+        margin = 88.dp
+    )
+    val tiles = layout.nodes.flatMap { it.tiles() }.map { tile ->
+        GraphExportTile(
+            id = tile.id,
+            label = tile.label,
+            role = tile.role,
+            x = tile.rect.x.value,
+            y = tile.rect.y.value,
+            width = tile.rect.w.value,
+            height = tile.rect.h.value
+        )
+    }
+    fun GraphNode.exportLine(type: String, points: Pair<PointDp, PointDp>): GraphExportLine =
+        GraphExportLine(
+            fromX = points.first.x.value,
+            fromY = points.first.y.value,
+            toX = points.second.x.value,
+            toY = points.second.y.value,
+            type = type,
+            meta = null
+        )
+    val spouseLines = layout.nodes.mapNotNull { node ->
+        node.spouseLine()?.let { node.exportLine("SPOUSE", it) }
+    }
+    val lineageLines = layout.lineageEdges.map { edge ->
+        GraphExportLine(
+            fromX = edge.from.x.value,
+            fromY = edge.from.y.value,
+            toX = edge.to.x.value,
+            toY = edge.to.y.value,
+            type = edge.type,
+            meta = edge.meta
+        )
+    }
+    return GraphExportSnapshot(
+        width = layout.width.value,
+        height = layout.height.value,
+        tiles = tiles,
+        spouseLines = spouseLines,
+        lineageLines = lineageLines
+    )
 }
 
 @Composable

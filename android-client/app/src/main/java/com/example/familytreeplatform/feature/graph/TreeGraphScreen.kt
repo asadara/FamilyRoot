@@ -24,6 +24,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.familytreeplatform.GraphScreen
+import com.example.familytreeplatform.createGraphExportSnapshot
 import com.example.familytreeplatform.R
 import com.example.familytreeplatform.export.FamilyGraphExporter
 import com.example.familytreeplatform.navigation.GraphShellAction
@@ -46,7 +47,13 @@ fun TreeGraphScreen(
         ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri ->
         if (uri != null) runCatching {
-            val bytes = FamilyGraphExporter.renderPdf(state.persons, state.relationships)
+            val snapshot = state.centerPersonId?.let { center ->
+                state.relations?.let { relations ->
+                    createGraphExportSnapshot(center, relations, state.persons, state.relationships)
+                }
+            }
+            val bytes = snapshot?.let(FamilyGraphExporter::renderPdf)
+                ?: FamilyGraphExporter.renderPdf(state.persons, state.relationships)
             context.contentResolver.openOutputStream(uri).use { requireNotNull(it).write(bytes) }
         }
     }
@@ -54,7 +61,13 @@ fun TreeGraphScreen(
         ActivityResultContracts.CreateDocument("image/png")
     ) { uri ->
         if (uri != null) runCatching {
-            val bytes = FamilyGraphExporter.renderPng(state.persons, state.relationships)
+            val snapshot = state.centerPersonId?.let { center ->
+                state.relations?.let { relations ->
+                    createGraphExportSnapshot(center, relations, state.persons, state.relationships)
+                }
+            }
+            val bytes = snapshot?.let(FamilyGraphExporter::renderPng)
+                ?: FamilyGraphExporter.renderPng(state.persons, state.relationships)
             context.contentResolver.openOutputStream(uri).use { requireNotNull(it).write(bytes) }
         }
     }
