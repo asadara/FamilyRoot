@@ -36,3 +36,4 @@ android-client/app/*.iml
 
 # Local scratch artifacts
 tablet-test.png
+sample-data/

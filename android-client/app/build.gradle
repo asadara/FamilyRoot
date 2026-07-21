@@ -12,6 +12,10 @@ def releaseApiBaseUrl = providers.gradleProperty("familyTreeReleaseApiBaseUrl")
     .orElse(providers.environmentVariable("FAMILY_TREE_RELEASE_API_BASE_URL"))
     .orElse("https://api.familyroot.invalid/")
     .get()
+def pilotApiBaseUrl = providers.gradleProperty("familyTreePilotApiBaseUrl")
+    .orElse(providers.environmentVariable("FAMILY_TREE_PILOT_API_BASE_URL"))
+    .orElse("https://familyroot-api-pilot-441927816740.asia-southeast1.run.app/")
+    .get()
 def configuredVersionCode = providers.gradleProperty("familyTreeVersionCode").orElse("1").get().toInteger()
 def configuredVersionName = providers.gradleProperty("familyTreeVersionName").orElse("1.0").get()
 def releaseStorePath = System.getenv("FAMILY_TREE_RELEASE_STORE_FILE")
@@ -49,6 +53,11 @@ android {
     buildTypes {
         debug {
             buildConfigField "String", "API_BASE_URL", "\"${debugApiBaseUrl}\""
+        }
+        pilot {
+            initWith debug
+            matchingFallbacks = ['debug']
+            buildConfigField "String", "API_BASE_URL", "\"${pilotApiBaseUrl}\""
         }
         release {
             buildConfigField "String", "API_BASE_URL", "\"${releaseApiBaseUrl}\""

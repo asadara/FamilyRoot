@@ -20,6 +20,7 @@ import com.example.familytreeplatform.models.RelationsResponse
 import com.example.familytreeplatform.ui.theme.FamilyTreePlatformTheme
 import org.junit.Rule
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class GraphProgressiveExpansionTest {
@@ -28,6 +29,7 @@ class GraphProgressiveExpansionTest {
 
     @Test
     fun siblingFamilyOpensAndClosesWithoutChangingTheGraphCenter() {
+        var exportedIds = emptySet<String>()
         val relationships = listOf(
             parentChild("father-older", "father", "older"),
             parentChild("mother-older", "mother", "older"),
@@ -70,6 +72,9 @@ class GraphProgressiveExpansionTest {
                     ),
                     allRelationships = relationships,
                     onSelectPerson = { selectedPersonId = it },
+                    onExportSnapshotChanged = { snapshot ->
+                        exportedIds = snapshot.tiles.mapTo(mutableSetOf()) { it.id }
+                    },
                     onClearSelection = { selectedPersonId = null },
                     onOpenPerson = {},
                     onBack = {}
@@ -95,6 +100,7 @@ class GraphProgressiveExpansionTest {
         composeRule.onAllNodes(hasContentDescription("Kakak", substring = true)).assertCountEquals(1)
         composeRule.onAllNodes(hasContentDescription("Dewi", substring = true)).assertCountEquals(1)
         composeRule.onAllNodes(hasContentDescription("Nara", substring = true)).assertCountEquals(1)
+        assertTrue("Export snapshot must follow expanded workspace", "younger-child" in exportedIds)
 
         composeRule.onNodeWithTag("lineage-children-younger")
             .performTouchInput { click(center) }
@@ -105,6 +111,7 @@ class GraphProgressiveExpansionTest {
         composeRule.onAllNodes(hasContentDescription("Kakak", substring = true)).assertCountEquals(1)
         composeRule.onAllNodes(hasContentDescription("Dewi", substring = true)).assertCountEquals(0)
         composeRule.onAllNodes(hasContentDescription("Nara", substring = true)).assertCountEquals(0)
+        assertFalse("Export snapshot must follow collapsed workspace", "younger-child" in exportedIds)
     }
 
     @Test

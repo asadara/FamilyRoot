@@ -230,6 +230,8 @@ Ketentuan client:
   variable `FAMILY_TREE_API_BASE_URL`, dengan default emulator
   `http://10.0.2.2:3001/`; physical-device test memakai `127.0.0.1` bersama
   ADB reverse tanpa mengubah source;
+- build type `pilot` memakai endpoint Cloud Run pilot yang terpisah dari konfigurasi
+  debug lokal; APK tester harus berasal dari task `assemblePilot`;
 - instalasi APK, instrumentation, logcat, dan smoke test pada perangkat fisik wajib
   menargetkan serial USB. Wireless debugging/Wireless ADB tidak digunakan sebagai
   kebijakan keamanan proyek;

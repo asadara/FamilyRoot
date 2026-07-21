@@ -25,4 +25,13 @@ class SpaceSelectionScreenTest {
         assertTrue(spaceSelectionErrorMessage("HTTP 400 VALIDATION_ERROR: Invitation has expired").contains("kedaluwarsa"))
         assertTrue(spaceSelectionErrorMessage("HTTP 503 INTERNAL_ERROR: unavailable").contains("Server sedang"))
     }
+
+    @Test
+    fun invitationTokenCanBeExtractedFromSharedMessage() {
+        assertEquals(
+            "AbCdEfGhIjKlMnOpQrStUvWx",
+            normalizeInvitationToken("Undangan Keluarga\nKode: AbCdEfGhIjKlMnOpQrStUvWx")
+        )
+        assertEquals("AbCdEfGhIjKl", normalizeInvitationToken("  AbCdEfGhIjKl  "))
+    }
 }

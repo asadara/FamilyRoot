@@ -19,6 +19,13 @@ Environment variable `FAMILY_TREE_API_BASE_URL` dapat dipakai sebagai pengganti
 Gradle property. Production mempunyai endpoint HTTPS terpisah dan tidak memakai
 cleartext traffic.
 
+APK untuk tablet/tester pilot selalu dibangun dengan build type khusus agar endpoint
+Cloud Run tidak dapat tertimpa oleh default debug lokal:
+
+```powershell
+.\gradlew.bat assemblePilot
+```
+
 Release bundle dibangun dengan R8, resource shrinking, dan Baseline Profile:
 
 ```powershell

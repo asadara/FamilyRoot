@@ -13,7 +13,15 @@ class AuthScreenTest {
                 mode = AuthMode.REGISTER,
                 displayName = "Budi",
                 email = "a@b.test",
-                password = "secret"
+                password = "rahasia-aman"
+            ).canSubmit
+        )
+        assertFalse(
+            AuthUiState(
+                mode = AuthMode.REGISTER,
+                displayName = "Budi",
+                email = "email-tidak-valid",
+                password = "rahasia-aman"
             ).canSubmit
         )
     }

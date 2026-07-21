@@ -1,6 +1,9 @@
 package com.example.familytreeplatform.export
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.example.familytreeplatform.GraphExportLine
+import com.example.familytreeplatform.GraphExportSnapshot
+import com.example.familytreeplatform.GraphExportTile
 import com.example.familytreeplatform.models.ExportRelationship
 import com.example.familytreeplatform.models.PersonListItem
 import org.junit.Assert.assertEquals
@@ -30,6 +33,27 @@ class FamilyGraphExporterTest {
     fun pdfHasExpectedHeader() {
         val bytes = FamilyGraphExporter.renderPdf(listOf(person), emptyList())
         assertEquals("%PDF", bytes.take(4).map(Byte::toInt).map(Int::toChar).joinToString(""))
+        assertTrue(bytes.size > 1_000)
+    }
+
+    @Test
+    fun workspaceSnapshotIsTheSourceForPngExport() {
+        val snapshot = GraphExportSnapshot(
+            width = 420f,
+            height = 520f,
+            tiles = listOf(
+                GraphExportTile("parent", "Budi", "CENTER", 150f, 50f, 120f, 152f),
+                GraphExportTile("child", "Raka", "CHILD", 150f, 300f, 120f, 152f)
+            ),
+            spouseLines = emptyList(),
+            lineageLines = listOf(
+                GraphExportLine(210f, 202f, 210f, 300f, "PARENT_CHILD", "BIOLOGICAL")
+            )
+        )
+
+        val bytes = FamilyGraphExporter.renderPng(snapshot)
+
+        assertEquals(0x89, bytes[0].toInt() and 0xff)
         assertTrue(bytes.size > 1_000)
     }
 

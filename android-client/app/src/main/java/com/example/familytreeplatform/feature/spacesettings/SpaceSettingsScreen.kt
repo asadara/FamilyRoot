@@ -1,5 +1,7 @@
 package com.example.familytreeplatform.feature.spacesettings
 
+import android.content.Intent
+
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -230,6 +232,13 @@ fun SpaceSettingsScreen(
                     onToggle = { invitationOpen = !invitationOpen }
                 ) {
                     Text("Tentukan kewenangan penerima undangan.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    if (!state.loadingInvitePermission && state.memberRole !in setOf("OWNER", "ADMIN")) {
+                        SettingsNotice(
+                            "Hanya pemilik atau pengelola silsilah yang dapat membuat undangan.",
+                            error = true
+                        )
+                        Spacer(Modifier.height(10.dp))
+                    }
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
@@ -238,6 +247,7 @@ fun SpaceSettingsScreen(
                             FilterChip(
                                 selected = state.role == role,
                                 onClick = { viewModel.setRole(role) },
+                                enabled = state.memberRole in setOf("OWNER", "ADMIN"),
                                 label = { Text(invitationRoleLabel(role)) },
                                 modifier = Modifier.weight(1f)
                             )
@@ -252,11 +262,20 @@ fun SpaceSettingsScreen(
                         singleLine = true
                     )
                     Button(
-                        enabled = !state.creating,
+                        enabled = !state.creating && !state.loadingInvitePermission &&
+                            state.memberRole in setOf("OWNER", "ADMIN"),
                         onClick = viewModel::createInvitation,
                         modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
                     ) {
                         Text(if (state.creating) "Membuat undangan…" else "Buat kode undangan")
+                    }
+                    state.invitationError?.let { error ->
+                        Spacer(Modifier.height(10.dp))
+                        SettingsNotice(settingsErrorMessage(error), error = true)
+                    }
+                    state.invitationMessage?.let { message ->
+                        Spacer(Modifier.height(10.dp))
+                        SettingsNotice(message)
                     }
                     state.invitation?.let { invitation ->
                         Surface(
@@ -276,10 +295,30 @@ fun SpaceSettingsScreen(
                                     modifier = Modifier.padding(top = 10.dp)
                                 )
                                 Text("Berlaku hingga ${invitation.expiresAt}", style = MaterialTheme.typography.bodySmall)
-                                OutlinedButton(
-                                    onClick = { clipboardManager.setText(AnnotatedString(invitation.token)) },
-                                    modifier = Modifier.padding(top = 10.dp)
-                                ) { Text("Salin kode") }
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
+                                ) {
+                                    OutlinedButton(
+                                        onClick = { clipboardManager.setText(AnnotatedString(invitation.token)) },
+                                        modifier = Modifier.weight(1f)
+                                    ) { Text("Salin kode") }
+                                    OutlinedButton(
+                                        onClick = {
+                                            val sharedText = "Undangan ${invitation.spaceName}\nKode: ${invitation.token}"
+                                            context.startActivity(
+                                                Intent.createChooser(
+                                                    Intent(Intent.ACTION_SEND).apply {
+                                                        type = "text/plain"
+                                                        putExtra(Intent.EXTRA_TEXT, sharedText)
+                                                    },
+                                                    "Bagikan undangan"
+                                                )
+                                            )
+                                        },
+                                        modifier = Modifier.weight(1f)
+                                    ) { Text("Bagikan") }
+                                }
                             }
                         }
                     }
@@ -626,6 +665,8 @@ internal fun settingsErrorMessage(message: String?): String {
     val value = message.orEmpty()
     return when {
         value.contains("Expiry", ignoreCase = true) -> "Masa berlaku harus antara 1–30 hari."
+        value.contains("Only OWNER", ignoreCase = true) || value.contains("Only ADMIN", ignoreCase = true) ->
+            "Hanya pemilik atau pengelola silsilah yang dapat membuat undangan."
         value.contains("already", ignoreCase = true) && value.contains("member", ignoreCase = true) ->
             "Pengguna tersebut sudah menjadi anggota silsilah."
         value.contains("403") || value.contains("FORBIDDEN", ignoreCase = true) ->

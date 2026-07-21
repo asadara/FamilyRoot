@@ -20,8 +20,14 @@ data class AuthUiState(
     val loading: Boolean = false,
     val error: String? = null
 ) {
+    val emailLooksValid: Boolean
+        get() = email.trim().let { value ->
+            value.contains('@') && value.substringAfter('@').contains('.')
+        }
+    val passwordLooksValid: Boolean
+        get() = password.length >= 10
     val canSubmit: Boolean
-        get() = email.isNotBlank() && password.isNotBlank() &&
+        get() = emailLooksValid && passwordLooksValid &&
             (mode == AuthMode.SIGN_IN || displayName.isNotBlank()) && !loading
 }
 

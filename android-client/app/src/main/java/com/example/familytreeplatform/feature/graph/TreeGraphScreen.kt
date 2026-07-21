@@ -24,7 +24,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.familytreeplatform.GraphScreen
-import com.example.familytreeplatform.createGraphExportSnapshot
+import com.example.familytreeplatform.GraphExportSnapshot
 import com.example.familytreeplatform.R
 import com.example.familytreeplatform.export.FamilyGraphExporter
 import com.example.familytreeplatform.navigation.GraphShellAction
@@ -43,33 +43,27 @@ fun TreeGraphScreen(
     val context = LocalContext.current
     var resetViewRequest by rememberSaveable { mutableIntStateOf(0) }
     var quickAddRequest by remember { mutableStateOf<GraphQuickAddRequest?>(null) }
+    var exportSnapshot by remember(centerPersonId) { mutableStateOf<GraphExportSnapshot?>(null) }
+    var exportError by remember { mutableStateOf<String?>(null) }
     val pdfWriter = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri ->
         if (uri != null) runCatching {
-            val snapshot = state.centerPersonId?.let { center ->
-                state.relations?.let { relations ->
-                    createGraphExportSnapshot(center, relations, state.persons, state.relationships)
-                }
-            }
-            val bytes = snapshot?.let(FamilyGraphExporter::renderPdf)
-                ?: FamilyGraphExporter.renderPdf(state.persons, state.relationships)
+            val snapshot = requireNotNull(exportSnapshot) { "Workspace tree is not ready" }
+            val bytes = FamilyGraphExporter.renderPdf(snapshot)
             context.contentResolver.openOutputStream(uri).use { requireNotNull(it).write(bytes) }
-        }
+        }.onSuccess { exportError = null }
+            .onFailure { exportError = exportErrorMessage(it.message) }
     }
     val pngWriter = rememberLauncherForActivityResult(
         ActivityResultContracts.CreateDocument("image/png")
     ) { uri ->
         if (uri != null) runCatching {
-            val snapshot = state.centerPersonId?.let { center ->
-                state.relations?.let { relations ->
-                    createGraphExportSnapshot(center, relations, state.persons, state.relationships)
-                }
-            }
-            val bytes = snapshot?.let(FamilyGraphExporter::renderPng)
-                ?: FamilyGraphExporter.renderPng(state.persons, state.relationships)
+            val snapshot = requireNotNull(exportSnapshot) { "Workspace tree is not ready" }
+            val bytes = FamilyGraphExporter.renderPng(snapshot)
             context.contentResolver.openOutputStream(uri).use { requireNotNull(it).write(bytes) }
-        }
+        }.onSuccess { exportError = null }
+            .onFailure { exportError = exportErrorMessage(it.message) }
     }
 
     LaunchedEffect(shellAction) {
@@ -125,6 +119,7 @@ fun TreeGraphScreen(
                 onOpenPerson = onOpenPerson,
                 onShowRelationshipPath = viewModel::showRelationshipPathInGraph,
                 onHideExplorationBreadcrumb = viewModel::hideExplorationBreadcrumb,
+                onExportSnapshotChanged = { exportSnapshot = it },
                 onBack = onBack,
             )
         }
@@ -155,10 +150,44 @@ fun TreeGraphScreen(
         }
         state.error?.let { error ->
             Text(
-                error,
+                graphErrorMessage(error),
                 color = MaterialTheme.colorScheme.error,
                 modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)
             )
         }
+        exportError?.let { error ->
+            Text(
+                error,
+                color = MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(16.dp)
+            )
+        }
+    }
+}
+
+internal fun exportErrorMessage(message: String?): String = when {
+    message.orEmpty().contains("not ready", ignoreCase = true) ->
+        "Pohon masih disiapkan. Tunggu sebentar lalu ulangi ekspor."
+    message.orEmpty().contains("permission", ignoreCase = true) ->
+        "Lokasi penyimpanan tidak dapat diakses. Pilih lokasi lain."
+    else -> "Ekspor belum berhasil. Pilih lokasi penyimpanan lalu coba kembali."
+}
+
+internal fun graphErrorMessage(message: String?): String {
+    val value = message.orEmpty()
+    return when {
+        value.contains("401") || value.contains("UNAUTHENTICATED", ignoreCase = true) ->
+            "Sesi masuk sudah berakhir. Silakan masuk kembali."
+        value.contains("403") || value.contains("FORBIDDEN", ignoreCase = true) ->
+            "Akun Anda tidak memiliki izin untuk membuka data ini."
+        value.contains("500") || value.contains("INTERNAL_ERROR", ignoreCase = true) ||
+            value.contains("502") || value.contains("503") || value.contains("504") ->
+            "Server sedang bermasalah. Coba lagi beberapa saat."
+        value.contains("connect", ignoreCase = true) || value.contains("timeout", ignoreCase = true) ||
+            value.contains("failed", ignoreCase = true) ->
+            "Server belum dapat dijangkau. Periksa koneksi lalu coba kembali."
+        else -> "Pohon belum dapat dimuat. Coba perbarui kembali."
     }
 }

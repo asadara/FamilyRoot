@@ -20,6 +20,8 @@ import kotlinx.coroutines.launch
 
 data class SpaceSettingsUiState(
     val role: String = "VIEWER",
+    val memberRole: String? = null,
+    val loadingInvitePermission: Boolean = true,
     val expiresInDays: String = "7",
     val creating: Boolean = false,
     val loadingClaims: Boolean = false,
@@ -29,6 +31,8 @@ data class SpaceSettingsUiState(
     val reviewingProposalId: String? = null,
     val merging: Boolean = false,
     val invitation: CreatedInvitation? = null,
+    val invitationError: String? = null,
+    val invitationMessage: String? = null,
     val claims: List<ClaimReviewItem> = emptyList(),
     val proposals: List<ProposalItem> = emptyList(),
     val duplicates: List<DuplicateGroup> = emptyList(),
@@ -49,37 +53,79 @@ class SpaceSettingsViewModel(
     val uiState: StateFlow<SpaceSettingsUiState> = _uiState.asStateFlow()
 
     init {
+        refreshInvitationPermission()
         refreshClaims()
         refreshProposals()
         refreshDuplicates()
     }
 
     fun setRole(value: String) {
-        _uiState.update { it.copy(role = value, error = null) }
+        _uiState.update { it.copy(role = value, invitationError = null, invitationMessage = null) }
     }
 
     fun setExpiresInDays(value: String) {
         if (value.all { it.isDigit() }) {
-            _uiState.update { it.copy(expiresInDays = value, error = null) }
+            _uiState.update { it.copy(expiresInDays = value, invitationError = null, invitationMessage = null) }
+        }
+    }
+
+    private fun refreshInvitationPermission() {
+        viewModelScope.launch {
+            repository.listSpaces()
+                .onSuccess { spaces ->
+                    _uiState.update {
+                        it.copy(
+                            memberRole = spaces.firstOrNull { space -> space.spaceId == spaceId }?.role,
+                            loadingInvitePermission = false
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(
+                            loadingInvitePermission = false,
+                            invitationError = error.message
+                        )
+                    }
+                }
         }
     }
 
     fun createInvitation() {
         val state = _uiState.value
+        if (state.memberRole !in setOf("OWNER", "ADMIN")) {
+            _uiState.update {
+                it.copy(invitationError = "Only OWNER or ADMIN can create invitations")
+            }
+            return
+        }
         val days = state.expiresInDays.toIntOrNull()
         if (days == null || days !in 1..30) {
-            _uiState.update { it.copy(error = "Expiry must be between 1 and 30 days") }
+            _uiState.update { it.copy(invitationError = "Expiry must be between 1 and 30 days") }
             return
         }
 
         viewModelScope.launch {
-            _uiState.update { it.copy(creating = true, error = null, invitation = null) }
+            _uiState.update {
+                it.copy(
+                    creating = true,
+                    invitationError = null,
+                    invitationMessage = null,
+                    invitation = null
+                )
+            }
             repository.createInvitation(spaceId, state.role, days)
                 .onSuccess { invitation ->
-                    _uiState.update { it.copy(creating = false, invitation = invitation) }
+                    _uiState.update {
+                        it.copy(
+                            creating = false,
+                            invitation = invitation,
+                            invitationMessage = "Kode undangan berhasil dibuat."
+                        )
+                    }
                 }
                 .onFailure { error ->
-                    _uiState.update { it.copy(creating = false, error = error.message) }
+                    _uiState.update { it.copy(creating = false, invitationError = error.message) }
                 }
         }
     }

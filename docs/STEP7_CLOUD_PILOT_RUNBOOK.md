@@ -138,7 +138,7 @@ base URL:
 
 ```powershell
 Set-Location D:\FamilyRoot\android-client
-.\gradlew.bat assembleDebug -PfamilyTreeApiBaseUrl=https://SERVICE_URL/
+.\gradlew.bat assemblePilot
 ```
 
 Untuk build ini ADB reverse tidak dipakai sebagai jalur API; USB tetap dipakai untuk

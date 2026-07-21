@@ -202,7 +202,7 @@ private data class GraphLayout(
     val height: Dp
 )
 
-internal data class GraphExportTile(
+data class GraphExportTile(
     val id: String,
     val label: String,
     val role: String,
@@ -212,7 +212,7 @@ internal data class GraphExportTile(
     val height: Float
 )
 
-internal data class GraphExportLine(
+data class GraphExportLine(
     val fromX: Float,
     val fromY: Float,
     val toX: Float,
@@ -221,7 +221,7 @@ internal data class GraphExportLine(
     val meta: String?
 )
 
-internal data class GraphExportSnapshot(
+data class GraphExportSnapshot(
     val width: Float,
     val height: Float,
     val tiles: List<GraphExportTile>,
@@ -284,6 +284,7 @@ fun GraphScreen(
     onOpenPerson: (String) -> Unit,
     onShowRelationshipPath: () -> Unit = {},
     onHideExplorationBreadcrumb: () -> Unit = {},
+    onExportSnapshotChanged: (GraphExportSnapshot) -> Unit = {},
     onBack: () -> Unit,
 ) {
     if (relations == null) {
@@ -398,6 +399,9 @@ fun GraphScreen(
     }
 
     val density = LocalDensity.current
+    LaunchedEffect(layout) {
+        onExportSnapshotChanged(layout.toExportSnapshot())
+    }
     val tiles = remember(layout) { layout.nodes.flatMap { it.tiles() } }
     val activeSpouseId = remember(centerPersonId, relations, allRelationships) {
         findActiveSpouseId(centerPersonId, relations, allRelationships)
@@ -1213,31 +1217,8 @@ fun GraphScreen(
     }
 }
 
-internal fun createGraphExportSnapshot(
-    centerPersonId: String,
-    relations: RelationsResponse,
-    persons: List<PersonListItem>,
-    allRelationships: List<ExportRelationship>
-): GraphExportSnapshot {
-    val displayName: (String) -> String = { id ->
-        persons.firstOrNull { it.personId == id }?.fullName ?: "Person"
-    }
-    val layout = buildCoupleGraphLayout(
-        centerPersonId = centerPersonId,
-        relations = relations,
-        allRelationships = allRelationships,
-        displayName = displayName,
-        persons = persons,
-        childrenCollapsed = false,
-        parentsCollapsed = false,
-        siblingsCollapsed = false,
-        tileW = 120.dp,
-        tileH = 152.dp,
-        spouseGapX = 28.dp,
-        siblingGapX = 28.dp,
-        rankGapY = 64.dp,
-        margin = 88.dp
-    )
+private fun GraphLayout.toExportSnapshot(): GraphExportSnapshot {
+    val layout = this
     val tiles = layout.nodes.flatMap { it.tiles() }.map { tile ->
         GraphExportTile(
             id = tile.id,

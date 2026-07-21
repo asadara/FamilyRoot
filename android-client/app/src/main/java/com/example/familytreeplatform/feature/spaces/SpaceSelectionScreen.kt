@@ -220,9 +220,17 @@ private fun JoinFamilyCard(
             value = state.invitationCode,
             onValueChange = viewModel::setInvitationCode,
             label = { Text("Kode undangan") },
+            supportingText = { Text("Tempel kode atau seluruh pesan undangan.") },
+            isError = state.invitationError != null,
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
+        state.invitationError?.let { error ->
+            SpaceError(
+                spaceSelectionErrorMessage(error),
+                Modifier.fillMaxWidth().padding(top = 8.dp)
+            )
+        }
         Button(
             enabled = !state.processing && state.invitationCode.isNotBlank(),
             onClick = viewModel::previewInvitation,

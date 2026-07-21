@@ -20,6 +20,7 @@ data class SpaceSelectionUiState(
     val invitationPreview: InvitationPreview? = null,
     val loadingSpaces: Boolean = true,
     val processing: Boolean = false,
+    val invitationError: String? = null,
     val error: String? = null
 )
 
@@ -41,30 +42,38 @@ class SpaceSelectionViewModel(private val repository: PersonRepository) : ViewMo
     fun setNewSpaceName(value: String) = _uiState.update { it.copy(newSpaceName = value, error = null) }
 
     fun setInvitationCode(value: String) = _uiState.update {
-        it.copy(invitationCode = value, invitationPreview = null, error = null)
+        it.copy(invitationCode = value, invitationPreview = null, invitationError = null)
     }
 
     fun selectSpace(space: FamilySpace) = SessionStore.selectSpace(space.spaceId, space.name)
 
     fun previewInvitation() {
-        val token = _uiState.value.invitationCode.trim()
+        val token = normalizeInvitationToken(_uiState.value.invitationCode)
         if (token.isBlank() || _uiState.value.processing) return
         viewModelScope.launch {
-            _uiState.update { it.copy(processing = true, invitationPreview = null, error = null) }
+            _uiState.update { it.copy(processing = true, invitationPreview = null, invitationError = null) }
             repository.previewInvitation(token)
-                .onSuccess { preview -> _uiState.update { it.copy(processing = false, invitationPreview = preview) } }
-                .onFailure { error -> _uiState.update { it.copy(processing = false, error = error.message) } }
+                .onSuccess { preview ->
+                    _uiState.update {
+                        it.copy(processing = false, invitationCode = token, invitationPreview = preview)
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(processing = false, invitationError = error.message) }
+                }
         }
     }
 
     fun acceptInvitation() {
-        val token = _uiState.value.invitationCode.trim()
+        val token = normalizeInvitationToken(_uiState.value.invitationCode)
         if (token.isBlank() || _uiState.value.processing) return
         viewModelScope.launch {
-            _uiState.update { it.copy(processing = true, error = null) }
+            _uiState.update { it.copy(processing = true, invitationError = null) }
             repository.acceptInvitation(token)
                 .onSuccess { SessionStore.selectSpace(it.spaceId, it.name) }
-                .onFailure { error -> _uiState.update { it.copy(processing = false, error = error.message) } }
+                .onFailure { error ->
+                    _uiState.update { it.copy(processing = false, invitationError = error.message) }
+                }
         }
     }
 
@@ -85,4 +94,13 @@ class SpaceSelectionViewModel(private val repository: PersonRepository) : ViewMo
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T = SpaceSelectionViewModel(repository) as T
     }
+}
+
+internal fun normalizeInvitationToken(raw: String): String {
+    val trimmed = raw.trim()
+    return Regex("[A-Za-z0-9_-]{12,128}")
+        .findAll(trimmed)
+        .lastOrNull()
+        ?.value
+        ?: trimmed
 }

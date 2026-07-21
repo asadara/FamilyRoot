@@ -162,6 +162,12 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, modifier: Mod
                 value = state.email,
                 onValueChange = viewModel::setEmail,
                 label = { Text("Email") },
+                supportingText = {
+                    if (state.email.isNotBlank() && !state.emailLooksValid) {
+                        Text("Masukkan alamat email yang valid.")
+                    }
+                },
+                isError = state.email.isNotBlank() && !state.emailLooksValid,
                 modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next)
@@ -170,6 +176,8 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, modifier: Mod
                 value = state.password,
                 onValueChange = viewModel::setPassword,
                 label = { Text("Kata sandi") },
+                supportingText = { Text("Minimal 10 karakter.") },
+                isError = state.password.isNotBlank() && !state.passwordLooksValid,
                 visualTransformation = PasswordVisualTransformation(),
                 modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
                 singleLine = true,
@@ -193,7 +201,11 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, modifier: Mod
                 else Text(if (state.mode == AuthMode.SIGN_IN) "Masuk" else "Buat akun")
             }
             Text(
-                "Dengan melanjutkan, Anda bertanggung jawab atas kontribusi dan validasi informasi yang dibagikan.",
+                if (state.mode == AuthMode.REGISTER) {
+                    "Akun dibuat dengan email dan kata sandi. Masuk dengan Google belum tersedia pada versi pilot."
+                } else {
+                    "Dengan melanjutkan, Anda bertanggung jawab atas kontribusi dan validasi informasi yang dibagikan."
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 12.dp)
