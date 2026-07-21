@@ -1325,3 +1325,65 @@ selection Tahap 6, tanpa membuka kembali status penutupan tahap tersebut:
 
 Perubahan ini adalah penyempurnaan frontend Android. Ia tidak mengubah kontrak API,
 database, deployment Cloud Run, atau keputusan keamanan Tahap 7.
+
+### 31.7 Unit partnership atomik dan parentage eksplisit
+
+Pada 21 Juli 2026 aturan layout diperketat setelah kasus dua saudara kandung yang
+masing-masing mempunyai pasangan memperlihatkan urutan card ambigu. Ketentuan ini
+menajamkan bagian 6–10 tanpa mengubah model data:
+
+- setiap komponen partnership yang sedang terlihat ditempatkan sebagai satu unit
+  atomik; collision avoidance menggeser seluruh unit, bukan salah satu person saja;
+- satu `personId` tetap mempunyai satu card ketika mempunyai partnership lama,
+  partnership baru, atau dicapai melalui beberapa jalur;
+- urutan saudara memakai tanggal lahir bila tersedia; data tanpa tanggal lahir
+  memakai urutan pencatatan yang stabil tanpa mengklaim urutan umur;
+- aturan atomik berlaku simetris untuk cabang ke bawah dan ke atas;
+- anak dengan dua parent eksplisit dan partnership tercatat memakai junction cincin
+  hanya bila tipe parentage sama;
+- dua co-parent tanpa partnership memakai anchor masing-masing yang membentuk hub
+  netral dan tidak pernah memperoleh cincin hasil inferensi;
+- satu parent eksplisit memakai anchor bawah card parent. Parent lain yang belum
+  tercatat boleh muncul sebagai slot visual `Orang tua lain belum tercatat`, tetapi
+  slot tersebut bukan `Person`, tidak masuk hitungan/pencarian/sync/export terstruktur,
+  dan hanya ikut pada export visual;
+- pasangan aktif tidak otomatis menjadi parent bagi anak yang hanya terhubung kepada
+  salah satu anggota pasangan; anak dari partnership historis tetap berada pada
+  cabang partnership asalnya;
+- tap pertama tetap menampilkan arrow untuk relationship tersembunyi dan `+` untuk
+  arah yang benar-benar kosong. Pada role `VIEWER`, arah kosong ditampilkan terkunci,
+  bukan sebagai aksi yang baru akan ditolak server;
+- jalur tambah/hubungkan melalui Inspector, Profil, dan menu Keluarga tetap tersedia
+  sebagai fallback resmi.
+
+Export PNG/PDF tetap dibangun dari snapshot layout workspace yang sama, sehingga
+unit, connector, dan slot visual tidak memakai renderer layout lama yang terpisah.
+Snapshot export juga membawa nama akrab, gender avatar, status kehidupan, dan umur
+yang sama dengan person card workspace. Marker partnership dari couple unit maupun
+cabang progresif/historis sama-sama dirender sebagai cincin; `DIVORCED` memakai
+cincin terpisah dan `WIDOWED` memakai treatment muted.
+
+Dialog tambah pasangan menggunakan istilah eksplisit `Tanggal mulai hubungan`.
+Nilai tersebut bukan tanggal lahir person dan tetap disimpan sebagai ISO
+`YYYY-MM-DD` pada kontrak data. Pengguna memilihnya melalui date picker, sementara
+tampilan memakai format Indonesia `dd MMMM yyyy`, misalnya `01 Januari 1990`.
+Tanggal lahir person tetap dilengkapi melalui Profil sampai quick-add person
+mempunyai keputusan produk tersendiri.
+
+### 31.8 Menu Alat dan informasi aplikasi
+
+Pada 21 Juli 2026 menu Alat diseragamkan pada bottom navigation dan navigation rail.
+Selain export PDF/PNG dan reset graph pada workspace Pohon, menu menyediakan:
+
+- `Tentang aplikasi`, berisi identitas TRêdhAH, filosofi nama, tagline, prinsip
+  privasi/kolaborasi, serta status versi;
+- `Petunjuk penggunaan`, mencakup cara memulai, mengisi data, menjelajah graph,
+  menambah hubungan, bekerja offline, memahami peran, dan melakukan export;
+- `Versi aplikasi`, menggunakan label `Beta 0.1.0` selama belum ada rilis resmi;
+- footer `© sadar@studio 2026` pada menu dan halaman pendukung.
+
+Halaman About/Help dibuka di atas back stack workspace agar tombol Kembali memulihkan
+halaman asal tanpa mereset graph. Bottom navigation diringkas menjadi 64 dp dan tidak
+lagi menambahkan system inset kedua karena inset perangkat sudah ditangani scaffold
+tingkat aktivitas. Tujuannya memaksimalkan tinggi workspace tanpa menutup menu oleh
+navigation bar Android.

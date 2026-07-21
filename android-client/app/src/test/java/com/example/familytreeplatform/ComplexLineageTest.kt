@@ -74,6 +74,93 @@ class ComplexLineageTest {
     }
 
     @Test
+    fun `sibling couples remain atomic and ordered regardless of relationship response order`() {
+        val relationships = listOf(
+            spouse("raka-alya", "raka", "alya", "MARRIED", "2022-01-01"),
+            spouse("rieke-antony", "rieke", "antony", "MARRIED", "2024-01-01")
+        )
+        val base = mapOf(
+            "raka" to LineagePlacementRect(0f, 0f, 120f, 152f),
+            "alya" to LineagePlacementRect(148f, 0f, 120f, 152f),
+            "rieke" to LineagePlacementRect(296f, 0f, 120f, 152f)
+        )
+        fun place(input: List<ExportRelationship>) = planProgressivePlacements(
+            basePositions = base,
+            visiblePersonIds = setOf("raka", "alya", "rieke", "antony"),
+            visibleRelationships = input,
+            allRelationships = input,
+            tileWidth = 120f,
+            tileHeight = 152f,
+            siblingGap = 28f,
+            partnershipGap = 28f,
+            rankGap = 64f,
+            fallbackY = 0f
+        )
+
+        val positions = place(relationships)
+        assertEquals(positions, place(relationships.reversed()))
+        assertTrue(positions.getValue("raka").x < positions.getValue("alya").x)
+        assertTrue(positions.getValue("alya").x < positions.getValue("rieke").x)
+        assertEquals(
+            148f,
+            positions.getValue("antony").x - positions.getValue("rieke").x,
+            0.01f
+        )
+        assertTrue(positions.getValue("rieke").x < positions.getValue("antony").x)
+    }
+
+    @Test
+    fun `parent couple opened upward is placed as one atomic unit`() {
+        val relationships = listOf(
+            parentChild("budi-raka", "budi", "raka", "BIOLOGICAL"),
+            parentChild("siti-raka", "siti", "raka", "BIOLOGICAL"),
+            spouse("budi-siti", "budi", "siti", "MARRIED", "2000-01-01")
+        )
+        val positions = planProgressivePlacements(
+            basePositions = mapOf("raka" to LineagePlacementRect(0f, 0f, 120f, 152f)),
+            visiblePersonIds = setOf("raka", "budi", "siti"),
+            visibleRelationships = relationships,
+            allRelationships = relationships,
+            tileWidth = 120f,
+            tileHeight = 152f,
+            siblingGap = 28f,
+            partnershipGap = 28f,
+            rankGap = 64f,
+            fallbackY = 0f
+        )
+
+        val budi = positions.getValue("budi")
+        val siti = positions.getValue("siti")
+        assertEquals(budi.y, siti.y, 0.01f)
+        assertEquals(148f, kotlin.math.abs(budi.x - siti.x), 0.01f)
+        assertTrue(budi.bottom < positions.getValue("raka").top)
+    }
+
+    @Test
+    fun `multiple partnerships share one person card and keep their own junction slots`() {
+        val relationships = listOf(
+            spouse("old", "raka", "alya", "DIVORCED", "2010-01-01", "2018-01-01"),
+            spouse("current", "raka", "maya", "MARRIED", "2022-01-01")
+        )
+        val positions = planProgressivePlacements(
+            basePositions = mapOf("raka" to LineagePlacementRect(0f, 0f, 120f, 152f)),
+            visiblePersonIds = setOf("raka", "alya", "maya"),
+            visibleRelationships = relationships,
+            allRelationships = relationships,
+            tileWidth = 120f,
+            tileHeight = 152f,
+            siblingGap = 28f,
+            partnershipGap = 28f,
+            rankGap = 64f,
+            fallbackY = 0f
+        )
+
+        assertEquals(3, positions.size)
+        assertTrue(positions.getValue("alya").x < positions.getValue("raka").x)
+        assertTrue(positions.getValue("raka").x < positions.getValue("maya").x)
+    }
+
+    @Test
     fun `partnership expansion reveals every recorded partner without inferring children`() {
         val relationships = listOf(
             spouse("old", "person", "old-partner", "DIVORCED", "2000-01-01", "2007-01-01"),

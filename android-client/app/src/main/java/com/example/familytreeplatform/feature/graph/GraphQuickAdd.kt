@@ -1,5 +1,6 @@
 package com.example.familytreeplatform.feature.graph
 
+import android.app.DatePickerDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,7 +18,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import java.util.Calendar
 
 enum class QuickRelationKind { PARENT, CHILD, PARTNER }
 
@@ -42,6 +46,7 @@ fun GraphQuickAddDialog(
     var nickName by rememberSaveable(request) { mutableStateOf("") }
     var gender by rememberSaveable(request) { mutableStateOf("UNKNOWN") }
     var startDate by rememberSaveable(request) { mutableStateOf("") }
+    val context = LocalContext.current
     val relationLabel = when (request.kind) {
         QuickRelationKind.PARENT -> "orang tua"
         QuickRelationKind.CHILD -> "anak"
@@ -84,13 +89,43 @@ fun GraphQuickAddDialog(
                     GenderButton("UNKNOWN", "Belum tahu", gender) { gender = it }
                 }
                 if (request.kind == QuickRelationKind.PARTNER) {
+                    val openRelationshipDatePicker = {
+                        val initial = parseIsoDate(startDate) ?: Calendar.getInstance()
+                        DatePickerDialog(
+                            context,
+                            { _, year, month, dayOfMonth ->
+                                startDate = "%04d-%02d-%02d".format(
+                                    year,
+                                    month + 1,
+                                    dayOfMonth
+                                )
+                            },
+                            initial.get(Calendar.YEAR),
+                            initial.get(Calendar.MONTH),
+                            initial.get(Calendar.DAY_OF_MONTH)
+                        ).show()
+                    }
                     OutlinedTextField(
-                        value = startDate,
-                        onValueChange = { startDate = it },
-                        label = { Text("Tanggal mulai") },
-                        supportingText = { Text("Format YYYY-MM-DD") },
+                        value = formatIndonesianDate(startDate).orEmpty(),
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Tanggal mulai hubungan") },
+                        supportingText = {
+                            Text("Bukan tanggal lahir. Tanggal lahir dapat dilengkapi di profil.")
+                        },
+                        trailingIcon = {
+                            TextButton(
+                                enabled = !saving,
+                                onClick = openRelationshipDatePicker
+                            ) {
+                                Text("Pilih")
+                            }
+                        },
                         singleLine = true,
-                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp)
+                            .testTag("relationship-start-date")
                     )
                 }
                 error?.let {
@@ -141,3 +176,41 @@ private fun GenderButton(
 }
 
 private val DATE_PATTERN = Regex("\\d{4}-\\d{2}-\\d{2}")
+
+private val INDONESIAN_MONTHS = listOf(
+    "Januari",
+    "Februari",
+    "Maret",
+    "April",
+    "Mei",
+    "Juni",
+    "Juli",
+    "Agustus",
+    "September",
+    "Oktober",
+    "November",
+    "Desember"
+)
+
+internal fun formatIndonesianDate(isoDate: String): String? {
+    val calendar = parseIsoDate(isoDate) ?: return null
+    return "%02d %s %04d".format(
+        calendar.get(Calendar.DAY_OF_MONTH),
+        INDONESIAN_MONTHS[calendar.get(Calendar.MONTH)],
+        calendar.get(Calendar.YEAR)
+    )
+}
+
+private fun parseIsoDate(isoDate: String): Calendar? {
+    if (!DATE_PATTERN.matches(isoDate)) return null
+    val parts = isoDate.split('-').mapNotNull(String::toIntOrNull)
+    if (parts.size != 3 || parts[1] !in 1..12) return null
+    return runCatching {
+        Calendar.getInstance().apply {
+            isLenient = false
+            clear()
+            set(parts[0], parts[1] - 1, parts[2])
+            timeInMillis
+        }
+    }.getOrNull()
+}

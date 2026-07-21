@@ -3,10 +3,12 @@ package com.example.familytreeplatform.export
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.DashPathEffect
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
 import com.example.familytreeplatform.GraphExportLine
+import com.example.familytreeplatform.GraphExportPlaceholder
 import com.example.familytreeplatform.GraphExportSnapshot
 import com.example.familytreeplatform.GraphExportTile
 import com.example.familytreeplatform.models.ExportRelationship
@@ -89,7 +91,7 @@ object FamilyGraphExporter {
             color = Color.DKGRAY
             textSize = 20f
         }
-        canvas.drawText("TRêdhAH", 48f, 58f, titlePaint)
+        canvas.drawText("TR\u00eadhAH", 48f, 58f, titlePaint)
         canvas.drawText("Ekspor workspace pohon keluarga", 48f, 90f, subtitlePaint)
         if (snapshot.tiles.isEmpty()) return
 
@@ -114,13 +116,18 @@ object FamilyGraphExporter {
             style = Paint.Style.STROKE
             strokeWidth = 1.5f / scale
         }
-        snapshot.spouseLines.forEach { line ->
+        val partnershipLines = snapshotPartnershipLines(snapshot)
+        partnershipLines.forEach { line ->
             val centerX = (line.fromX + line.toX) / 2f
             val centerY = (line.fromY + line.toY) / 2f
-            canvas.drawCircle(centerX - 5f, centerY, 7f, spousePaint)
-            canvas.drawCircle(centerX + 5f, centerY, 7f, spousePaint)
+            val separation = if (line.meta == "DIVORCED") 10f else 5f
+            val markerPaint = Paint(spousePaint).apply {
+                if (line.meta == "WIDOWED") alpha = 122
+            }
+            canvas.drawCircle(centerX - separation, centerY, 7f, markerPaint)
+            canvas.drawCircle(centerX + separation, centerY, 7f, markerPaint)
         }
-        snapshot.lineageLines.forEach { line ->
+        snapshot.lineageLines.filterNot { it.type == "SPOUSE" }.forEach { line ->
             val hubY = line.fromY + (line.toY - line.fromY) / 2f
             canvas.drawLine(line.fromX, line.fromY, line.fromX, hubY, connectorPaint)
             canvas.drawLine(line.fromX, hubY, line.toX, hubY, connectorPaint)
@@ -128,33 +135,150 @@ object FamilyGraphExporter {
         }
 
         snapshot.tiles.forEach { tile -> drawSnapshotTile(canvas, tile, connectorPaint) }
+        snapshot.placeholders.forEach { placeholder ->
+            drawSnapshotPlaceholder(canvas, placeholder, connectorPaint)
+        }
         canvas.restore()
+    }
+
+    internal fun snapshotPartnershipLines(snapshot: GraphExportSnapshot): List<GraphExportLine> =
+        (snapshot.spouseLines + snapshot.lineageLines.filter { it.type == "SPOUSE" })
+            .distinctBy { line ->
+            listOf(line.fromX to line.fromY, line.toX to line.toY)
+                .sortedWith(compareBy<Pair<Float, Float>> { it.first }.thenBy { it.second })
+        }
+
+    private fun drawSnapshotPlaceholder(
+        canvas: Canvas,
+        placeholder: GraphExportPlaceholder,
+        borderPaint: Paint
+    ) {
+        val rect = RectF(
+            placeholder.x,
+            placeholder.y,
+            placeholder.x + placeholder.width,
+            placeholder.y + placeholder.height
+        )
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(246, 245, 241) }
+        val dashedBorder = Paint(borderPaint).apply {
+            color = Color.rgb(145, 145, 138)
+            pathEffect = DashPathEffect(floatArrayOf(8f, 6f), 0f)
+        }
+        canvas.drawRoundRect(rect, 14f, 14f, fillPaint)
+        canvas.drawRoundRect(rect, 14f, 14f, dashedBorder)
+        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = Color.rgb(95, 95, 90)
+            textSize = 15f
+            textAlign = Paint.Align.CENTER
+        }
+        canvas.drawText("+", rect.centerX(), rect.centerY() - 8f, textPaint.apply {
+            textSize = 24f
+        })
+        textPaint.textSize = 13f
+        canvas.drawText("Orang tua lain", rect.centerX(), rect.centerY() + 16f, textPaint)
+        canvas.drawText("belum tercatat", rect.centerX(), rect.centerY() + 34f, textPaint)
     }
 
     private fun drawSnapshotTile(canvas: Canvas, tile: GraphExportTile, borderPaint: Paint) {
         val rect = RectF(tile.x, tile.y, tile.x + tile.width, tile.y + tile.height)
-        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(250, 249, 246) }
+        val deceased = tile.lifeStatus == "DECEASED"
+        val fillPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (deceased) Color.rgb(232, 229, 221) else Color.rgb(255, 251, 240)
+        }
+        val cardBorder = Paint(borderPaint).apply {
+            color = if (deceased) Color.rgb(141, 137, 128) else Color.rgb(122, 111, 91)
+        }
         canvas.drawRoundRect(rect, 14f, 14f, fillPaint)
-        canvas.drawRoundRect(rect, 14f, 14f, borderPaint)
-        val avatarPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(226, 235, 226) }
-        val avatarTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(52, 82, 62)
-            textSize = 15f
-            isFakeBoldText = true
-            textAlign = Paint.Align.CENTER
+        canvas.drawRoundRect(rect, 14f, 14f, cardBorder)
+
+        val avatarBackground = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (deceased) Color.rgb(214, 210, 201) else Color.rgb(247, 228, 174)
+        }
+        val avatarForeground = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            color = if (deceased) Color.rgb(126, 123, 117) else Color.rgb(113, 78, 26)
+            style = Paint.Style.FILL
         }
         val centerX = rect.centerX()
-        canvas.drawCircle(centerX, rect.top + 28f, 14f, avatarPaint)
-        val initials = tile.label.trim().split(Regex("\\s+")).filter { it.isNotBlank() }.take(2)
-            .joinToString("") { it.first().uppercase() }
-        canvas.drawText(initials.ifBlank { "?" }, centerX, rect.top + 33f, avatarTextPaint)
+        val avatarCenterY = rect.top + 42f
+        val avatarRadius = 28f
+        canvas.drawCircle(centerX, avatarCenterY, avatarRadius, avatarBackground)
+        canvas.drawCircle(centerX, avatarCenterY - 8f, 8f, avatarForeground)
+        canvas.drawOval(
+            RectF(
+                centerX - 15f,
+                avatarCenterY + 3f,
+                centerX + 15f,
+                avatarCenterY + 20f
+            ),
+            avatarForeground
+        )
+        if (tile.gender == "FEMALE") {
+            val hairPaint = Paint(avatarForeground).apply {
+                style = Paint.Style.STROKE
+                strokeWidth = 3f
+            }
+            canvas.drawArc(
+                RectF(
+                    centerX - 11f,
+                    avatarCenterY - 17f,
+                    centerX + 11f,
+                    avatarCenterY + 5f
+                ),
+                185f,
+                170f,
+                false,
+                hairPaint
+            )
+        }
         val namePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.rgb(20, 35, 55)
-            textSize = 17f
+            color = if (deceased) Color.rgb(88, 85, 79) else Color.rgb(48, 37, 23)
+            textSize = 14f
             isFakeBoldText = true
             textAlign = Paint.Align.CENTER
         }
-        canvas.drawText(tile.label.take(22), centerX, rect.top + 57f, namePaint)
+        val nameLines = twoLineText(tile.label, namePaint, rect.width() - 24f)
+        val nameStartY = rect.top + 91f
+        nameLines.forEachIndexed { index, line ->
+            canvas.drawText(line, centerX, nameStartY + index * 17f, namePaint)
+        }
+        tile.age?.let { age ->
+            val agePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = if (deceased) Color.rgb(105, 102, 96) else Color.rgb(92, 78, 57)
+                textSize = 12f
+                textAlign = Paint.Align.CENTER
+            }
+            canvas.drawText("$age tahun", centerX, rect.bottom - 14f, agePaint)
+        }
+    }
+
+    private fun twoLineText(text: String, paint: Paint, maxWidth: Float): List<String> {
+        val words = text.trim().split(Regex("\\s+")).filter(String::isNotBlank)
+        if (words.isEmpty()) return listOf("?")
+        val lines = mutableListOf<String>()
+        var current = ""
+        words.forEach { word ->
+            val candidate = if (current.isEmpty()) word else "$current $word"
+            if (paint.measureText(candidate) <= maxWidth || current.isEmpty()) {
+                current = candidate
+            } else if (lines.isEmpty()) {
+                lines += current
+                current = word
+            } else {
+                current += " $word"
+            }
+        }
+        if (current.isNotEmpty()) lines += current
+        return lines.take(2).mapIndexed { index, line ->
+            if (index == 1 && lines.size > 2 || paint.measureText(line) > maxWidth) {
+                var shortened = line
+                while (shortened.isNotEmpty() && paint.measureText("$shortened…") > maxWidth) {
+                    shortened = shortened.dropLast(1)
+                }
+                "$shortened…"
+            } else {
+                line
+            }
+        }
     }
 
     internal fun resolveGenerations(
@@ -206,7 +330,7 @@ object FamilyGraphExporter {
             color = Color.DKGRAY
             textSize = 22f
         }
-        canvas.drawText("TRêdhAH", 60f, 70f, titlePaint)
+        canvas.drawText("TR\u00eadhAH", 60f, 70f, titlePaint)
         canvas.drawText("Merangkai jejak, menyatukan trah  |  ${people.size} person  |  ${relationships.size} hubungan", 60f, 108f, subtitlePaint)
         if (people.isEmpty()) {
             canvas.drawText("Belum ada person dalam silsilah ini", 60f, 180f, subtitlePaint)

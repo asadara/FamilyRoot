@@ -726,6 +726,31 @@ yang sudah selesai:
 > Koreksi visual berikutnya memberi splash drawable khusus berukuran 96 dp agar logo
 > penuh aman pada mask splash Android/Samsung dan aksara Jawa tidak terpotong; logo
 > launcher/header tetap memakai aset penuh tanpa inset tambahan.
+> Pada 21 Juli 2026 layout graph diperketat: partnership yang terlihat diposisikan
+> sebagai unit atomik untuk cabang saudara, keturunan, dan leluhur; satu person tidak
+> diduplikasi pada multiple partnership. Parentage tetap sepenuhnya eksplisit:
+> co-parent dengan partnership dan tipe sama memakai junction cincin, co-parent tanpa
+> partnership memakai hub netral, sedangkan single parent memakai anchor card serta
+> slot visual orang tua belum tercatat tanpa membuat record `Person` dummy. Pasangan
+> aktif tidak diinferensikan sebagai parent, dan anak partnership lama tetap pada
+> cabang asal. Kontrol arah kosong memakai `+` hanya bagi role yang boleh mengubah;
+> `VIEWER` melihat status terkunci. Export visual memakai snapshot layout workspace
+> yang sama. Keputusan rinci berada di bagian 31.7 risalah frontend.
+> Koreksi export berikutnya membawa state visual kartu yang sama (nama akrab, avatar
+> gender, status hidup/meninggal, dan umur) serta merender cincin untuk partnership
+> atomik dan progresif/historis. Field ambigu `Tanggal mulai` pada quick-add pasangan
+> diganti menjadi `Tanggal mulai hubungan`: ini bukan tanggal lahir, dipilih melalui
+> date picker, disimpan sebagai ISO `YYYY-MM-DD`, dan ditampilkan dalam format
+> Indonesia seperti `01 Januari 1990`.
+> Menu Alat kemudian diseragamkan untuk layout bottom navigation dan rail. Ia memuat
+> export/reset pada Pohon, halaman Tentang aplikasi, halaman Petunjuk penggunaan,
+> label `Beta 0.1.0`, dan footer `© sadar@studio 2026`. About/Help memakai back
+> stack terpisah agar workspace graph tidak direset. Tinggi bottom navigation menjadi
+> 64 dp dan inset bawah ganda dihapus karena scaffold aktivitas sudah menangani
+> system bars. Keputusan rinci dicatat pada bagian 31.8 risalah frontend.
+> Quality gate gabungan layout atomik, parity export, date picker, dan menu pendukung
+> lulus: unit test, lintDebug, assembleDebug/androidTest, serta seluruh 31 connected
+> instrumentation test pada Samsung SM-T225 Android 14.
 > Daftar di bawah tetap berguna sebagai konteks awal, tetapi keputusan terbaru dalam
 > kedua risalah tersebut mengalahkan item agenda yang sudah diselesaikan.
 

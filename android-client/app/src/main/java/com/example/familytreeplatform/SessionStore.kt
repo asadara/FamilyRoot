@@ -23,6 +23,8 @@ object SessionStore {
     val activeSpaceId: StateFlow<String?> = _activeSpaceId
     private val _activeSpaceName = MutableStateFlow<String?>(null)
     val activeSpaceName: StateFlow<String?> = _activeSpaceName
+    private val _activeSpaceRole = MutableStateFlow<String?>(null)
+    val activeSpaceRole: StateFlow<String?> = _activeSpaceRole
     private val _restoring = MutableStateFlow(false)
     val restoring: StateFlow<Boolean> = _restoring
     private val _hasPersistedSession = MutableStateFlow(false)
@@ -39,6 +41,7 @@ object SessionStore {
             _userEmail.value = secureStorage.get("user_email")
             _activeSpaceId.value = preferences.getString("active_space_id", null)
             _activeSpaceName.value = preferences.getString("active_space_name", null)
+            _activeSpaceRole.value = preferences.getString("active_space_role", null)
             !storedRefreshToken.isNullOrBlank() && !_userId.value.isNullOrBlank()
         }.getOrElse {
             secureStorage.clear()
@@ -49,6 +52,7 @@ object SessionStore {
             _userEmail.value = null
             _activeSpaceId.value = null
             _activeSpaceName.value = null
+            _activeSpaceRole.value = null
             false
         }
         _restoring.value = restored
@@ -74,9 +78,14 @@ object SessionStore {
         _userEmail.value = email
         _activeSpaceId.value = null
         _activeSpaceName.value = null
+        _activeSpaceRole.value = null
         _restoring.value = false
         _hasPersistedSession.value = true
-        preferences.edit().remove("active_space_id").apply()
+        preferences.edit()
+            .remove("active_space_id")
+            .remove("active_space_name")
+            .remove("active_space_role")
+            .apply()
     }
 
     @Synchronized
@@ -107,18 +116,24 @@ object SessionStore {
         _restoring.value = false
     }
 
-    fun selectSpace(spaceId: String, spaceName: String? = null) {
+    fun selectSpace(spaceId: String, spaceName: String? = null, role: String? = null) {
         _activeSpaceId.value = spaceId
         _activeSpaceName.value = spaceName
+        _activeSpaceRole.value = role
         preferences.edit()
             .putString("active_space_id", spaceId)
             .putString("active_space_name", spaceName)
+            .putString("active_space_role", role)
             .apply()
     }
 
-    fun updateActiveSpaceName(spaceName: String) {
+    fun updateActiveSpace(spaceName: String, role: String?) {
         _activeSpaceName.value = spaceName
-        preferences.edit().putString("active_space_name", spaceName).apply()
+        _activeSpaceRole.value = role
+        preferences.edit()
+            .putString("active_space_name", spaceName)
+            .putString("active_space_role", role)
+            .apply()
     }
 
     @Synchronized
@@ -129,6 +144,7 @@ object SessionStore {
         _userEmail.value = null
         _activeSpaceId.value = null
         _activeSpaceName.value = null
+        _activeSpaceRole.value = null
         storedRefreshToken = null
         _restoring.value = false
         _hasPersistedSession.value = false

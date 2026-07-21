@@ -34,6 +34,7 @@ fun TreeGraphScreen(
     viewModel: TreeGraphViewModel,
     onBack: () -> Unit,
     onOpenPerson: (String) -> Unit,
+    canEditRelationships: Boolean = true,
     shellAction: GraphShellAction? = null,
     onShellActionConsumed: () -> Unit = {},
     modifier: Modifier = Modifier
@@ -111,6 +112,7 @@ fun TreeGraphScreen(
                 resetViewRequest = resetViewRequest,
                 onSelectPerson = viewModel::selectPerson,
                 onInspectPerson = viewModel::inspectPerson,
+                canEditRelationships = canEditRelationships,
                 onQuickAddRequest = { request ->
                     viewModel.beginQuickAdd()
                     quickAddRequest = request

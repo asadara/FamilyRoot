@@ -18,6 +18,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import com.example.familytreeplatform.BuildConfig
+import com.example.familytreeplatform.feature.support.applicationVersionLabel
 
 class NavigationShellSearchTest {
     @get:Rule
@@ -98,6 +100,43 @@ class NavigationShellSearchTest {
             assertTrue(settingsOpened)
             assertFalse(signedOut)
         }
+    }
+
+    @Test
+    fun toolsMenuShowsSupportVersionCopyrightAndPreservesGraphActions() {
+        var navigatedRoute: String? = null
+        var graphAction: GraphShellAction? = null
+        composeRule.setContent {
+            FamilyTreePlatformTheme(dynamicColor = false) {
+                FamilyRootNavigationShell(
+                    currentRoute = Routes.GRAPH,
+                    onNavigate = { navigatedRoute = it },
+                    spaceName = "Keluarga Demo",
+                    userDisplayName = "Budi Santoso",
+                    userEmail = "father@family.test",
+                    people = emptyList(),
+                    pendingSyncCount = 0,
+                    onSearchPerson = {},
+                    onOpenSettings = {},
+                    onSignOut = {},
+                    onGraphAction = { graphAction = it }
+                ) { contentModifier ->
+                    Box(modifier = contentModifier.fillMaxSize())
+                }
+            }
+        }
+
+        composeRule.onNodeWithText("Alat").performClick()
+        composeRule.onNodeWithText("Ekspor PDF").assertIsDisplayed().performClick()
+        composeRule.runOnIdle { assertEquals(GraphShellAction.EXPORT_PDF, graphAction) }
+
+        composeRule.onNodeWithText("Alat").performClick()
+        composeRule.onNodeWithText("Tentang aplikasi").assertIsDisplayed()
+        composeRule.onNodeWithText("Petunjuk penggunaan").assertIsDisplayed()
+        composeRule.onNodeWithText(applicationVersionLabel(BuildConfig.VERSION_NAME)).assertIsDisplayed()
+        composeRule.onNodeWithText("© sadar@studio 2026").assertIsDisplayed()
+        composeRule.onNodeWithText("Tentang aplikasi").performClick()
+        composeRule.runOnIdle { assertEquals(Routes.ABOUT, navigatedRoute) }
     }
 
     private fun person(id: String, name: String) = PersonListItem(

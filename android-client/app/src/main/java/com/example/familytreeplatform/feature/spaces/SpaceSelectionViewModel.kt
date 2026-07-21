@@ -45,7 +45,8 @@ class SpaceSelectionViewModel(private val repository: PersonRepository) : ViewMo
         it.copy(invitationCode = value, invitationPreview = null, invitationError = null)
     }
 
-    fun selectSpace(space: FamilySpace) = SessionStore.selectSpace(space.spaceId, space.name)
+    fun selectSpace(space: FamilySpace) =
+        SessionStore.selectSpace(space.spaceId, space.name, space.role)
 
     fun previewInvitation() {
         val token = normalizeInvitationToken(_uiState.value.invitationCode)
@@ -70,7 +71,7 @@ class SpaceSelectionViewModel(private val repository: PersonRepository) : ViewMo
         viewModelScope.launch {
             _uiState.update { it.copy(processing = true, invitationError = null) }
             repository.acceptInvitation(token)
-                .onSuccess { SessionStore.selectSpace(it.spaceId, it.name) }
+                .onSuccess { SessionStore.selectSpace(it.spaceId, it.name, it.role) }
                 .onFailure { error ->
                     _uiState.update { it.copy(processing = false, invitationError = error.message) }
                 }
@@ -83,7 +84,7 @@ class SpaceSelectionViewModel(private val repository: PersonRepository) : ViewMo
         viewModelScope.launch {
             _uiState.update { it.copy(processing = true, error = null) }
             repository.createSpace(name)
-                .onSuccess { SessionStore.selectSpace(it.spaceId, it.name) }
+                .onSuccess { SessionStore.selectSpace(it.spaceId, it.name, it.role) }
                 .onFailure { error -> _uiState.update { it.copy(processing = false, error = error.message) } }
         }
     }

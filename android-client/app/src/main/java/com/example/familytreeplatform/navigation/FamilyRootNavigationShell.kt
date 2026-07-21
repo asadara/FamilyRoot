@@ -11,7 +11,10 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -58,6 +61,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.PopupProperties
+import com.example.familytreeplatform.BuildConfig
+import com.example.familytreeplatform.feature.support.applicationVersionLabel
 import com.example.familytreeplatform.models.PersonListItem
 import com.example.familytreeplatform.ui.branding.TredhahBrand
 import com.example.familytreeplatform.ui.branding.TredhahLogo
@@ -124,18 +129,8 @@ internal fun FamilyRootNavigationShell(
                             label = { Text(destination.label) }
                         )
                     }
-                    if (onGraphAction != null) {
-                        HorizontalDivider(modifier = Modifier.width(48.dp).padding(vertical = 6.dp))
-                        GraphRailUtilityAction("PDF") {
-                            onGraphAction(GraphShellAction.EXPORT_PDF)
-                        }
-                        GraphRailUtilityAction("PNG") {
-                            onGraphAction(GraphShellAction.EXPORT_PNG)
-                        }
-                        GraphRailUtilityAction("Atur ulang") {
-                            onGraphAction(GraphShellAction.RESET_VIEW)
-                        }
-                    }
+                    HorizontalDivider(modifier = Modifier.width(48.dp).padding(vertical = 4.dp))
+                    RailToolsMenu(onGraphAction = onGraphAction, onNavigate = onNavigate)
                 }
                 Column(modifier = Modifier.weight(1f).fillMaxSize()) {
                     appBar()
@@ -148,7 +143,10 @@ internal fun FamilyRootNavigationShell(
             Scaffold(
                 topBar = appBar,
                 bottomBar = {
-                    NavigationBar {
+                    NavigationBar(
+                        modifier = Modifier.height(64.dp),
+                        windowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
+                    ) {
                         topLevelDestinations.forEach { destination ->
                             NavigationBarItem(
                                 selected = currentRoute == destination.route,
@@ -157,45 +155,7 @@ internal fun FamilyRootNavigationShell(
                                 label = { Text(destination.label) }
                             )
                         }
-                        if (onGraphAction != null) {
-                            var utilitiesExpanded by rememberSaveable { mutableStateOf(false) }
-                            NavigationBarItem(
-                                selected = false,
-                                onClick = { utilitiesExpanded = true },
-                                icon = {
-                                    Box {
-                                        Text("⋯")
-                                        DropdownMenu(
-                                            expanded = utilitiesExpanded,
-                                            onDismissRequest = { utilitiesExpanded = false }
-                                        ) {
-                                            DropdownMenuItem(
-                                                text = { Text("Ekspor PDF") },
-                                                onClick = {
-                                                    utilitiesExpanded = false
-                                                    onGraphAction(GraphShellAction.EXPORT_PDF)
-                                                }
-                                            )
-                                            DropdownMenuItem(
-                                                text = { Text("Ekspor PNG") },
-                                                onClick = {
-                                                    utilitiesExpanded = false
-                                                    onGraphAction(GraphShellAction.EXPORT_PNG)
-                                                }
-                                            )
-                                            DropdownMenuItem(
-                                                text = { Text("Atur ulang graph") },
-                                                onClick = {
-                                                    utilitiesExpanded = false
-                                                    onGraphAction(GraphShellAction.RESET_VIEW)
-                                                }
-                                            )
-                                        }
-                                    }
-                                },
-                                label = { Text("Alat") }
-                            )
-                        }
+                        CompactToolsMenu(onGraphAction = onGraphAction, onNavigate = onNavigate)
                     }
                 }
             ) { innerPadding ->
@@ -468,15 +428,125 @@ private fun FamilyRootGlobalAppBar(
 }
 
 @Composable
-private fun GraphRailUtilityAction(label: String, onClick: () -> Unit) {
-    TextButton(
-        onClick = onClick,
-        modifier = Modifier.width(80.dp).height(40.dp)
-    ) {
-        Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+private fun RailToolsMenu(
+    onGraphAction: ((GraphShellAction) -> Unit)?,
+    onNavigate: (String) -> Unit
+) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    Box(contentAlignment = Alignment.Center) {
+        TextButton(
+            onClick = { expanded = true },
+            modifier = Modifier.width(80.dp).height(40.dp)
+        ) {
+            Text("Alat", style = MaterialTheme.typography.labelSmall, maxLines = 1)
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            ToolsMenuItems(
+                onGraphAction = onGraphAction,
+                onNavigate = onNavigate,
+                close = { expanded = false }
+            )
+        }
     }
 }
 
+@Composable
+private fun RowScope.CompactToolsMenu(
+    onGraphAction: ((GraphShellAction) -> Unit)?,
+    onNavigate: (String) -> Unit
+) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    NavigationBarItem(
+        selected = false,
+        onClick = { expanded = true },
+        icon = {
+            Box {
+                Text("\u22ef")
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    ToolsMenuItems(
+                        onGraphAction = onGraphAction,
+                        onNavigate = onNavigate,
+                        close = { expanded = false }
+                    )
+                }
+            }
+        },
+        label = { Text("Alat") }
+    )
+}
+
+@Composable
+private fun ColumnScope.ToolsMenuItems(
+    onGraphAction: ((GraphShellAction) -> Unit)?,
+    onNavigate: (String) -> Unit,
+    close: () -> Unit
+) {
+    if (onGraphAction != null) {
+        DropdownMenuItem(
+            text = { Text("Ekspor PDF") },
+            onClick = {
+                close()
+                onGraphAction(GraphShellAction.EXPORT_PDF)
+            }
+        )
+        DropdownMenuItem(
+            text = { Text("Ekspor PNG") },
+            onClick = {
+                close()
+                onGraphAction(GraphShellAction.EXPORT_PNG)
+            }
+        )
+        DropdownMenuItem(
+            text = { Text("Atur ulang graph") },
+            onClick = {
+                close()
+                onGraphAction(GraphShellAction.RESET_VIEW)
+            }
+        )
+        HorizontalDivider()
+    }
+    DropdownMenuItem(
+        text = { Text("Tentang aplikasi") },
+        onClick = {
+            close()
+            onNavigate(Routes.ABOUT)
+        }
+    )
+    DropdownMenuItem(
+        text = { Text("Petunjuk penggunaan") },
+        onClick = {
+            close()
+            onNavigate(Routes.HELP)
+        }
+    )
+    DropdownMenuItem(
+        text = {
+            Column {
+                Text("Versi aplikasi")
+                Text(
+                    applicationVersionLabel(BuildConfig.VERSION_NAME),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        onClick = {},
+        enabled = false
+    )
+    HorizontalDivider()
+    Text(
+        "\u00a9 sadar@studio 2026",
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+    )
+}
 @Composable
 private fun rememberNetworkAvailable(): Boolean {
     val context = LocalContext.current

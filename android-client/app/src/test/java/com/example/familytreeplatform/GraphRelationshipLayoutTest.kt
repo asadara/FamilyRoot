@@ -32,6 +32,31 @@ class GraphRelationshipLayoutTest {
         assertEquals(emptyList<String>(), findSiblingIds("center", emptyList(), people))
     }
 
+    @Test
+    fun `siblings without birth dates use stable record order without claiming an age order`() {
+        val undatedPeople = listOf(
+            person("first-recorded", "Pertama", "1990-01-01").copy(
+                birthDate = null,
+                createdAt = "2026-07-20T08:00:00Z"
+            ),
+            person("later-recorded", "Berikutnya", "1990-01-01").copy(
+                birthDate = null,
+                createdAt = "2026-07-20T09:00:00Z"
+            ),
+            person("center", "Tengah", "1995-01-01")
+        )
+        val relationships = listOf(
+            parentChild("parent", "center"),
+            parentChild("parent", "later-recorded"),
+            parentChild("parent", "first-recorded")
+        )
+
+        assertEquals(
+            listOf("first-recorded", "later-recorded"),
+            findSiblingIds("center", relationships, undatedPeople)
+        )
+    }
+
     private fun person(id: String, name: String, birthDate: String) = PersonListItem(
         personId = id,
         fullName = name,

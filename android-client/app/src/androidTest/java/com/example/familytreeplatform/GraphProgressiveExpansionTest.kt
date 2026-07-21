@@ -101,6 +101,17 @@ class GraphProgressiveExpansionTest {
         composeRule.onAllNodes(hasContentDescription("Dewi", substring = true)).assertCountEquals(1)
         composeRule.onAllNodes(hasContentDescription("Nara", substring = true)).assertCountEquals(1)
         assertTrue("Export snapshot must follow expanded workspace", "younger-child" in exportedIds)
+        val kakakX = composeRule.onNode(hasContentDescription("Kakak", substring = true))
+            .fetchSemanticsNode().boundsInRoot.left
+        val alyaX = composeRule.onNode(hasContentDescription("Alya", substring = true))
+            .fetchSemanticsNode().boundsInRoot.left
+        val adikX = composeRule.onNode(hasContentDescription("Adik", substring = true))
+            .fetchSemanticsNode().boundsInRoot.left
+        val dewiX = composeRule.onNode(hasContentDescription("Dewi", substring = true))
+            .fetchSemanticsNode().boundsInRoot.left
+        assertTrue("Kakak-Alya must remain an atomic couple", kakakX < alyaX)
+        assertTrue("Sibling family units must keep birth order", alyaX < adikX)
+        assertTrue("Adik-Dewi must remain an atomic couple", adikX < dewiX)
 
         composeRule.onNodeWithTag("lineage-children-younger")
             .performTouchInput { click(center) }

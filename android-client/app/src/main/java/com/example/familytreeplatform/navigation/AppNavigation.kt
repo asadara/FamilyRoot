@@ -41,6 +41,8 @@ import com.example.familytreeplatform.feature.persondetail.PersonDetailViewModel
 import com.example.familytreeplatform.feature.profile.ProfileScreen
 import com.example.familytreeplatform.feature.spacesettings.SpaceSettingsScreen
 import com.example.familytreeplatform.feature.spacesettings.SpaceSettingsViewModel
+import com.example.familytreeplatform.feature.support.AboutScreen
+import com.example.familytreeplatform.feature.support.HelpScreen
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.flowOf
 
@@ -53,6 +55,8 @@ object Routes {
     const val GRAPH = "graph"
     const val SPACE_SETTINGS = "space-settings"
     const val PROFILE = "profile"
+    const val ABOUT = "about"
+    const val HELP = "help"
     const val PERSON_DETAIL = "person/{personId}"
     fun personDetail(personId: String) = "person/$personId"
 }
@@ -64,6 +68,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
     val token by SessionStore.accessToken.collectAsState()
     val spaceId by SessionStore.activeSpaceId.collectAsState()
     val spaceName by SessionStore.activeSpaceName.collectAsState()
+    val spaceRole by SessionStore.activeSpaceRole.collectAsState()
     val userDisplayName by SessionStore.userDisplayName.collectAsState()
     val userEmail by SessionStore.userEmail.collectAsState()
     val userId by SessionStore.userId.collectAsState()
@@ -80,10 +85,14 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
     val pendingSyncCount by pendingSyncFlow.collectAsState(initial = 0)
     var requestedSearchPersonId by rememberSaveable { mutableStateOf<String?>(null) }
     val navigateTopLevel: (String) -> Unit = { route ->
-        navController.navigate(route) {
-            popUpTo(Routes.GRAPH) { saveState = true }
-            launchSingleTop = true
-            restoreState = true
+        if (route == Routes.ABOUT || route == Routes.HELP) {
+            navController.navigate(route) { launchSingleTop = true }
+        } else {
+            navController.navigate(route) {
+                popUpTo(Routes.GRAPH) { saveState = true }
+                launchSingleTop = true
+                restoreState = true
+            }
         }
     }
 
@@ -113,7 +122,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
         val selectedSpaceId = spaceId ?: return@LaunchedEffect
         repository.listSpaces().onSuccess { spaces ->
             spaces.firstOrNull { it.spaceId == selectedSpaceId }?.let { space ->
-                SessionStore.updateActiveSpaceName(space.name)
+                SessionStore.updateActiveSpace(space.name, space.role)
             }
         }
         repository.listPersons(selectedSpaceId)
@@ -186,6 +195,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
             ) { shellModifier ->
                 TreeGraphScreen(
                     viewModel = graphViewModel,
+                    canEditRelationships = spaceRole != null && spaceRole != "VIEWER",
                     onBack = { navigateTopLevel(Routes.PEOPLE) },
                     onOpenPerson = { navController.navigate(Routes.personDetail(it)) },
                     shellAction = graphShellAction,
@@ -299,6 +309,12 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                     modifier = shellModifier
                 )
             }
+        }
+        composable(Routes.ABOUT) {
+            AboutScreen(onBack = { navController.popBackStack() })
+        }
+        composable(Routes.HELP) {
+            HelpScreen(onBack = { navController.popBackStack() })
         }
         composable(
             route = Routes.PERSON_DETAIL,

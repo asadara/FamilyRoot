@@ -133,6 +133,7 @@ internal data class LineagePlacementRect(
     val top: Float get() = y
     val right: Float get() = x + width
     val bottom: Float get() = y + height
+    val centerX: Float get() = x + width / 2f
 
     fun shifted(dx: Float, dy: Float = 0f): LineagePlacementRect =
         copy(x = x + dx, y = y + dy)
@@ -161,27 +162,48 @@ internal fun planProgressivePlacements(
     fallbackY: Float
 ): Map<String, LineagePlacementRect> {
     if (basePositions.isEmpty() || visiblePersonIds.isEmpty()) return basePositions
-    val positions = linkedMapOf<String, LineagePlacementRect>().apply {
-        putAll(basePositions)
-    }
-    val missingPersonIds = visiblePersonIds
-        .filterNot { it in positions }
-        .toMutableSet()
-    if (missingPersonIds.isEmpty()) return positions
-
     val horizontalStep = tileWidth + siblingGap
     val partnershipStep = tileWidth + partnershipGap
     val verticalStep = tileHeight + rankGap
     val relationshipIndex = LineageRelationshipIndex.from(allRelationships)
-    val collisionIndex = PlacementCollisionIndex(tileWidth, tileHeight).apply {
-        positions.values.forEach(::add)
+    val visible = visiblePersonIds.toSet()
+    val visiblePartnerships = visibleRelationships.filter {
+        it.type == "SPOUSE" && it.fromPersonId in visible && it.toPersonId in visible
     }
+    val components = PartnershipComponents(visible, visiblePartnerships)
+    val units = components.personIdsByComponent.mapValues { (componentId, personIds) ->
+        buildAtomicPlacementUnit(
+            componentId = componentId,
+            personIds = personIds,
+            basePositions = basePositions,
+            partnerships = visiblePartnerships,
+            relationshipIndex = relationshipIndex,
+            tileWidth = tileWidth,
+            tileHeight = tileHeight,
+            partnershipStep = partnershipStep
+        )
+    }
+    val primaryUnitId = units.values
+        .filter { unit -> unit.personIds.any(basePositions::containsKey) }
+        .minWithOrNull(
+            compareBy<AtomicPlacementUnit> {
+                val y = it.baseOrigin?.y ?: Float.MAX_VALUE
+                kotlin.math.abs(y - fallbackY)
+            }.thenByDescending { unit -> unit.personIds.count(basePositions::containsKey) }
+                .thenBy { it.baseOrigin?.x ?: Float.MAX_VALUE }
+                .thenBy { it.id }
+        )?.id
+    val primaryCenterX = primaryUnitId?.let { units.getValue(it).proposedBounds().centerX }
+        ?: basePositions.values.minOf { it.x }
+    val placedOrigins = linkedMapOf<String, UnitOrigin>()
+    val collisionIndex = PlacementCollisionIndex(tileWidth, tileHeight)
 
-    fun findFreeRect(
-        proposed: LineagePlacementRect,
+    fun placeUnit(
+        unit: AtomicPlacementUnit,
+        proposed: UnitOrigin,
         preferredDirection: Int = 0
-    ): LineagePlacementRect {
-        val attempts = visiblePersonIds.size + basePositions.size + 8
+    ): UnitOrigin {
+        val attempts = visible.size + basePositions.size + 8
         repeat(attempts) { index ->
             val step = when {
                 index == 0 -> 0
@@ -190,112 +212,261 @@ internal fun planProgressivePlacements(
                 else -> -(index / 2)
             }
             val candidate = proposed.shifted(horizontalStep * step)
-            if (!collisionIndex.overlaps(candidate)) return candidate
+            if (!collisionIndex.overlaps(unit.boundsAt(candidate))) {
+                collisionIndex.add(unit.boundsAt(candidate))
+                placedOrigins[unit.id] = candidate
+                return candidate
+            }
         }
-        val rightEdge = positions.values.maxOf { it.right }
-        return LineagePlacementRect(
-            x = rightEdge + siblingGap,
-            y = proposed.y,
-            width = tileWidth,
-            height = tileHeight
+        val rightEdge = placedOrigins.entries.maxOfOrNull { (id, origin) ->
+            units.getValue(id).boundsAt(origin).right
+        } ?: proposed.x
+        return UnitOrigin(rightEdge + siblingGap - unit.minX, proposed.y).also {
+            collisionIndex.add(unit.boundsAt(it))
+            placedOrigins[unit.id] = it
+        }
+    }
+
+    units.values
+        .filter { it.baseOrigin != null }
+        .sortedWith(
+            compareByDescending<AtomicPlacementUnit> { it.id == primaryUnitId }
+                .thenBy { kotlin.math.abs((it.baseOrigin?.y ?: fallbackY) - fallbackY) }
+                .thenBy { it.baseOrigin?.y ?: fallbackY }
+                .thenBy { it.baseOrigin?.x ?: 0f }
+                .thenBy { it.id }
         )
-    }
+        .forEach { unit ->
+            val proposed = requireNotNull(unit.baseOrigin)
+            val preferredDirection = unit.proposedBounds().centerX.compareTo(primaryCenterX)
+            placeUnit(unit, proposed, preferredDirection)
+        }
 
-    fun addPerson(
-        personId: String,
-        proposed: LineagePlacementRect,
-        preferredDirection: Int = 0
-    ) {
-        val rect = findFreeRect(proposed, preferredDirection)
-        positions[personId] = rect
-        collisionIndex.add(rect)
-        missingPersonIds.remove(personId)
-    }
-
-    val relationshipsByPerson = buildMap<String, MutableList<ExportRelationship>> {
-        visibleRelationships.forEach { relationship ->
-            getOrPut(relationship.fromPersonId) { mutableListOf() }.add(relationship)
-            getOrPut(relationship.toPersonId) { mutableListOf() }.add(relationship)
+    val componentRelationships = visibleRelationships
+        .filter { it.type == "PARENT_CHILD" }
+        .mapNotNull { relationship ->
+            val fromComponent = components.componentByPersonId[relationship.fromPersonId]
+                ?: return@mapNotNull null
+            val toComponent = components.componentByPersonId[relationship.toPersonId]
+                ?: return@mapNotNull null
+            if (fromComponent == toComponent) null else ComponentRelationship(
+                relationship = relationship,
+                fromComponentId = fromComponent,
+                toComponentId = toComponent
+            )
+        }
+    val relationshipsByComponent = buildMap<String, MutableList<ComponentRelationship>> {
+        componentRelationships.forEach { relationship ->
+            getOrPut(relationship.fromComponentId) { mutableListOf() }.add(relationship)
+            getOrPut(relationship.toComponentId) { mutableListOf() }.add(relationship)
         }
     }
     val queue = ArrayDeque<String>().apply {
-        positions.entries
-            .sortedWith(
-                compareBy<Map.Entry<String, LineagePlacementRect>> { it.value.y }
-                    .thenBy { it.value.x }
-                    .thenBy { it.key }
-            )
-            .forEach { addLast(it.key) }
+        placedOrigins.keys.forEach(::addLast)
     }
     val processed = mutableSetOf<String>()
+    while (queue.isNotEmpty()) {
+        val knownComponentId = queue.removeFirst()
+        if (!processed.add(knownComponentId)) continue
+        val knownUnit = units.getValue(knownComponentId)
+        val knownOrigin = placedOrigins.getValue(knownComponentId)
+        relationshipsByComponent[knownComponentId]
+            .orEmpty()
+            .sortedBy { it.relationship.relationshipId }
+            .forEach { connection ->
+                val nextComponentId = if (connection.fromComponentId == knownComponentId) {
+                    connection.toComponentId
+                } else connection.fromComponentId
+                if (nextComponentId in placedOrigins) return@forEach
+                val nextUnit = units.getValue(nextComponentId)
+                val knownPersonId = if (connection.fromComponentId == knownComponentId) {
+                    connection.relationship.fromPersonId
+                } else connection.relationship.toPersonId
+                val nextPersonId = connection.relationship.otherPersonId(knownPersonId)
+                val knownRect = knownUnit.rectFor(knownPersonId, knownOrigin)
+                val nextRelative = nextUnit.relativeRects.getValue(nextPersonId)
+                val nextY = if (connection.fromComponentId == knownComponentId) {
+                    knownRect.y + verticalStep - nextRelative.y
+                } else {
+                    knownRect.y - verticalStep - nextRelative.y
+                }
+                val proposed = UnitOrigin(
+                    x = knownRect.centerX - nextRelative.centerX,
+                    y = nextY
+                )
+                val placed = placeUnit(nextUnit, proposed)
+                if (placedOrigins[nextComponentId] == placed) queue.addLast(nextComponentId)
+            }
+    }
 
+    units.values.filterNot { it.id in placedOrigins }.sortedBy { it.id }.forEach { unit ->
+        val rightEdge = placedOrigins.entries.maxOfOrNull { (id, origin) ->
+            units.getValue(id).boundsAt(origin).right
+        } ?: basePositions.values.maxOf { it.right }
+        placeUnit(unit, UnitOrigin(rightEdge + siblingGap - unit.minX, fallbackY))
+    }
+
+    return buildMap {
+        units.values.forEach { unit ->
+            val origin = placedOrigins.getValue(unit.id)
+            unit.personIds.forEach { personId -> put(personId, unit.rectFor(personId, origin)) }
+        }
+    }
+}
+
+private data class UnitOrigin(val x: Float, val y: Float) {
+    fun shifted(dx: Float): UnitOrigin = copy(x = x + dx)
+}
+
+private data class ComponentRelationship(
+    val relationship: ExportRelationship,
+    val fromComponentId: String,
+    val toComponentId: String
+)
+
+private data class AtomicPlacementUnit(
+    val id: String,
+    val personIds: Set<String>,
+    val relativeRects: Map<String, LineagePlacementRect>,
+    val baseOrigin: UnitOrigin?
+) {
+    val minX: Float = relativeRects.values.minOf { it.left }
+    private val minY: Float = relativeRects.values.minOf { it.top }
+    private val maxX: Float = relativeRects.values.maxOf { it.right }
+    private val maxY: Float = relativeRects.values.maxOf { it.bottom }
+
+    fun boundsAt(origin: UnitOrigin): LineagePlacementRect = LineagePlacementRect(
+        x = origin.x + minX,
+        y = origin.y + minY,
+        width = maxX - minX,
+        height = maxY - minY
+    )
+
+    fun proposedBounds(): LineagePlacementRect = boundsAt(baseOrigin ?: UnitOrigin(0f, 0f))
+
+    fun rectFor(personId: String, origin: UnitOrigin): LineagePlacementRect =
+        relativeRects.getValue(personId).shifted(origin.x, origin.y)
+}
+
+private fun buildAtomicPlacementUnit(
+    componentId: String,
+    personIds: Set<String>,
+    basePositions: Map<String, LineagePlacementRect>,
+    partnerships: List<ExportRelationship>,
+    relationshipIndex: LineageRelationshipIndex,
+    tileWidth: Float,
+    tileHeight: Float,
+    partnershipStep: Float
+): AtomicPlacementUnit {
+    val componentPartnerships = partnerships.filter {
+        it.fromPersonId in personIds && it.toPersonId in personIds
+    }
+    val baseMembers = personIds.filter(basePositions::containsKey)
+        .sortedWith(compareBy<String> { basePositions.getValue(it).x }.thenBy { it })
+    val anchorId = baseMembers.firstOrNull()
+        ?: personIds.maxWithOrNull(
+            compareBy<String> { personId ->
+                componentPartnerships.count {
+                    it.fromPersonId == personId || it.toPersonId == personId
+                }
+            }.thenByDescending { it }
+        )
+        ?: componentId
+    val anchorBase = basePositions[anchorId]
+    val relativeRects = linkedMapOf<String, LineagePlacementRect>()
+    if (anchorBase != null) {
+        baseMembers.forEach { personId ->
+            val rect = basePositions.getValue(personId)
+            relativeRects[personId] = LineagePlacementRect(
+                x = rect.x - anchorBase.x,
+                y = rect.y - anchorBase.y,
+                width = rect.width,
+                height = rect.height
+            )
+        }
+    } else {
+        relativeRects[anchorId] = LineagePlacementRect(0f, 0f, tileWidth, tileHeight)
+    }
+    val occupiedSlots = relativeRects.values.mapTo(mutableSetOf()) {
+        kotlin.math.round(it.x / partnershipStep).toInt()
+    }
+    val queue = ArrayDeque<String>().apply { addAll(relativeRects.keys) }
+    val processed = mutableSetOf<String>()
     while (queue.isNotEmpty()) {
         val knownPersonId = queue.removeFirst()
         if (!processed.add(knownPersonId)) continue
-        val knownRect = positions[knownPersonId] ?: continue
-        relationshipsByPerson[knownPersonId]
-            .orEmpty()
-            .sortedWith(
-                compareBy<ExportRelationship> { if (it.type == "SPOUSE") 0 else 1 }
-                    .thenBy {
-                        if (it.type == "SPOUSE") {
-                            partnershipHorizontalSlot(
-                                personId = knownPersonId,
-                                relationshipId = it.relationshipId,
-                                index = relationshipIndex
-                            )
-                        } else 0
-                    }
-                    .thenBy { it.relationshipId }
-            )
+        val knownRect = relativeRects.getValue(knownPersonId)
+        componentPartnerships
+            .filter { it.fromPersonId == knownPersonId || it.toPersonId == knownPersonId }
+            .sortedWith(partnershipChronologyComparator)
             .forEach { relationship ->
-                val personId = relationship.otherPersonId(knownPersonId)
-                if (personId !in missingPersonIds) return@forEach
-                val partnershipSlot = if (relationship.type == "SPOUSE") {
+                val partnerId = relationship.otherPersonId(knownPersonId)
+                if (partnerId in relativeRects) return@forEach
+                var slot = kotlin.math.round(knownRect.x / partnershipStep).toInt() +
                     partnershipHorizontalSlot(
                         personId = knownPersonId,
                         relationshipId = relationship.relationshipId,
                         index = relationshipIndex
                     )
-                } else 0
-                val proposed = when {
-                    relationship.type == "SPOUSE" -> LineagePlacementRect(
-                        x = knownRect.x + partnershipStep * partnershipSlot,
-                        y = knownRect.y,
-                        width = tileWidth,
-                        height = tileHeight
-                    )
-                    relationship.fromPersonId == personId -> LineagePlacementRect(
-                        x = knownRect.x,
-                        y = knownRect.y - verticalStep,
-                        width = tileWidth,
-                        height = tileHeight
-                    )
-                    else -> LineagePlacementRect(
-                        x = knownRect.x,
-                        y = knownRect.y + verticalStep,
-                        width = tileWidth,
-                        height = tileHeight
-                    )
-                }
-                addPerson(personId, proposed, partnershipSlot.compareTo(0))
-                queue.addLast(personId)
+                val direction = slot.compareTo(kotlin.math.round(knownRect.x / partnershipStep).toInt())
+                    .takeIf { it != 0 } ?: 1
+                while (slot in occupiedSlots) slot += direction
+                occupiedSlots += slot
+                relativeRects[partnerId] = LineagePlacementRect(
+                    x = slot * partnershipStep,
+                    y = knownRect.y,
+                    width = tileWidth,
+                    height = tileHeight
+                )
+                queue.addLast(partnerId)
             }
     }
-
-    missingPersonIds.toList().sorted().forEach { personId ->
-        val rightEdge = positions.values.maxOf { it.right }
-        addPerson(
-            personId = personId,
-            proposed = LineagePlacementRect(
-                x = rightEdge + siblingGap,
-                y = fallbackY,
-                width = tileWidth,
-                height = tileHeight
-            )
+    personIds.filterNot(relativeRects::containsKey).sorted().forEach { personId ->
+        var slot = (occupiedSlots.maxOrNull() ?: -1) + 1
+        while (slot in occupiedSlots) slot++
+        occupiedSlots += slot
+        relativeRects[personId] = LineagePlacementRect(
+            x = slot * partnershipStep,
+            y = 0f,
+            width = tileWidth,
+            height = tileHeight
         )
     }
-    return positions
+    return AtomicPlacementUnit(
+        id = componentId,
+        personIds = personIds,
+        relativeRects = relativeRects,
+        baseOrigin = anchorBase?.let { UnitOrigin(it.x, it.y) }
+    )
+}
+
+private class PartnershipComponents(
+    personIds: Set<String>,
+    partnerships: List<ExportRelationship>
+) {
+    private val parent = personIds.associateWith { it }.toMutableMap()
+
+    private fun find(personId: String): String {
+        val current = parent.getValue(personId)
+        if (current == personId) return personId
+        return find(current).also { parent[personId] = it }
+    }
+
+    private fun union(first: String, second: String) {
+        val firstRoot = find(first)
+        val secondRoot = find(second)
+        if (firstRoot == secondRoot) return
+        if (firstRoot < secondRoot) parent[secondRoot] = firstRoot else parent[firstRoot] = secondRoot
+    }
+
+    init {
+        partnerships.forEach { union(it.fromPersonId, it.toPersonId) }
+    }
+
+    val componentByPersonId: Map<String, String> = personIds.associateWith(::find)
+    val personIdsByComponent: Map<String, Set<String>> = componentByPersonId.entries
+        .groupBy({ it.value }, { it.key })
+        .mapValues { (_, ids) -> ids.toSet() }
 }
 
 private class PlacementCollisionIndex(

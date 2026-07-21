@@ -2,6 +2,7 @@ package com.example.familytreeplatform.export
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.familytreeplatform.GraphExportLine
+import com.example.familytreeplatform.GraphExportPlaceholder
 import com.example.familytreeplatform.GraphExportSnapshot
 import com.example.familytreeplatform.GraphExportTile
 import com.example.familytreeplatform.models.ExportRelationship
@@ -48,6 +49,15 @@ class FamilyGraphExporterTest {
             spouseLines = emptyList(),
             lineageLines = listOf(
                 GraphExportLine(210f, 202f, 210f, 300f, "PARENT_CHILD", "BIOLOGICAL")
+            ),
+            placeholders = listOf(
+                GraphExportPlaceholder(
+                    label = "Orang tua lain belum tercatat",
+                    x = 282f,
+                    y = 50f,
+                    width = 120f,
+                    height = 152f
+                )
             )
         )
 
@@ -55,6 +65,25 @@ class FamilyGraphExporterTest {
 
         assertEquals(0x89, bytes[0].toInt() and 0xff)
         assertTrue(bytes.size > 1_000)
+    }
+
+    @Test
+    fun progressiveAndAtomicPartnershipMarkersShareTheExportRingRenderer() {
+        val atomic = GraphExportLine(10f, 20f, 40f, 20f, "SPOUSE", null)
+        val progressive = GraphExportLine(60f, 20f, 90f, 20f, "SPOUSE", "DIVORCED")
+        val lineage = GraphExportLine(20f, 40f, 20f, 80f, "PARENT_CHILD", "BIOLOGICAL")
+        val snapshot = GraphExportSnapshot(
+            width = 100f,
+            height = 100f,
+            tiles = emptyList(),
+            spouseLines = listOf(atomic),
+            lineageLines = listOf(progressive, lineage)
+        )
+
+        assertEquals(
+            listOf(atomic, progressive),
+            FamilyGraphExporter.snapshotPartnershipLines(snapshot)
+        )
     }
 
     @Test
