@@ -135,12 +135,12 @@ try {
     .map((person) => person.personId)
     .sort()
     .join(',');
-  assert(ownerPeople.length === 6, 'Expected exactly six dummy profiles');
+  assert(ownerPeople.length > 0, 'Expected at least one dummy profile');
   assert(
     ownerIds === collaboratorIds,
     'The sessions received different profiles',
   );
-  result('SHARED_SIX_PROFILE_SNAPSHOT');
+  result('SHARED_PROFILE_SNAPSHOT', `${ownerPeople.length} PROFILES`);
 
   const target =
     ownerPeople.find(

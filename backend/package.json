@@ -14,6 +14,7 @@
     "start:prod": "node dist/main",
     "seed:dev": "ts-node -r tsconfig-paths/register src/dev/seed-dev.ts",
     "smoke:step7:cloud": "node scripts/step7-cloud-smoke.mjs",
+    "smoke:invitation:roles": "jest --config ./test/jest-e2e.json --runInBand test/invitation-collaboration.e2e-spec.ts",
     "migration:run": "typeorm-ts-node-commonjs migration:run -d src/database/data-source.ts",
     "migration:revert": "typeorm-ts-node-commonjs migration:revert -d src/database/data-source.ts",
     "migration:show": "typeorm-ts-node-commonjs migration:show -d src/database/data-source.ts",
