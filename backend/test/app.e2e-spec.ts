@@ -1,11 +1,19 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access */
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import {
+  INestApplication,
+  UnauthorizedException,
+  ValidationPipe,
+} from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { AppModule } from '../src/app.module';
 import { randomUUID } from 'node:crypto';
 import { OBJECT_STORAGE } from '../src/archive/storage/object-storage';
+import {
+  GOOGLE_ID_TOKEN_VERIFIER,
+  type GoogleIdentity,
+} from '../src/auth/google-id-token-verifier';
 
 describe('Phase 1 security contract (e2e)', () => {
   let app: INestApplication<App>;
@@ -20,6 +28,28 @@ describe('Phase 1 security contract (e2e)', () => {
   let spaceId: string;
   let personId: string;
   const storedObjects = new Map<string, Buffer>();
+  const googleNewUserToken = `google-new-${'x'.repeat(120)}`;
+  const googleLinkToken = `google-link-${'x'.repeat(120)}`;
+  const googleIdentities = new Map<string, GoogleIdentity>([
+    [
+      googleNewUserToken,
+      {
+        subject: 'google-subject-new-user',
+        email: 'new.user@gmail.com',
+        displayName: 'New Google User',
+        hostedDomain: null,
+      },
+    ],
+    [
+      googleLinkToken,
+      {
+        subject: 'google-subject-linked-user',
+        email: 'linked.user@gmail.com',
+        displayName: 'Linked Google User',
+        hostedDomain: null,
+      },
+    ],
+  ]);
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -37,6 +67,18 @@ describe('Phase 1 security contract (e2e)', () => {
         },
         createSignedReadUrl: (path: string) =>
           Promise.resolve(`https://storage.example.test/signed/${path}`),
+      })
+      .overrideProvider(GOOGLE_ID_TOKEN_VERIFIER)
+      .useValue({
+        verify: (idToken: string) => {
+          const identity = googleIdentities.get(idToken);
+          if (!identity) {
+            return Promise.reject(
+              new UnauthorizedException('Google ID token is invalid'),
+            );
+          }
+          return Promise.resolve(identity);
+        },
       })
       .compile();
     app = moduleFixture.createNestApplication();
@@ -177,6 +219,49 @@ describe('Phase 1 security contract (e2e)', () => {
       .post('/auth/refresh')
       .send({ refreshToken: loggedIn.body.refreshToken })
       .expect(401);
+  });
+
+  it('creates and safely links accounts through verified Google identities', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/auth/google')
+      .send({ idToken: googleNewUserToken })
+      .expect(200);
+    expect(created.body.user).toEqual(
+      expect.objectContaining({
+        email: 'new.user@gmail.com',
+        displayName: 'New Google User',
+      }),
+    );
+
+    await request(app.getHttpServer())
+      .post('/auth/google')
+      .send({ idToken: googleNewUserToken })
+      .expect(200)
+      .expect(({ body }) =>
+        expect(body.user.userId).toBe(created.body.user.userId),
+      );
+
+    const passwordAccount = await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({
+        email: 'linked.user@gmail.com',
+        displayName: 'Password User',
+        password: 'very-secure-linked-password',
+      })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/auth/google')
+      .send({ idToken: googleLinkToken })
+      .expect(200)
+      .expect(({ body }) =>
+        expect(body.user.userId).toBe(passwordAccount.body.user.userId),
+      );
+
+    await request(app.getHttpServer())
+      .post('/auth/google')
+      .send({ idToken: `invalid-${'x'.repeat(120)}` })
+      .expect(401)
+      .expect(({ body }) => expect(body.code).toBe('UNAUTHENTICATED'));
   });
 
   it('creates a Family Space and OWNER membership atomically', async () => {

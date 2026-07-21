@@ -47,6 +47,7 @@ import retrofit2.converter.gson.GsonConverterFactory
 import com.example.familytreeplatform.models.LoginRequest
 import com.example.familytreeplatform.models.RegisterRequest
 import com.example.familytreeplatform.models.AuthResponse
+import com.example.familytreeplatform.models.GoogleLoginRequest
 import com.example.familytreeplatform.models.FamilySpace
 import com.example.familytreeplatform.models.CreateSpaceRequest
 import com.example.familytreeplatform.models.CreateInvitationRequest
@@ -82,6 +83,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import com.example.familytreeplatform.feature.auth.GoogleCredentialClient
 
 enum class SyncBatchResult { COMPLETE, RETRY }
 
@@ -145,6 +147,10 @@ class PersonRepository(
         apiService.register(RegisterRequest(email, displayName, password))
     }
 
+    suspend fun loginWithGoogle(idToken: String): Result<AuthResponse> = apiResult {
+        apiService.googleLogin(GoogleLoginRequest(idToken))
+    }
+
     fun acceptSession(auth: AuthResponse) {
         SessionStore.saveSession(
             auth.accessToken,
@@ -174,6 +180,9 @@ class PersonRepository(
         } catch (_: Exception) {
             // Local logout must still succeed when the server is unavailable.
         } finally {
+            runCatching {
+                appContext?.let { GoogleCredentialClient(it).clearCredentialState() }
+            }
             SessionStore.clear()
         }
     }

@@ -7,6 +7,7 @@ import { Public } from './public.decorator';
 import { CurrentUser } from './auth-user.decorator';
 import type { AuthUser } from './auth-user.interface';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
+import { GoogleLoginDto } from './dto/google-login.dto';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -23,6 +24,13 @@ export class AuthController {
   @Post('login')
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto.email, dto.password);
+  }
+
+  @Public()
+  @HttpCode(200)
+  @Post('google')
+  google(@Body() dto: GoogleLoginDto) {
+    return this.authService.loginWithGoogle(dto.idToken);
   }
 
   @Public()

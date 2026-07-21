@@ -16,6 +16,10 @@ def pilotApiBaseUrl = providers.gradleProperty("familyTreePilotApiBaseUrl")
     .orElse(providers.environmentVariable("FAMILY_TREE_PILOT_API_BASE_URL"))
     .orElse("https://familyroot-api-pilot-441927816740.asia-southeast1.run.app/")
     .get()
+def googleWebClientId = providers.gradleProperty("familyTreeGoogleWebClientId")
+    .orElse(providers.environmentVariable("FAMILY_TREE_GOOGLE_WEB_CLIENT_ID"))
+    .orElse("")
+    .get()
 def configuredVersionCode = providers.gradleProperty("familyTreeVersionCode").orElse("1").get().toInteger()
 def configuredVersionName = providers.gradleProperty("familyTreeVersionName").orElse("1.0").get()
 def releaseStorePath = System.getenv("FAMILY_TREE_RELEASE_STORE_FILE")
@@ -35,6 +39,8 @@ android {
         targetSdk 34
         versionCode configuredVersionCode
         versionName configuredVersionName
+
+        buildConfigField "String", "GOOGLE_WEB_CLIENT_ID", "\"${googleWebClientId}\""
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -156,6 +162,11 @@ dependencies {
     kapt 'androidx.room:room-compiler:2.6.1'
     implementation 'androidx.work:work-runtime-ktx:2.9.0'
     implementation 'androidx.profileinstaller:profileinstaller:1.3.1'
+
+    // Google Sign-In through Android Credential Manager.
+    implementation 'androidx.credentials:credentials:1.3.0'
+    implementation 'androidx.credentials:credentials-play-services-auth:1.3.0'
+    implementation 'com.google.android.libraries.identity.googleid:googleid:1.1.1'
 }
 
 kapt {

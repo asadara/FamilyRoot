@@ -24,11 +24,11 @@
   role;
 - CI membangun container setelah lint, build, unit test, dan e2e test lulus.
 
-Google Sign-In tidak ditambahkan pada tahap ini. FamilyRoot tetap memakai autentikasi
-email/password, access JWT, dan rotating refresh token yang sudah diuji. Jika Google
-Sign-In dipilih nanti, Google ID token cukup diverifikasi pada endpoint pertukaran
-login; request sensitif berikutnya tetap memakai JWT FamilyRoot. Keputusan itu
-memerlukan client ID Android/web dan perubahan kontrak tersendiri.
+Google Sign-In kemudian ditambahkan dengan pola yang telah diputuskan: Credential
+Manager Android mengirim Google ID token ke endpoint pertukaran backend, lalu request
+berikutnya tetap memakai access JWT dan rotating refresh token TRêdhAH. Setup OAuth,
+migration identity, package/SHA-1, dan acceptance test berada di
+`GOOGLE_SIGN_IN_SETUP.md`.
 
 Identitas `Person` lintas Family Space juga tidak digabung. Isolasi tenant yang telah
 disepakati tetap berlaku sampai model consent, field sharing, pencabutan, dan audit

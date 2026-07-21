@@ -55,6 +55,15 @@ describe('environment validation', () => {
     ).toThrow('DB_POOL_MAX must not exceed 10');
   });
 
+  it('rejects malformed Google OAuth client IDs', () => {
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: 'development',
+        GOOGLE_OAUTH_CLIENT_ID: 'not-a-google-client',
+      }),
+    ).toThrow('GOOGLE_OAUTH_CLIENT_ID must be a Google Web client ID');
+  });
+
   it('requires server-side storage credentials in production', () => {
     expect(() =>
       validateEnvironment({

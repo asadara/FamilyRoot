@@ -37,6 +37,7 @@ import retrofit2.http.Path
 import com.example.familytreeplatform.models.LoginRequest
 import com.example.familytreeplatform.models.RegisterRequest
 import com.example.familytreeplatform.models.AuthResponse
+import com.example.familytreeplatform.models.GoogleLoginRequest
 import com.example.familytreeplatform.models.FamilySpace
 import com.example.familytreeplatform.models.CreateSpaceRequest
 import com.example.familytreeplatform.models.CreateInvitationRequest
@@ -61,6 +62,9 @@ interface ApiService {
 
     @POST("auth/register")
     suspend fun register(@Body request: RegisterRequest): Response<AuthResponse>
+
+    @POST("auth/google")
+    suspend fun googleLogin(@Body request: GoogleLoginRequest): Response<AuthResponse>
 
     @GET("spaces")
     suspend fun listSpaces(): Response<List<FamilySpace>>

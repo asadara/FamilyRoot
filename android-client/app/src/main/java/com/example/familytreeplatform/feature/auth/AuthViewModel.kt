@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.familytreeplatform.repository.PersonRepository
+import com.example.familytreeplatform.BuildConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -11,15 +12,18 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 enum class AuthMode { SIGN_IN, REGISTER }
+enum class AuthMethod { PASSWORD, GOOGLE }
 
 data class AuthUiState(
     val mode: AuthMode = AuthMode.SIGN_IN,
     val displayName: String = "",
     val email: String = "",
     val password: String = "",
-    val loading: Boolean = false,
+    val loadingMethod: AuthMethod? = null,
     val error: String? = null
 ) {
+    val loading: Boolean
+        get() = loadingMethod != null
     val emailLooksValid: Boolean
         get() = email.trim().let { value ->
             value.contains('@') && value.substringAfter('@').contains('.')
@@ -57,18 +61,56 @@ class AuthViewModel(private val repository: PersonRepository) : ViewModel() {
         authenticate(email, "Test123456!", displayName = null)
     }
 
+    fun beginGoogleSignIn(): Boolean {
+        if (_uiState.value.loading) return false
+        if (BuildConfig.GOOGLE_WEB_CLIENT_ID.isBlank()) {
+            _uiState.update { it.copy(error = "GOOGLE_NOT_CONFIGURED") }
+            return false
+        }
+        _uiState.update { it.copy(loadingMethod = AuthMethod.GOOGLE, error = null) }
+        return true
+    }
+
+    fun completeGoogleSignIn(credentialResult: Result<String>) {
+        val idToken = credentialResult.getOrElse { error ->
+            _uiState.update {
+                it.copy(
+                    loadingMethod = null,
+                    error = if (error is GoogleSignInCancelledException) null else error.message
+                )
+            }
+            return
+        }
+        viewModelScope.launch {
+            val result = repository.loginWithGoogle(idToken)
+            result.onSuccess {
+                repository.acceptSession(it)
+                repository.resumeOfflineSync()
+                _uiState.update { state -> state.copy(loadingMethod = null) }
+            }.onFailure { error ->
+                _uiState.update { it.copy(loadingMethod = null, error = error.message) }
+            }
+        }
+    }
+
+    fun cancelPendingGoogleSignIn() {
+        _uiState.update {
+            if (it.loadingMethod == AuthMethod.GOOGLE) it.copy(loadingMethod = null) else it
+        }
+    }
+
     private fun authenticate(email: String, password: String, displayName: String?) {
         if (_uiState.value.loading) return
         viewModelScope.launch {
-            _uiState.update { it.copy(loading = true, error = null) }
+            _uiState.update { it.copy(loadingMethod = AuthMethod.PASSWORD, error = null) }
             val result = if (displayName != null) repository.register(email, displayName, password)
             else repository.login(email, password)
             result.onSuccess {
                 repository.acceptSession(it)
                 repository.resumeOfflineSync()
-                _uiState.update { state -> state.copy(loading = false) }
+                _uiState.update { state -> state.copy(loadingMethod = null) }
             }.onFailure { error ->
-                _uiState.update { it.copy(loading = false, error = error.message) }
+                _uiState.update { it.copy(loadingMethod = null, error = error.message) }
             }
         }
     }

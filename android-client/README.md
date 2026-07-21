@@ -26,6 +26,17 @@ Cloud Run tidak dapat tertimpa oleh default debug lokal:
 .\gradlew.bat assemblePilot
 ```
 
+Google Sign-In membutuhkan Web OAuth client ID yang sama dengan backend:
+
+```powershell
+$env:FAMILY_TREE_GOOGLE_WEB_CLIENT_ID='<Web application Client ID>'
+.\gradlew.bat assemblePilot
+Remove-Item Env:FAMILY_TREE_GOOGLE_WEB_CLIENT_ID
+```
+
+Panduan Google Auth Platform, package/SHA-1 pilot, migration, dan acceptance test
+berada di `../docs/GOOGLE_SIGN_IN_SETUP.md`.
+
 Release bundle dibangun dengan R8, resource shrinking, dan Baseline Profile:
 
 ```powershell

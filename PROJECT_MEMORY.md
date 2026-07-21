@@ -261,6 +261,7 @@ Aturan graph yang sudah dikoreksi dan tidak boleh diregresikan:
 Tabel aktif meliputi:
 
 - `users` — akun login;
+- `user_google_identities` — Google subject satu-ke-satu untuk akun login;
 - `family_spaces` — ruang keluarga;
 - `space_members` — membership dan role;
 - `space_invitations` — token undangan single-use dan expiry;
@@ -278,15 +279,18 @@ Tabel aktif meliputi:
 
 Alur auth saat ini:
 
-1. pengguna register/login dengan email-password pada fondasi development;
-2. backend mengeluarkan access token singkat dan opaque refresh token;
+1. pengguna dapat register/login dengan email-password atau Google Sign-In;
+2. Google ID token hanya ditukar pada backend setelah signature, audience, issuer,
+   expiry, email verification, dan subject diverifikasi; backend lalu mengeluarkan
+   access token singkat dan opaque refresh token;
 3. Android menyimpan access token hanya di memory;
 4. refresh token dan user ID disimpan sebagai ciphertext AES-256-GCM;
 5. key enkripsi dibuat non-exportable di Android Keystore;
 6. refresh token berotasi; replay dapat merevoke satu token family;
 7. `activeSpaceId` disimpan di private SharedPreferences;
 8. process restart dapat memulihkan session melalui refresh flow;
-9. logout merevoke session server dan membersihkan session lokal.
+9. logout merevoke session server, membersihkan state Credential Manager, dan
+   membersihkan session lokal.
 
 Android system backup dan device-transfer backup dinonaktifkan. HTTP logging hanya
 `BASIC` pada debug dan tidak membawa body/header sensitif; release logging dimatikan.

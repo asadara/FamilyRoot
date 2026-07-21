@@ -22,6 +22,7 @@ class AuthScreenTest {
         }
 
         composeRule.onNodeWithTag("authSubmit").assertIsDisplayed()
+        composeRule.onNodeWithTag("googleAuthSubmit").assertIsDisplayed()
         composeRule.onNodeWithText("Email").assertIsDisplayed()
         composeRule.onNodeWithText("Kata sandi").assertIsDisplayed()
         composeRule.onNodeWithText("Buat akun").assertIsDisplayed()

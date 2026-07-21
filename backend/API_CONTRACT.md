@@ -12,6 +12,8 @@
 
 - `POST /auth/register` — public; accepts `email`, `displayName`, and a password of at least 10 characters.
 - `POST /auth/login` — public; accepts `email` and `password`.
+- `POST /auth/google` — public; accepts a Google `idToken`, verifies it against
+  `GOOGLE_OAUTH_CLIENT_ID`, and creates or resumes the matching account.
 - `POST /auth/refresh` — public; accepts the opaque `refreshToken`, rotates it, and returns a new access/refresh pair.
 - `POST /auth/logout` — public; revokes the refresh-token family and returns `204`.
 - `GET /auth/me` — requires `Authorization: Bearer <accessToken>`.
@@ -19,6 +21,10 @@
 - Access tokens expire after one hour; refresh sessions expire after 30 days. Only SHA-256 token digests are stored server-side.
 - Refresh tokens are single-use. Reuse of a rotated token revokes the active token family and returns `401`.
 - `JWT_SECRET` is mandatory in production.
+- Google Sign-In stores the stable Google `sub` separately from mutable email data.
+  Gmail/Workspace identities may safely link to an existing matching password
+  account; other third-party-email Google accounts require an explicit account-link
+  flow when a matching password account already exists.
 - The legacy `x-user-id` header is not accepted as authentication.
 
 ## Space roles

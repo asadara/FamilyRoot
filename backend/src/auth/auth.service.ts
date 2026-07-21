@@ -1,5 +1,6 @@
 import {
   ConflictException,
+  Inject,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -11,6 +12,12 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { UserEntity } from '../users/user.entity';
 import { RegisterDto } from './dto/register.dto';
 import { RefreshSessionEntity } from './refresh-session.entity';
+import {
+  GOOGLE_ID_TOKEN_VERIFIER,
+  type GoogleIdTokenVerifierContract,
+  type GoogleIdentity,
+} from './google-id-token-verifier';
+import { GoogleIdentityEntity } from './google-identity.entity';
 
 const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -31,6 +38,8 @@ export class AuthService {
     @InjectRepository(UserEntity)
     private readonly usersRepo: Repository<UserEntity>,
     private readonly jwtService: JwtService,
+    @Inject(GOOGLE_ID_TOKEN_VERIFIER)
+    private readonly googleIdTokenVerifier: GoogleIdTokenVerifierContract,
   ) {}
 
   async register(dto: RegisterDto) {
@@ -60,6 +69,66 @@ export class AuthService {
       throw new UnauthorizedException('Email or password is incorrect');
     }
     return this.issueToken(user);
+  }
+
+  async loginWithGoogle(idToken: string) {
+    const identity = await this.googleIdTokenVerifier.verify(idToken);
+    return this.usersRepo.manager.transaction(async (manager) => {
+      const users = manager.getRepository(UserEntity);
+      const googleIdentities = manager.getRepository(GoogleIdentityEntity);
+      const linkedIdentity = await googleIdentities.findOne({
+        where: { googleSubject: identity.subject },
+      });
+      let user = linkedIdentity
+        ? await users.findOne({ where: { userId: linkedIdentity.userId } })
+        : null;
+
+      if (!user) {
+        user = await users.findOne({ where: { email: identity.email } });
+        if (user) {
+          if (!this.canSafelyLinkGoogleIdentity(identity)) {
+            throw new ConflictException(
+              'Sign in with the existing password before linking this Google account',
+            );
+          }
+          const existingIdentity = await googleIdentities.findOne({
+            where: { userId: user.userId },
+          });
+          if (
+            existingIdentity &&
+            existingIdentity.googleSubject !== identity.subject
+          ) {
+            throw new ConflictException(
+              'Email is already linked to another Google account',
+            );
+          }
+        } else {
+          user = await users.save(
+            users.create({
+              email: identity.email,
+              phone: null,
+              displayName: identity.displayName,
+              passwordHash: null,
+            }),
+          );
+        }
+        await googleIdentities.save(
+          googleIdentities.create({
+            googleSubject: identity.subject,
+            userId: user.userId,
+            emailAtLink: identity.email,
+          }),
+        );
+      }
+
+      return this.createSessionResponse(manager, user);
+    });
+  }
+
+  private canSafelyLinkGoogleIdentity(identity: GoogleIdentity) {
+    return (
+      identity.email.endsWith('@gmail.com') || identity.hostedDomain !== null
+    );
   }
 
   private refreshTokenHash(token: string) {

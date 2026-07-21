@@ -2,6 +2,7 @@ package com.example.familytreeplatform.models
 
 data class LoginRequest(val email: String, val password: String)
 data class RegisterRequest(val email: String, val displayName: String, val password: String)
+data class GoogleLoginRequest(val idToken: String)
 data class AuthUser(val userId: String, val email: String?, val displayName: String)
 data class AuthResponse(
     val accessToken: String,

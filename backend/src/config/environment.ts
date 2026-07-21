@@ -73,6 +73,15 @@ export function validateEnvironment(
     );
   }
 
+  if (
+    environment.GOOGLE_OAUTH_CLIENT_ID &&
+    !/^[0-9]+-[a-z0-9-]+\.apps\.googleusercontent\.com$/i.test(
+      environment.GOOGLE_OAUTH_CLIENT_ID.trim(),
+    )
+  ) {
+    throw new Error('GOOGLE_OAUTH_CLIENT_ID must be a Google Web client ID');
+  }
+
   const poolMax = readPositiveInteger(
     environment.DB_POOL_MAX,
     5,

@@ -6,10 +6,19 @@ import { UserEntity } from '../users/user.entity';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { RefreshSessionEntity } from './refresh-session.entity';
+import {
+  GOOGLE_ID_TOKEN_VERIFIER,
+  GoogleIdTokenVerifier,
+} from './google-id-token-verifier';
+import { GoogleIdentityEntity } from './google-identity.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([UserEntity, RefreshSessionEntity]),
+    TypeOrmModule.forFeature([
+      UserEntity,
+      RefreshSessionEntity,
+      GoogleIdentityEntity,
+    ]),
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => {
@@ -25,7 +34,14 @@ import { RefreshSessionEntity } from './refresh-session.entity';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService],
+  providers: [
+    AuthService,
+    GoogleIdTokenVerifier,
+    {
+      provide: GOOGLE_ID_TOKEN_VERIFIER,
+      useExisting: GoogleIdTokenVerifier,
+    },
+  ],
   exports: [JwtModule],
 })
 export class AuthModule {}

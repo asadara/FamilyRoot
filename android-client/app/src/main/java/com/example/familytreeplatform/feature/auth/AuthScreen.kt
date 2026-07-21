@@ -24,6 +24,8 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -31,7 +33,10 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -39,15 +44,37 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.familytreeplatform.BuildConfig
+import com.example.familytreeplatform.R
 import com.example.familytreeplatform.ui.branding.TredhahBrand
 import com.example.familytreeplatform.ui.branding.TredhahLogo
+import kotlinx.coroutines.launch
 
 @Composable
 fun AuthScreen(viewModel: AuthViewModel, modifier: Modifier = Modifier) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val googleCredentialClient = remember(context) { GoogleCredentialClient(context) }
+    val coroutineScope = rememberCoroutineScope()
+    val onGoogleClick: () -> Unit = {
+        if (viewModel.beginGoogleSignIn()) {
+            coroutineScope.launch {
+                viewModel.completeGoogleSignIn(
+                    runCatching {
+                        googleCredentialClient.getIdToken(BuildConfig.GOOGLE_WEB_CLIENT_ID)
+                    }
+                )
+            }
+        }
+    }
+    DisposableEffect(viewModel) {
+        onDispose(viewModel::cancelPendingGoogleSignIn)
+    }
     BoxWithConstraints(
         modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
     ) {
@@ -66,7 +93,12 @@ fun AuthScreen(viewModel: AuthViewModel, modifier: Modifier = Modifier) {
                         modifier = Modifier.fillMaxWidth().widthIn(max = 980.dp)
                     ) {
                         WelcomePanel(Modifier.weight(0.9f))
-                        AuthForm(state, viewModel, Modifier.weight(1.1f))
+                        AuthForm(
+                            state,
+                            viewModel,
+                            onGoogleClick = onGoogleClick,
+                            modifier = Modifier.weight(1.1f)
+                        )
                     }
                 } else {
                     Column(
@@ -74,7 +106,11 @@ fun AuthScreen(viewModel: AuthViewModel, modifier: Modifier = Modifier) {
                         modifier = Modifier.fillMaxWidth().widthIn(max = 520.dp)
                     ) {
                         CompactWordmark()
-                        AuthForm(state, viewModel)
+                        AuthForm(
+                            state,
+                            viewModel,
+                            onGoogleClick = onGoogleClick
+                        )
                     }
                 }
             }
@@ -129,7 +165,12 @@ private fun CompactWordmark() {
 }
 
 @Composable
-private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, modifier: Modifier = Modifier) {
+private fun AuthForm(
+    state: AuthUiState,
+    viewModel: AuthViewModel,
+    onGoogleClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     Card(
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -148,6 +189,21 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, modifier: Mod
                 modifier = Modifier.padding(top = 4.dp)
             )
             AuthModeSelector(state.mode, viewModel::setMode)
+            GoogleAuthButton(
+                mode = state.mode,
+                loading = state.loadingMethod == AuthMethod.GOOGLE,
+                enabled = !state.loading && BuildConfig.GOOGLE_WEB_CLIENT_ID.isNotBlank(),
+                onClick = onGoogleClick
+            )
+            if (BuildConfig.GOOGLE_WEB_CLIENT_ID.isBlank()) {
+                Text(
+                    "Masuk dengan Google belum dikonfigurasi untuk build ini.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
+            }
+            AuthDivider()
             if (state.mode == AuthMode.REGISTER) {
                 OutlinedTextField(
                     value = state.displayName,
@@ -197,12 +253,14 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, modifier: Mod
                 onClick = viewModel::submit,
                 modifier = Modifier.fillMaxWidth().padding(top = 16.dp).testTag("authSubmit")
             ) {
-                if (state.loading) CircularProgressIndicator()
+                if (state.loadingMethod == AuthMethod.PASSWORD) {
+                    CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                }
                 else Text(if (state.mode == AuthMode.SIGN_IN) "Masuk" else "Buat akun")
             }
             Text(
                 if (state.mode == AuthMode.REGISTER) {
-                    "Akun dibuat dengan email dan kata sandi. Masuk dengan Google belum tersedia pada versi pilot."
+                    "Google akan membuat akun baru secara otomatis bila email belum terdaftar."
                 } else {
                     "Dengan melanjutkan, Anda bertanggung jawab atas kontribusi dan validasi informasi yang dibagikan."
                 },
@@ -212,6 +270,51 @@ private fun AuthForm(state: AuthUiState, viewModel: AuthViewModel, modifier: Mod
             )
             if (BuildConfig.DEBUG) DemoAccounts(state.loading, viewModel::signInDemo)
         }
+    }
+}
+
+@Composable
+private fun GoogleAuthButton(
+    mode: AuthMode,
+    loading: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit
+) {
+    OutlinedButton(
+        enabled = enabled,
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(50.dp)
+            .padding(top = 10.dp)
+            .testTag("googleAuthSubmit")
+    ) {
+        if (loading) {
+            CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+        } else {
+            Icon(
+                painter = painterResource(R.drawable.google_g),
+                contentDescription = null,
+                tint = Color.Unspecified,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(Modifier.size(10.dp))
+            Text(if (mode == AuthMode.SIGN_IN) "Masuk dengan Google" else "Daftar dengan Google")
+        }
+    }
+}
+
+@Composable
+private fun AuthDivider() {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 16.dp)
+    ) {
+        HorizontalDivider(Modifier.weight(1f))
+        Text("atau gunakan email", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        HorizontalDivider(Modifier.weight(1f))
     }
 }
 
@@ -260,6 +363,13 @@ private fun DemoButton(label: String, email: String, loading: Boolean, onDemo: (
 internal fun authErrorMessage(message: String?): String {
     val value = message.orEmpty()
     return when {
+        value.contains("GOOGLE_NOT_CONFIGURED", ignoreCase = true) ->
+            "Masuk dengan Google belum dikonfigurasi untuk aplikasi ini."
+        value.contains("GOOGLE_CREDENTIAL", ignoreCase = true) ->
+            "Akun Google belum dapat dibuka. Periksa Google Play Services lalu coba kembali."
+        value.contains("Google", ignoreCase = true) &&
+            (value.contains("401") || value.contains("UNAUTHENTICATED", ignoreCase = true)) ->
+            "Akun Google tidak dapat diverifikasi. Pilih akun lalu coba kembali."
         value.contains("401") || value.contains("UNAUTHENTICATED", ignoreCase = true) ||
             (!value.contains("400") && (value.contains("credential", ignoreCase = true) ||
                 value.contains("password", ignoreCase = true))) ->

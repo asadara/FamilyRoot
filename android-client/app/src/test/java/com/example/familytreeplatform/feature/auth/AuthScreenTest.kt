@@ -32,5 +32,7 @@ class AuthScreenTest {
         assertTrue(authErrorMessage("HTTP 401 invalid credentials").contains("tidak sesuai"))
         assertTrue(authErrorMessage("HTTP 400 VALIDATION_ERROR: password is too short").contains("Periksa"))
         assertTrue(authErrorMessage("HTTP 500 INTERNAL_ERROR: database unavailable").contains("Server sedang"))
+        assertTrue(authErrorMessage("GOOGLE_CREDENTIAL_UNAVAILABLE").contains("Google Play Services"))
+        assertTrue(authErrorMessage("HTTP 401 UNAUTHENTICATED: Google ID token is invalid").contains("Google tidak dapat diverifikasi"))
     }
 }

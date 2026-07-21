@@ -41,10 +41,14 @@ E2E tests should use a disposable database through `DB_DATABASE`, never `dev.sql
 
 ## Authentication
 
-Register or sign in through `/auth/register` and `/auth/login`, then send:
+Register or sign in through `/auth/register`, `/auth/login`, or the verified Google
+ID-token exchange at `/auth/google`, then send:
 
 ```http
 Authorization: Bearer <accessToken>
 ```
 
 The legacy `x-user-id` mechanism is no longer accepted.
+
+Google Sign-In setup and the required migration are documented in
+[`../docs/GOOGLE_SIGN_IN_SETUP.md`](../docs/GOOGLE_SIGN_IN_SETUP.md).
