@@ -50,6 +50,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -67,6 +68,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.SubcomposeAsyncImage
 import com.example.familytreeplatform.models.ExportRelationship
 import com.example.familytreeplatform.models.PersonListItem
 import com.example.familytreeplatform.models.RelationsResponse
@@ -286,6 +289,7 @@ fun GraphScreen(
     selectedPersonId: String?,
     inspectedPersonId: String? = null,
     persons: List<PersonListItem>,
+    profilePhotoUrls: Map<String, String> = emptyMap(),
     relations: RelationsResponse?,
     allRelationships: List<ExportRelationship>,
     explorationHistory: List<String> = emptyList(),
@@ -330,12 +334,12 @@ fun GraphScreen(
         relationshipPath?.edges?.map { it.relationshipId }?.toSet().orEmpty()
     }
 
-    val tileW = 120.dp
-    val tileH = 152.dp
-    val spouseGapX = 28.dp
-    val siblingGapX = 28.dp
-    val rankGapY = 64.dp
-    val margin = 88.dp
+    val tileW = 112.dp
+    val tileH = 136.dp
+    val spouseGapX = 24.dp
+    val siblingGapX = 24.dp
+    val rankGapY = 56.dp
+    val margin = 80.dp
 
     var childrenCollapsed by rememberSaveable(centerPersonId) { mutableStateOf(false) }
     var parentsCollapsed by rememberSaveable(centerPersonId) { mutableStateOf(false) }
@@ -1110,6 +1114,7 @@ fun GraphScreen(
                     if (person != null) {
                         PersonGraphCard(
                             person = person,
+                            profilePhotoUrl = profilePhotoUrls[tile.id],
                             selected = tile.id == selectedPersonId,
                             highlighted = showRelationshipPathInGraph && tile.id in pathPersonIds,
                             onActivate = {
@@ -1697,6 +1702,7 @@ private fun ExplorationBreadcrumb(
 @Composable
 private fun PersonGraphCard(
     person: PersonListItem,
+    profilePhotoUrl: String?,
     selected: Boolean,
     highlighted: Boolean,
     onActivate: () -> Unit,
@@ -1746,26 +1752,27 @@ private fun PersonGraphCard(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier.fillMaxSize().padding(12.dp)
+            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 8.dp)
         ) {
-            FallbackAvatar(
+            ProfileAvatar(
+                photoUrl = profilePhotoUrl,
                 gender = person.gender,
                 muted = deceased,
-                modifier = Modifier.size(56.dp)
+                modifier = Modifier.size(48.dp)
             )
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(7.dp))
             Text(
                 text = shortName,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
             age?.let {
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = "$it tahun",
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelSmall,
                     color = contentColor.copy(alpha = 0.76f)
                 )
             }
@@ -2948,6 +2955,31 @@ private fun preprocessTree(
                 spouseId = spouseId,
                 spouseLabel = spouseId?.let(displayName)
             )
+        }
+    )
+}
+
+@Composable
+private fun ProfileAvatar(
+    photoUrl: String?,
+    gender: String?,
+    muted: Boolean,
+    modifier: Modifier = Modifier
+) {
+    if (photoUrl.isNullOrBlank()) {
+        FallbackAvatar(gender = gender, muted = muted, modifier = modifier)
+        return
+    }
+    SubcomposeAsyncImage(
+        model = photoUrl,
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        modifier = modifier.clip(CircleShape),
+        loading = {
+            FallbackAvatar(gender = gender, muted = muted, modifier = Modifier.fillMaxSize())
+        },
+        error = {
+            FallbackAvatar(gender = gender, muted = muted, modifier = Modifier.fillMaxSize())
         }
     )
 }

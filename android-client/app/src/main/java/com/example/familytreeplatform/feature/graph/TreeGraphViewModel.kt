@@ -29,6 +29,7 @@ data class TreeGraphUiState(
     val selectedPersonId: String? = null,
     val inspectedPersonId: String? = null,
     val persons: List<PersonListItem> = emptyList(),
+    val profilePhotoUrls: Map<String, String> = emptyMap(),
     val relations: RelationsResponse? = null,
     val relationships: List<ExportRelationship> = emptyList(),
     val explorationHistory: List<String> = emptyList(),
@@ -77,6 +78,7 @@ class TreeGraphViewModel(
             _uiState.update { it.copy(loading = true, error = null) }
             val peopleResult = repository.listPersons(spaceId)
             val relationshipsResult = repository.listRelationships(spaceId)
+            val profilePhotosResult = repository.listProfilePhotos(spaceId)
             val people = peopleResult.getOrNull().orEmpty()
             val relationships = relationshipsResult.getOrNull().orEmpty()
                 .map(RelationItem::toExportRelationship)
@@ -123,6 +125,9 @@ class TreeGraphViewModel(
                         center?.let(::listOf).orEmpty()
                     },
                     persons = people,
+                    profilePhotoUrls = profilePhotosResult.getOrNull()
+                        ?.associate { it.personId to it.url }
+                        ?: it.profilePhotoUrls,
                     relationships = relationships,
                     relations = centerRelations,
                     loading = false

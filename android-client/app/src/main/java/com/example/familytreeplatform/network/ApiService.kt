@@ -20,6 +20,7 @@ import com.example.familytreeplatform.models.ExportSpaceResponse
 import com.example.familytreeplatform.models.DuplicateGroup
 import com.example.familytreeplatform.models.MediaItem
 import com.example.familytreeplatform.models.MediaRequest
+import com.example.familytreeplatform.models.ProfilePhotoItem
 import com.example.familytreeplatform.models.MergePersonsRequest
 import com.example.familytreeplatform.models.ProposalItem
 import com.example.familytreeplatform.models.ProposalRequest
@@ -35,6 +36,10 @@ import retrofit2.http.GET
 import retrofit2.http.Query
 import retrofit2.http.PATCH
 import retrofit2.http.Path
+import retrofit2.http.Multipart
+import retrofit2.http.Part
+import okhttp3.MultipartBody
+import okhttp3.RequestBody
 import com.example.familytreeplatform.models.LoginRequest
 import com.example.familytreeplatform.models.RegisterRequest
 import com.example.familytreeplatform.models.AuthResponse
@@ -117,6 +122,20 @@ interface ApiService {
         @Path("personId") personId: String,
         @Body request: MediaRequest
     ): Response<MediaItem>
+
+    @Multipart
+    @POST("persons/{personId}/media/upload")
+    suspend fun uploadProfilePhoto(
+        @Path("personId") personId: String,
+        @Query("spaceId") spaceId: String,
+        @Part file: MultipartBody.Part,
+        @Part("label") label: RequestBody
+    ): Response<MediaItem>
+
+    @GET("spaces/{spaceId}/profile-photos")
+    suspend fun listProfilePhotos(
+        @Path("spaceId") spaceId: String
+    ): Response<List<ProfilePhotoItem>>
 
     @GET("proposals")
     suspend fun listProposals(@Query("spaceId") spaceId: String): Response<List<ProposalItem>>

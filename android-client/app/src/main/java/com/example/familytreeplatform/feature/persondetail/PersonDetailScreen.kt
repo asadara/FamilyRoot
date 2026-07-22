@@ -1,5 +1,7 @@
 package com.example.familytreeplatform.feature.persondetail
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -52,6 +54,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -67,12 +71,14 @@ import com.example.familytreeplatform.models.PersonListItem
 import com.example.familytreeplatform.models.RelationsResponse
 import com.example.familytreeplatform.models.RelationItem
 import com.example.familytreeplatform.models.SourceItem
+import coil.compose.SubcomposeAsyncImage
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun PersonDetailScreen(
     viewModel: PersonDetailViewModel,
     onBack: () -> Unit,
+    canEditProfile: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -103,6 +109,11 @@ fun PersonDetailScreen(
     var relationQuery by rememberSaveable(person.personId) { mutableStateOf("") }
     var pendingRelationshipDelete by rememberSaveable(person.personId) { mutableStateOf<String?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val profilePhotoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let(viewModel::uploadProfilePhoto)
+    }
 
     var overviewExpanded by rememberSaveable(person.personId) { mutableStateOf(true) }
     var syncExpanded by rememberSaveable(person.personId) { mutableStateOf(false) }
@@ -168,7 +179,15 @@ fun PersonDetailScreen(
                     Text("‹  Kembali ke workspace")
                 }
             }
-            item { PersonProfileHero(person = person) }
+            item {
+                PersonProfileHero(
+                    person = person,
+                    profilePhotoUrl = state.profilePhotoUrl,
+                    canEditProfile = canEditProfile,
+                    updating = state.updating,
+                    onPickPhoto = { profilePhotoPicker.launch("image/*") }
+                )
+            }
             state.message?.let { message ->
                 item { ProfileFeedback(message = personMessage(message), error = false) }
             }
@@ -246,7 +265,7 @@ fun PersonDetailScreen(
                     onToggle = { mediaExpanded = !mediaExpanded }
                 ) {
                     MediaSection(
-                        media = state.media,
+                        media = state.media.filterNot { it.uri.startsWith("object://") },
                         label = mediaLabel,
                         onLabelChange = { mediaLabel = it },
                         uri = mediaUri,
@@ -329,7 +348,13 @@ fun PersonDetailScreen(
 }
 
 @Composable
-private fun PersonProfileHero(person: PersonListItem) {
+private fun PersonProfileHero(
+    person: PersonListItem,
+    profilePhotoUrl: String?,
+    canEditProfile: Boolean,
+    updating: Boolean,
+    onPickPhoto: () -> Unit
+) {
     val deceased = person.lifeStatus == "DECEASED"
     val avatarColor = if (deceased) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary
     val contentColor = if (deceased) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onPrimaryContainer
@@ -353,12 +378,18 @@ private fun PersonProfileHero(person: PersonListItem) {
             val compact = maxWidth < 480.dp
             if (compact) {
                 Column {
-                    PersonHeroIdentity(person, avatarColor, contentColor)
+                    PersonHeroIdentity(
+                        person, avatarColor, contentColor, profilePhotoUrl,
+                        canEditProfile, updating, onPickPhoto
+                    )
                     PersonHeroFacts(person, Modifier.fillMaxWidth().padding(top = 16.dp))
                 }
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    PersonHeroIdentity(person, avatarColor, contentColor, Modifier.weight(1f))
+                    PersonHeroIdentity(
+                        person, avatarColor, contentColor, profilePhotoUrl,
+                        canEditProfile, updating, onPickPhoto, Modifier.weight(1f)
+                    )
                     PersonHeroFacts(person, Modifier.widthIn(min = 300.dp))
                 }
             }
@@ -371,19 +402,14 @@ private fun PersonHeroIdentity(
     person: PersonListItem,
     avatarColor: androidx.compose.ui.graphics.Color,
     contentColor: androidx.compose.ui.graphics.Color,
+    profilePhotoUrl: String?,
+    canEditProfile: Boolean,
+    updating: Boolean,
+    onPickPhoto: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier) {
-        Surface(shape = CircleShape, color = avatarColor, shadowElevation = 3.dp, modifier = Modifier.size(82.dp)) {
-            Box(contentAlignment = Alignment.Center) {
-                Text(
-                    personProfileInitials(person.fullName),
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = if (person.lifeStatus == "DECEASED") MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.onPrimary
-                )
-            }
-        }
+        PersonDetailAvatar(person, profilePhotoUrl, avatarColor)
         Column(modifier = Modifier.padding(start = 16.dp).weight(1f)) {
             Text("Profil person", style = MaterialTheme.typography.labelMedium, color = contentColor.copy(alpha = 0.76f))
             Text(
@@ -406,6 +432,57 @@ private fun PersonHeroIdentity(
                     modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)
                 )
             }
+            if (canEditProfile) {
+                TextButton(
+                    enabled = !updating,
+                    onClick = onPickPhoto,
+                    modifier = Modifier.padding(top = 2.dp)
+                ) {
+                    Text(if (profilePhotoUrl == null) "Tambah foto" else "Ganti foto")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PersonDetailAvatar(
+    person: PersonListItem,
+    profilePhotoUrl: String?,
+    avatarColor: androidx.compose.ui.graphics.Color
+) {
+    val fallback: @Composable () -> Unit = {
+        Surface(shape = CircleShape, color = avatarColor, modifier = Modifier.fillMaxSize()) {
+            Box(contentAlignment = Alignment.Center) {
+                Text(
+                    personProfileInitials(person.fullName),
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (person.lifeStatus == "DECEASED") {
+                        MaterialTheme.colorScheme.surface
+                    } else {
+                        MaterialTheme.colorScheme.onPrimary
+                    }
+                )
+            }
+        }
+    }
+    Surface(
+        shape = CircleShape,
+        shadowElevation = 3.dp,
+        modifier = Modifier.size(82.dp).clip(CircleShape)
+    ) {
+        if (profilePhotoUrl.isNullOrBlank()) {
+            fallback()
+        } else {
+            SubcomposeAsyncImage(
+                model = profilePhotoUrl,
+                contentDescription = "Foto profil ${person.fullName}",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+                loading = { fallback() },
+                error = { fallback() }
+            )
         }
     }
 }

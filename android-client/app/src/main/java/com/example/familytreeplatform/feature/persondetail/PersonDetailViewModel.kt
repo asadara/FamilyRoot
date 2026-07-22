@@ -16,6 +16,7 @@ import com.example.familytreeplatform.models.RelationsResponse
 import com.example.familytreeplatform.models.SourceItem
 import com.example.familytreeplatform.models.SourceRequest
 import com.example.familytreeplatform.repository.PersonRepository
+import android.net.Uri
 import com.example.familytreeplatform.data.local.OfflineMutationEntity
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +31,7 @@ data class PersonDetailUiState(
     val people: List<PersonListItem> = emptyList(),
     val sources: List<SourceItem> = emptyList(),
     val media: List<MediaItem> = emptyList(),
+    val profilePhotoUrl: String? = null,
     val path: RelationshipPathResponse? = null,
     val loadingRelations: Boolean = false,
     val refreshing: Boolean = false,
@@ -82,6 +84,7 @@ class PersonDetailViewModel(
             val relationsResult = repository.getRelations(spaceId, personId)
             val sourcesResult = repository.listSources(spaceId, personId)
             val mediaResult = repository.listMedia(spaceId, personId)
+            val profilePhotosResult = repository.listProfilePhotos(spaceId)
             _uiState.update { current ->
                 current.copy(
                     refreshing = false,
@@ -90,6 +93,10 @@ class PersonDetailViewModel(
                     relations = relationsResult.getOrNull() ?: current.relations,
                     sources = sourcesResult.getOrNull() ?: current.sources,
                     media = mediaResult.getOrNull() ?: current.media,
+                    profilePhotoUrl = profilePhotosResult.getOrNull()
+                        ?.firstOrNull { it.personId == personId }
+                        ?.url
+                        ?: current.profilePhotoUrl,
                     error = peopleResult.exceptionOrNull()?.message
                         ?: relationsResult.exceptionOrNull()?.message
                         ?: sourcesResult.exceptionOrNull()?.message
@@ -129,10 +136,15 @@ class PersonDetailViewModel(
         viewModelScope.launch {
             val sourcesResult = repository.listSources(spaceId, personId)
             val mediaResult = repository.listMedia(spaceId, personId)
+            val profilePhotosResult = repository.listProfilePhotos(spaceId)
             _uiState.update {
                 it.copy(
                     sources = sourcesResult.getOrNull().orEmpty(),
                     media = mediaResult.getOrNull().orEmpty(),
+                    profilePhotoUrl = profilePhotosResult.getOrNull()
+                        ?.firstOrNull { photo -> photo.personId == personId }
+                        ?.url
+                        ?: it.profilePhotoUrl,
                     error = sourcesResult.exceptionOrNull()?.message
                         ?: mediaResult.exceptionOrNull()?.message
                         ?: it.error
@@ -268,6 +280,23 @@ class PersonDetailViewModel(
             meta = meta,
             success = "Parent relationship saved (${relationshipMetaMessage(meta)})"
         )
+    }
+
+    fun uploadProfilePhoto(uri: Uri) {
+        val person = _uiState.value.person ?: return
+        viewModelScope.launch {
+            _uiState.update { it.copy(updating = true, error = null, message = null) }
+            repository.uploadProfilePhoto(spaceId, personId, uri, person.fullName)
+                .onSuccess {
+                    refreshArchive()
+                    _uiState.update {
+                        it.copy(updating = false, message = "Foto profil berhasil diperbarui")
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(updating = false, error = error.message) }
+                }
+        }
     }
 
     fun addChild(childId: String, meta: String = "BIOLOGICAL") {

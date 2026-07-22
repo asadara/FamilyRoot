@@ -95,6 +95,35 @@ export class ArchiveService {
     });
   }
 
+  async listProfilePhotos(spaceId: string) {
+    const media = await this.mediaRepo.find({
+      where: { spaceId, kind: 'PHOTO' },
+      order: { createdAt: 'DESC' },
+    });
+    const latestManagedPhotoByPerson = new Map<string, MediaItemEntity>();
+    for (const item of media) {
+      if (
+        item.uri.startsWith('object://') &&
+        !latestManagedPhotoByPerson.has(item.personId)
+      ) {
+        latestManagedPhotoByPerson.set(item.personId, item);
+      }
+    }
+
+    const expiresIn = 15 * 60;
+    return Promise.all(
+      [...latestManagedPhotoByPerson.values()].map(async (item) => ({
+        personId: item.personId,
+        mediaId: item.mediaId,
+        url: await this.objectStorage.createSignedReadUrl(
+          item.uri.slice('object://'.length),
+          expiresIn,
+        ),
+        expiresIn,
+      })),
+    );
+  }
+
   async createMedia(
     spaceId: string,
     personId: string,

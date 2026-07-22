@@ -361,6 +361,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 PersonDetailScreen(
                     viewModel = detailViewModel,
                     onBack = { navController.popBackStack() },
+                    canEditProfile = spaceRole != null && spaceRole != "VIEWER",
                     modifier = shellModifier
                 )
             }

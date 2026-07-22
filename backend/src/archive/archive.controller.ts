@@ -61,6 +61,14 @@ export class ArchiveController {
     return this.archiveService.listMedia(spaceId, personId);
   }
 
+  @Get('spaces/:spaceId/profile-photos')
+  @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
+  listProfilePhotos(@Param('spaceId') spaceId: string) {
+    if (!spaceId || !isUUID(spaceId))
+      throw new BadRequestException('Invalid spaceId');
+    return this.archiveService.listProfilePhotos(spaceId);
+  }
+
   @Post('persons/:personId/media')
   @SpaceRoles('OWNER', 'ADMIN', 'EDITOR')
   createMedia(

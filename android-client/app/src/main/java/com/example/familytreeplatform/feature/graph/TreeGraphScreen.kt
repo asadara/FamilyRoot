@@ -150,6 +150,7 @@ fun TreeGraphScreen(
                     selectedPersonId = state.selectedPersonId,
                     inspectedPersonId = state.inspectedPersonId,
                     persons = state.persons,
+                    profilePhotoUrls = state.profilePhotoUrls,
                     relations = state.relations,
                     allRelationships = state.relationships,
                     explorationHistory = state.explorationHistory,

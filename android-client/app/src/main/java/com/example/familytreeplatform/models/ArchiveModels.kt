@@ -38,6 +38,13 @@ data class MediaRequest(
     val sourceId: String? = null
 )
 
+data class ProfilePhotoItem(
+    val personId: String,
+    val mediaId: String,
+    val url: String,
+    val expiresIn: Int
+)
+
 data class ProposalItem(
     val proposalId: String,
     val spaceId: String,

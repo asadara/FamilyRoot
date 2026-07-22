@@ -1,6 +1,14 @@
 package com.example.familytreeplatform.repository
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Canvas
+import android.graphics.Color
+import android.graphics.Matrix
+import android.graphics.Paint
+import android.graphics.RectF
+import android.net.Uri
 import com.example.familytreeplatform.Config
 import com.example.familytreeplatform.BuildConfig
 import com.example.familytreeplatform.SessionStore
@@ -24,6 +32,7 @@ import com.example.familytreeplatform.models.ExportSpaceResponse
 import com.example.familytreeplatform.models.DuplicateGroup
 import com.example.familytreeplatform.models.MediaItem
 import com.example.familytreeplatform.models.MediaRequest
+import com.example.familytreeplatform.models.ProfilePhotoItem
 import com.example.familytreeplatform.models.MergePersonsRequest
 import com.example.familytreeplatform.models.ProposalItem
 import com.example.familytreeplatform.models.ProposalRequest
@@ -40,6 +49,9 @@ import okhttp3.Interceptor
 import okhttp3.Authenticator
 import okhttp3.Request
 import okhttp3.OkHttpClient
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Response
 import retrofit2.Retrofit
@@ -83,6 +95,9 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import androidx.exifinterface.media.ExifInterface
 import com.example.familytreeplatform.feature.auth.GoogleCredentialClient
 
 enum class SyncBatchResult { COMPLETE, RETRY }
@@ -596,6 +611,35 @@ class PersonRepository(
 
     suspend fun createMedia(personId: String, request: MediaRequest): Result<MediaItem> =
         apiResult { apiService.createMedia(personId, request) }
+
+    suspend fun listProfilePhotos(spaceId: String): Result<List<ProfilePhotoItem>> =
+        apiResult { apiService.listProfilePhotos(spaceId) }
+
+    suspend fun uploadProfilePhoto(
+        spaceId: String,
+        personId: String,
+        imageUri: Uri,
+        personName: String
+    ): Result<MediaItem> = withContext(Dispatchers.IO) {
+        runCatching {
+            val context = requireNotNull(appContext) { "Application context is unavailable" }
+            val jpeg = prepareProfilePhoto(context, imageUri)
+            val body = jpeg.toRequestBody("image/jpeg".toMediaType())
+            val file = MultipartBody.Part.createFormData(
+                "file",
+                "profile-$personId.jpg",
+                body
+            )
+            apiResult {
+                apiService.uploadProfilePhoto(
+                    personId = personId,
+                    spaceId = spaceId,
+                    file = file,
+                    label = "Foto profil $personName".toRequestBody("text/plain".toMediaType())
+                )
+            }.getOrThrow()
+        }
+    }
 
     suspend fun listProposals(spaceId: String): Result<List<ProposalItem>> =
         apiResult { apiService.listProposals(spaceId) }
@@ -1200,5 +1244,95 @@ class PersonRepository(
             prior = prior.priorResponse
         }
         return count
+    }
+}
+
+private fun prepareProfilePhoto(context: Context, imageUri: Uri): ByteArray {
+    val declaredSize = context.contentResolver.openAssetFileDescriptor(imageUri, "r")
+        ?.use { it.length }
+        ?: -1L
+    require(declaredSize <= 20L * 1024L * 1024L || declaredSize < 0L) {
+        "Foto terlalu besar. Pilih gambar di bawah 20 MB."
+    }
+    val source = context.contentResolver.openInputStream(imageUri)?.use { it.readBytes() }
+        ?: error("Foto tidak dapat dibaca")
+    require(source.isNotEmpty()) { "Foto kosong" }
+    require(source.size <= 20 * 1024 * 1024) {
+        "Foto terlalu besar. Pilih gambar di bawah 20 MB."
+    }
+
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(source, 0, source.size, bounds)
+    require(bounds.outWidth > 0 && bounds.outHeight > 0) { "Format foto tidak didukung" }
+    var sampleSize = 1
+    while (bounds.outWidth / sampleSize > 2048 || bounds.outHeight / sampleSize > 2048) {
+        sampleSize *= 2
+    }
+    val decoded = BitmapFactory.decodeByteArray(
+        source,
+        0,
+        source.size,
+        BitmapFactory.Options().apply { inSampleSize = sampleSize }
+    ) ?: error("Format foto tidak didukung")
+
+    val orientation = runCatching {
+        ExifInterface(ByteArrayInputStream(source)).getAttributeInt(
+            ExifInterface.TAG_ORIENTATION,
+            ExifInterface.ORIENTATION_NORMAL
+        )
+    }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
+    val orientationMatrix = Matrix().apply {
+        when (orientation) {
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> setScale(-1f, 1f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> setRotate(180f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> setScale(1f, -1f)
+            ExifInterface.ORIENTATION_TRANSPOSE -> {
+                setRotate(90f)
+                postScale(-1f, 1f)
+            }
+            ExifInterface.ORIENTATION_ROTATE_90 -> setRotate(90f)
+            ExifInterface.ORIENTATION_TRANSVERSE -> {
+                setRotate(-90f)
+                postScale(-1f, 1f)
+            }
+            ExifInterface.ORIENTATION_ROTATE_270 -> setRotate(-90f)
+        }
+    }
+    val oriented = if (!orientationMatrix.isIdentity) {
+        Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, orientationMatrix, true)
+            .also { if (it !== decoded) decoded.recycle() }
+    } else {
+        decoded
+    }
+
+    val targetSize = 768
+    val output = Bitmap.createBitmap(targetSize, targetSize, Bitmap.Config.ARGB_8888)
+    Canvas(output).apply {
+        drawColor(Color.WHITE)
+        val scale = maxOf(
+            targetSize.toFloat() / oriented.width,
+            targetSize.toFloat() / oriented.height
+        )
+        val width = oriented.width * scale
+        val height = oriented.height * scale
+        drawBitmap(
+            oriented,
+            null,
+            RectF(
+                (targetSize - width) / 2f,
+                (targetSize - height) / 2f,
+                (targetSize + width) / 2f,
+                (targetSize + height) / 2f
+            ),
+            Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
+        )
+    }
+    if (oriented !== output) oriented.recycle()
+    return ByteArrayOutputStream().use { stream ->
+        check(output.compress(Bitmap.CompressFormat.JPEG, 86, stream)) {
+            "Foto gagal diproses"
+        }
+        output.recycle()
+        stream.toByteArray()
     }
 }
