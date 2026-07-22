@@ -307,7 +307,14 @@ class PersonRepository(
         mutationDao?.observeForPerson(personId) ?: flowOf(emptyList())
 
     fun observeOfflineMutationCount(spaceId: String): Flow<Int> =
-        mutationDao?.observeCountForSpace(spaceId) ?: flowOf(0)
+        mutationDao?.observeForSpace(spaceId)?.map { mutations ->
+            mutations.count {
+                it.status == OfflineMutationStatus.PENDING || it.status == OfflineMutationStatus.SYNCING
+            }
+        } ?: flowOf(0)
+
+    fun observeOfflineMutationsForSpace(spaceId: String): Flow<List<OfflineMutationEntity>> =
+        mutationDao?.observeForSpace(spaceId) ?: flowOf(emptyList())
 
     suspend fun queueLifeStatusUpdate(
         spaceId: String,
@@ -394,6 +401,10 @@ class PersonRepository(
         val relationsDao = requireNotNull(relationshipDao) { "Offline relationship cache is unavailable" }
         val relationships = relationsDao.listBySpace(request.spaceId)
         require(relationships.none {
+            it.type == "SPOUSE" &&
+                setOf(it.fromPersonId, it.toPersonId) == setOf(request.parentId, request.childId)
+        }) { "Parent-child relationship cannot be created between spouses" }
+        require(relationships.none {
             it.type == "PARENT_CHILD" &&
                 it.fromPersonId == request.parentId && it.toPersonId == request.childId
         }) { "Relationship already exists" }
@@ -458,9 +469,14 @@ class PersonRepository(
         val fromId = minOf(request.personAId, request.personBId)
         val toId = maxOf(request.personAId, request.personBId)
         val relationsDao = requireNotNull(relationshipDao) { "Offline relationship cache is unavailable" }
-        require(relationsDao.listBySpace(request.spaceId).none {
+        val relationships = relationsDao.listBySpace(request.spaceId)
+        require(relationships.none {
             it.type == "SPOUSE" && it.fromPersonId == fromId && it.toPersonId == toId
         }) { "Spouse relationship already exists" }
+        require(
+            !hasParentChildPath(relationships, request.personAId, request.personBId) &&
+                !hasParentChildPath(relationships, request.personBId, request.personAId)
+        ) { "Spouse relationship cannot be created between ancestor and descendant" }
 
         val queueDao = requireNotNull(mutationDao) { "Offline mutation queue is unavailable" }
         val now = System.currentTimeMillis()
@@ -715,6 +731,21 @@ class PersonRepository(
             }
         } catch (e: Exception) {
             Result.failure(e)
+        }
+    }
+
+    suspend fun deleteRelationship(spaceId: String, relationshipId: String): Result<Unit> {
+        if (relationshipId.startsWith("local-")) {
+            return runCatching {
+                relationshipDao?.delete(relationshipId)
+                mutationDao?.delete(relationshipId.removePrefix("local-"))
+            }
+        }
+        return apiResult {
+            apiService.deleteRelationship(relationshipId, spaceId)
+        }.map {
+            relationshipDao?.delete(relationshipId)
+            Unit
         }
     }
 

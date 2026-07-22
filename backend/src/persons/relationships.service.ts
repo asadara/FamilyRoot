@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
@@ -21,6 +22,37 @@ export class RelationshipsService {
     @InjectRepository(ChangeLogEntity)
     private readonly changeRepo: Repository<ChangeLogEntity>,
   ) {}
+
+  private async hasParentChildPath(
+    spaceId: string,
+    ancestorId: string,
+    descendantId: string,
+  ): Promise<boolean> {
+    const parentage = await this.relationsRepo.find({
+      where: { spaceId, type: 'PARENT_CHILD' },
+      select: ['fromPersonId', 'toPersonId'],
+    });
+    const childrenByParent = new Map<string, string[]>();
+    parentage.forEach((relationship) => {
+      const children = childrenByParent.get(relationship.fromPersonId) ?? [];
+      children.push(relationship.toPersonId);
+      childrenByParent.set(relationship.fromPersonId, children);
+    });
+    const pending = [ancestorId];
+    const visited = new Set([ancestorId]);
+    while (pending.length > 0) {
+      const current = pending.shift();
+      if (!current) continue;
+      for (const childId of childrenByParent.get(current) ?? []) {
+        if (childId === descendantId) return true;
+        if (!visited.has(childId)) {
+          visited.add(childId);
+          pending.push(childId);
+        }
+      }
+    }
+    return false;
+  }
 
   async findByPerson(spaceId: string, personId: string) {
     const parents = await this.relationsRepo.find({
@@ -89,6 +121,31 @@ export class RelationshipsService {
         'createdAt',
       ],
     });
+  }
+
+  async remove(spaceId: string, relationshipId: string, actorUserId: string) {
+    const relationship = await this.relationsRepo.findOneBy({
+      spaceId,
+      relationshipId,
+    });
+    if (!relationship) throw new NotFoundException('Relationship not found');
+
+    await this.relationsRepo.manager.transaction(async (manager) => {
+      await manager.remove(relationship);
+      await manager.save(
+        manager.create(ChangeLogEntity, {
+          spaceId,
+          actorUserId,
+          entityType: 'RELATIONSHIP',
+          entityId: relationshipId,
+          operation: 'DELETE',
+          note: `Delete ${relationship.type.toLowerCase()} relationship`,
+          beforeJson: JSON.stringify(relationship),
+        }),
+      );
+    });
+
+    return { relationshipId, deleted: true };
   }
 
   async findPath(spaceId: string, fromPersonId: string, toPersonId: string) {
@@ -283,6 +340,14 @@ export class RelationshipsService {
     if (!personA || !personB) {
       throw new BadRequestException(
         'Spouses must be active persons in this Family Space',
+      );
+    }
+    const isAncestorPair =
+      (await this.hasParentChildPath(spaceId, personAId, personBId)) ||
+      (await this.hasParentChildPath(spaceId, personBId, personAId));
+    if (isAncestorPair) {
+      throw new BadRequestException(
+        'Spouse relationship cannot be created between ancestor and descendant',
       );
     }
     const aGender = personA.gender;

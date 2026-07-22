@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,6 +30,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -276,6 +278,8 @@ private data class VisibleTree(
     val children: List<ChildRender>
 )
 
+internal enum class GraphGenerationFilter { ALL, SAME, ANCESTORS, DESCENDANTS }
+
 @Composable
 fun GraphScreen(
     centerPersonId: String,
@@ -293,15 +297,17 @@ fun GraphScreen(
     onInspectPerson: (String) -> Unit = {},
     canEditRelationships: Boolean = true,
     onQuickAddRequest: (GraphQuickAddRequest) -> Unit = {},
+    onConnectPersons: (String, String) -> Unit = { _, _ -> },
     onClearSelection: () -> Unit,
     onOpenPerson: (String) -> Unit,
     onShowRelationshipPath: () -> Unit = {},
     onHideExplorationBreadcrumb: () -> Unit = {},
     onExportSnapshotChanged: (GraphExportSnapshot) -> Unit = {},
     onBack: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     if (relations == null) {
-        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Pohon keluarga belum tersedia")
                 TextButton(onClick = onBack, modifier = Modifier.padding(top = 8.dp)) {
@@ -333,6 +339,9 @@ fun GraphScreen(
 
     var childrenCollapsed by rememberSaveable(centerPersonId) { mutableStateOf(false) }
     var parentsCollapsed by rememberSaveable(centerPersonId) { mutableStateOf(false) }
+    var generationFilter by rememberSaveable(centerPersonId) {
+        mutableStateOf(GraphGenerationFilter.ALL)
+    }
     var expandedParentPersonIds by rememberSaveable(
         centerPersonId,
         stateSaver = PersonIdSetSaver
@@ -415,7 +424,56 @@ fun GraphScreen(
     LaunchedEffect(layout, personById) {
         onExportSnapshotChanged(layout.toExportSnapshot(personById))
     }
-    val tiles = remember(layout) { layout.nodes.flatMap { it.tiles() } }
+    val generationLevels = remember(centerPersonId, allRelationships) {
+        familyGenerationLevels(centerPersonId, allRelationships)
+    }
+    val generationRootIds = remember(centerPersonId, allRelationships) {
+        buildSet {
+            add(centerPersonId)
+            allRelationships
+                .filter {
+                    it.type == "SPOUSE" &&
+                        (it.fromPersonId == centerPersonId || it.toPersonId == centerPersonId)
+                }
+                .forEach {
+                    add(if (it.fromPersonId == centerPersonId) it.toPersonId else it.fromPersonId)
+                }
+        }
+    }
+    val generationVisiblePersonIds = remember(
+        persons,
+        generationLevels,
+        generationFilter,
+        generationRootIds
+    ) {
+        persons.mapNotNullTo(mutableSetOf()) { person ->
+            val generation = generationLevels[person.personId]
+            val visible = when (generationFilter) {
+                GraphGenerationFilter.ALL -> true
+                GraphGenerationFilter.SAME -> generation == 0
+                GraphGenerationFilter.ANCESTORS -> generation != null && generation < 0
+                GraphGenerationFilter.DESCENDANTS -> generation != null && generation > 0
+            }
+            person.personId.takeIf { visible || it in generationRootIds }
+        }
+    }
+    val visibleRelationshipIds = remember(allRelationships, generationVisiblePersonIds) {
+        allRelationships
+            .filter {
+                it.fromPersonId in generationVisiblePersonIds &&
+                    it.toPersonId in generationVisiblePersonIds
+            }
+            .mapTo(mutableSetOf()) { it.relationshipId }
+    }
+    val tiles = remember(layout, generationVisiblePersonIds) {
+        layout.nodes.flatMap { it.tiles() }.filter { it.id in generationVisiblePersonIds }
+    }
+    val linkHandleTile = tiles.firstOrNull { it.id == selectedPersonId }
+    val linkHandlePoint = linkHandleTile?.let { tile ->
+        PointDp(tile.rect.right + 18.dp, tile.rect.bottom - 18.dp)
+    }
+    var linkDragSourceId by remember { mutableStateOf<String?>(null) }
+    var linkDragPoint by remember { mutableStateOf<PointDp?>(null) }
     val activeSpouseId = remember(centerPersonId, relations, allRelationships) {
         findActiveSpouseId(centerPersonId, relations, allRelationships)
     }
@@ -692,7 +750,7 @@ fun GraphScreen(
     }
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
@@ -900,7 +958,9 @@ fun GraphScreen(
                 Canvas(modifier = Modifier.matchParentSize()) {
                     val lineStroke = 1.5.dp.toPx()
 
-                    layout.nodes.forEach { node ->
+                    layout.nodes
+                        .filter { node -> node.tiles().all { it.id in generationVisiblePersonIds } }
+                        .forEach { node ->
                         node.spouseLine()?.let { (a, b) ->
                             val highlighted = showRelationshipPathInGraph &&
                                 node.tiles().count { it.id in pathPersonIds } >= 2
@@ -925,7 +985,12 @@ fun GraphScreen(
                         }
                     }
 
-                    layout.lineageEdges.forEach { edge ->
+                    layout.lineageEdges
+                        .filter { edge ->
+                            generationFilter == GraphGenerationFilter.ALL ||
+                                edge.relationshipIds.any { it in visibleRelationshipIds }
+                        }
+                        .forEach { edge ->
                         val start = Offset(
                             with(density) { edge.from.x.toPx() },
                             with(density) { edge.from.y.toPx() }
@@ -1002,7 +1067,9 @@ fun GraphScreen(
                     }
                 }
 
-                layout.nodes.filterIsInstance<SingleParentNode>().forEach { node ->
+                layout.nodes.filterIsInstance<SingleParentNode>()
+                    .filter { generationFilter == GraphGenerationFilter.ALL }
+                    .forEach { node ->
                     PlaceholderGraphCard(
                         label = if (canEditRelationships) {
                             "+\nOrang tua lain\nbelum tercatat"
@@ -1228,6 +1295,30 @@ fun GraphScreen(
                             cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx())
                         )
                     }
+                    if (canEditRelationships && linkHandlePoint != null) {
+                        val handle = pointOffset(linkHandlePoint)
+                        linkDragPoint?.let { dragPoint ->
+                            drawLine(
+                                color = controlAccentColor,
+                                start = handle,
+                                end = pointOffset(dragPoint),
+                                strokeWidth = 2.5.dp.toPx(),
+                                pathEffect = PathEffect.dashPathEffect(
+                                    floatArrayOf(8.dp.toPx(), 5.dp.toPx())
+                                )
+                            )
+                        }
+                        drawCircle(
+                            color = controlAccentColor,
+                            radius = 12.dp.toPx(),
+                            center = handle
+                        )
+                        drawCircle(
+                            color = controlOnAccentColor,
+                            radius = 3.dp.toPx(),
+                            center = handle
+                        )
+                    }
                 }
 
                 branchControls.forEach { control ->
@@ -1322,7 +1413,77 @@ fun GraphScreen(
                             }
                     )
                 }
+                if (canEditRelationships && linkHandlePoint != null && selectedPersonId != null) {
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .offset(linkHandlePoint.x - 22.dp, linkHandlePoint.y - 22.dp)
+                            .testTag("connect-handle-$selectedPersonId")
+                            .pointerInput(tiles, selectedPersonId) {
+                                detectDragGestures(
+                                    onDragStart = {
+                                        linkDragSourceId = selectedPersonId
+                                        linkDragPoint = linkHandlePoint
+                                    },
+                                    onDrag = { change, dragAmount ->
+                                        change.consume()
+                                        val current = linkDragPoint ?: linkHandlePoint
+                                        linkDragPoint = PointDp(
+                                            current.x + with(density) { dragAmount.x.toDp() },
+                                            current.y + with(density) { dragAmount.y.toDp() }
+                                        )
+                                    },
+                                    onDragCancel = {
+                                        linkDragSourceId = null
+                                        linkDragPoint = null
+                                    },
+                                    onDragEnd = {
+                                        val sourceId = linkDragSourceId
+                                        val point = linkDragPoint
+                                        val target = point?.let { dropPoint ->
+                                            tiles.asReversed().firstOrNull { tile ->
+                                                dropPoint.x in tile.rect.left..tile.rect.right &&
+                                                    dropPoint.y in tile.rect.top..tile.rect.bottom
+                                            }
+                                        }
+                                        if (sourceId != null && target != null && target.id != sourceId) {
+                                            onConnectPersons(sourceId, target.id)
+                                        }
+                                        linkDragSourceId = null
+                                        linkDragPoint = null
+                                    }
+                                )
+                            }
+                            .semantics {
+                                contentDescription = "Tarik untuk menghubungkan person"
+                            }
+                    )
+                }
             }
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(12.dp)
+                        .horizontalScroll(rememberScrollState())
+                ) {
+                    listOf(
+                        GraphGenerationFilter.ALL to "Semua",
+                        GraphGenerationFilter.SAME to "Satu generasi",
+                        GraphGenerationFilter.ANCESTORS to "Leluhur",
+                        GraphGenerationFilter.DESCENDANTS to "Keturunan"
+                    ).forEach { (filter, label) ->
+                        FilterChip(
+                            selected = generationFilter == filter,
+                            onClick = {
+                                generationFilter = filter
+                                onClearSelection()
+                            },
+                            label = { Text(label) }
+                        )
+                    }
+                }
 
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -2789,6 +2950,37 @@ private fun preprocessTree(
             )
         }
     )
+}
+
+internal fun familyGenerationLevels(
+    centerPersonId: String,
+    relationships: List<ExportRelationship>
+): Map<String, Int> {
+    data class GenerationStep(val personId: String, val delta: Int)
+
+    val adjacency = mutableMapOf<String, MutableList<GenerationStep>>()
+    relationships.forEach { relationship ->
+        val forwardDelta = if (relationship.type == "PARENT_CHILD") 1 else 0
+        val reverseDelta = if (relationship.type == "PARENT_CHILD") -1 else 0
+        adjacency.getOrPut(relationship.fromPersonId) { mutableListOf() }
+            .add(GenerationStep(relationship.toPersonId, forwardDelta))
+        adjacency.getOrPut(relationship.toPersonId) { mutableListOf() }
+            .add(GenerationStep(relationship.fromPersonId, reverseDelta))
+    }
+
+    val levels = mutableMapOf(centerPersonId to 0)
+    val queue = ArrayDeque<String>().apply { add(centerPersonId) }
+    while (queue.isNotEmpty()) {
+        val current = queue.removeFirst()
+        val currentLevel = levels.getValue(current)
+        adjacency[current].orEmpty().forEach { step ->
+            if (step.personId !in levels) {
+                levels[step.personId] = currentLevel + step.delta
+                queue.add(step.personId)
+            }
+        }
+    }
+    return levels
 }
 
 /**

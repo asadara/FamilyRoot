@@ -29,6 +29,7 @@ import com.example.familytreeplatform.models.SourceItem
 import com.example.familytreeplatform.models.SourceRequest
 import retrofit2.Response
 import retrofit2.http.Body
+import retrofit2.http.DELETE
 import retrofit2.http.POST
 import retrofit2.http.GET
 import retrofit2.http.Query
@@ -167,6 +168,12 @@ interface ApiService {
 
     @POST("relationships/spouse")
     suspend fun createSpouse(@Body request: CreateSpouseRequest): Response<SpouseResponse>
+
+    @DELETE("relationships/{relationshipId}")
+    suspend fun deleteRelationship(
+        @Path("relationshipId") relationshipId: String,
+        @Query("spaceId") spaceId: String
+    ): Response<com.example.familytreeplatform.models.DeleteRelationshipResponse>
 
     @PATCH("persons/{personId}/life")
     suspend fun updateLifeStatus(

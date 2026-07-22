@@ -2,8 +2,10 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
   Post,
+  Param,
   Query,
 } from '@nestjs/common';
 import { isUUID } from 'class-validator';
@@ -74,6 +76,26 @@ export class RelationshipsController {
       dto.endDate ?? null,
       actorUserId,
       dto.clientMutationId,
+    );
+  }
+
+  @Delete(':relationshipId')
+  @SpaceRoles('OWNER', 'ADMIN', 'EDITOR')
+  remove(
+    @ActorUserId() actorUserId: string,
+    @Param('relationshipId') relationshipId: string,
+    @Query('spaceId') spaceId: string,
+  ) {
+    if (!spaceId || !isUUID(spaceId)) {
+      throw new BadRequestException('Invalid spaceId');
+    }
+    if (!relationshipId || !isUUID(relationshipId)) {
+      throw new BadRequestException('Invalid relationshipId');
+    }
+    return this.relationshipsService.remove(
+      spaceId,
+      relationshipId,
+      actorUserId,
     );
   }
 }

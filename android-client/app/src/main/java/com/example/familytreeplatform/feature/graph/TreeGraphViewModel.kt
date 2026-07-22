@@ -20,6 +20,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 data class TreeGraphUiState(
     val centerPersonId: String? = null,
@@ -36,8 +39,16 @@ data class TreeGraphUiState(
     val quickAddSaving: Boolean = false,
     val quickAddError: String? = null,
     val quickAddCompletedPersonId: String? = null,
+    val connectionSaving: Boolean = false,
+    val connectionMessage: String? = null,
+    val connectionError: String? = null,
+    val integritySavingRelationshipId: String? = null,
+    val integrityMessage: String? = null,
+    val integrityError: String? = null,
     val error: String? = null
 )
+
+enum class ExistingRelationKind { TARGET_PARENT, TARGET_CHILD, PARTNER }
 
 class TreeGraphViewModel(
     private val spaceId: String,
@@ -137,6 +148,110 @@ class TreeGraphViewModel(
     fun clearQuickAddFeedback() {
         _uiState.update {
             it.copy(quickAddError = null, quickAddCompletedPersonId = null)
+        }
+    }
+
+    fun connectExistingPeople(
+        sourcePersonId: String,
+        targetPersonId: String,
+        kind: ExistingRelationKind,
+        meta: String
+    ) {
+        if (sourcePersonId == targetPersonId) return
+        validateProposedRelationship(
+            sourcePersonId = sourcePersonId,
+            targetPersonId = targetPersonId,
+            kind = kind,
+            meta = meta,
+            relationships = _uiState.value.relationships
+        )?.let { validationMessage ->
+            _uiState.update {
+                it.copy(
+                    connectionSaving = false,
+                    connectionMessage = null,
+                    connectionError = validationMessage
+                )
+            }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    connectionSaving = true,
+                    connectionMessage = null,
+                    connectionError = null
+                )
+            }
+            val result = when (kind) {
+                ExistingRelationKind.TARGET_PARENT -> repository.queueParentChild(
+                    ParentChildRequest(spaceId, targetPersonId, sourcePersonId, meta),
+                    focusPersonId = sourcePersonId
+                )
+                ExistingRelationKind.TARGET_CHILD -> repository.queueParentChild(
+                    ParentChildRequest(spaceId, sourcePersonId, targetPersonId, meta),
+                    focusPersonId = sourcePersonId
+                )
+                ExistingRelationKind.PARTNER -> repository.queueSpouse(
+                    CreateSpouseRequest(
+                        spaceId = spaceId,
+                        personAId = sourcePersonId,
+                        personBId = targetPersonId,
+                        meta = meta,
+                        startDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                    ),
+                    focusPersonId = sourcePersonId
+                )
+            }
+            result.onSuccess {
+                _uiState.update {
+                    it.copy(
+                        connectionSaving = false,
+                        connectionMessage = "Hubungan berhasil dibuat dan menunggu sinkronisasi.",
+                        connectionError = null
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(
+                        connectionSaving = false,
+                        connectionMessage = null,
+                        connectionError = error.message ?: "Hubungan belum berhasil dibuat."
+                    )
+                }
+            }
+        }
+    }
+
+    fun deleteRecommendedRelationship(relationshipId: String) {
+        if (_uiState.value.integritySavingRelationshipId != null) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    integritySavingRelationshipId = relationshipId,
+                    integrityMessage = null,
+                    integrityError = null
+                )
+            }
+            repository.deleteRelationship(spaceId, relationshipId)
+                .onSuccess {
+                    _uiState.update {
+                        it.copy(
+                            integritySavingRelationshipId = null,
+                            integrityMessage = "Hubungan rancu berhasil dihapus.",
+                            integrityError = null
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(
+                            integritySavingRelationshipId = null,
+                            integrityMessage = null,
+                            integrityError = error.message
+                                ?: "Hubungan rancu belum berhasil dihapus."
+                        )
+                    }
+                }
         }
     }
 
@@ -272,7 +387,20 @@ class TreeGraphViewModel(
 internal fun updateGraphPersons(
     state: TreeGraphUiState,
     people: List<PersonListItem>
-): TreeGraphUiState = state.copy(persons = people)
+): TreeGraphUiState {
+    val availableIds = people.mapTo(mutableSetOf()) { it.personId }
+    val center = state.centerPersonId
+        ?.takeIf { it in availableIds }
+        ?: chooseInitialCenterPersonId(people, state.relationships)
+    return state.copy(
+        persons = people,
+        centerPersonId = center,
+        relations = center?.let { state.relationships.toRelationsResponse(it) },
+        explorationHistory = state.explorationHistory.ifEmpty {
+            center?.let(::listOf).orEmpty()
+        }
+    )
+}
 
 internal fun updateGraphRelationships(
     state: TreeGraphUiState,

@@ -330,6 +330,28 @@ export class PersonsService {
       );
     }
 
+    const partnership = await this.relationsRepo.findOne({
+      where: [
+        {
+          spaceId,
+          type: 'SPOUSE',
+          fromPersonId: parentId,
+          toPersonId: childId,
+        },
+        {
+          spaceId,
+          type: 'SPOUSE',
+          fromPersonId: childId,
+          toPersonId: parentId,
+        },
+      ],
+    });
+    if (partnership) {
+      throw new BadRequestException(
+        'Parent-child relationship cannot be created between spouses',
+      );
+    }
+
     const cycle = await this.isDescendant(spaceId, childId, parentId);
     if (cycle) {
       throw new BadRequestException('Cycle detected in family tree');

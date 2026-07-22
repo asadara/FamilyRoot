@@ -559,6 +559,57 @@ describe('Phase 1 security contract (e2e)', () => {
         expect(body.relationshipId).toBe(spouseRelation.body.relationshipId),
       );
     await request(app.getHttpServer())
+      .post('/persons/parent-child')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        spaceId,
+        parentId: firstPerson.body.personId,
+        childId: spouse.body.personId,
+        meta: 'BIOLOGICAL',
+        clientMutationId: randomUUID(),
+      })
+      .expect(400)
+      .expect(({ body }) =>
+        expect(body.message).toContain('cannot be created between spouses'),
+      );
+
+    const femaleDescendant = await request(app.getHttpServer())
+      .post('/persons')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        spaceId,
+        firstName: 'Daughter',
+        nickName: 'Daughter',
+        gender: 'FEMALE',
+      })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/persons/parent-child')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        spaceId,
+        parentId: firstPerson.body.personId,
+        childId: femaleDescendant.body.personId,
+        meta: 'BIOLOGICAL',
+        clientMutationId: randomUUID(),
+      })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/relationships/spouse')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        spaceId,
+        personAId: firstPerson.body.personId,
+        personBId: femaleDescendant.body.personId,
+        meta: 'MARRIED',
+        startDate: '2024-01-01',
+        clientMutationId: randomUUID(),
+      })
+      .expect(400)
+      .expect(({ body }) =>
+        expect(body.message).toContain('between ancestor and descendant'),
+      );
+    await request(app.getHttpServer())
       .get('/relationships')
       .set('Authorization', `Bearer ${ownerToken}`)
       .query({ spaceId })
@@ -629,6 +680,32 @@ describe('Phase 1 security contract (e2e)', () => {
       .expect(200);
     expect(gedcom.body.content).toContain('0 HEAD');
     expect(gedcom.body.content).toContain('1 CHIL');
+
+    await request(app.getHttpServer())
+      .delete(`/relationships/${spouseRelation.body.relationshipId}`)
+      .set('Authorization', `Bearer ${viewerToken}`)
+      .query({ spaceId })
+      .expect(403);
+    await request(app.getHttpServer())
+      .delete(`/relationships/${spouseRelation.body.relationshipId}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .query({ spaceId })
+      .expect(200)
+      .expect(({ body }) => expect(body.deleted).toBe(true));
+    await request(app.getHttpServer())
+      .get('/relationships')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .query({ spaceId })
+      .expect(200)
+      .expect(({ body }) =>
+        expect(body).not.toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              relationshipId: spouseRelation.body.relationshipId,
+            }),
+          ]),
+        ),
+      );
 
     const gedcomTarget = await request(app.getHttpServer())
       .post('/spaces')

@@ -261,15 +261,25 @@ class PersonDetailViewModel(
         }
     }
 
-    fun addParent(parentId: String) {
-        addParentChild(parentId = parentId, childId = personId, success = "Parent added")
+    fun addParent(parentId: String, meta: String = "BIOLOGICAL") {
+        addParentChild(
+            parentId = parentId,
+            childId = personId,
+            meta = meta,
+            success = "Parent relationship saved (${relationshipMetaMessage(meta)})"
+        )
     }
 
-    fun addChild(childId: String) {
-        addParentChild(parentId = personId, childId = childId, success = "Child added")
+    fun addChild(childId: String, meta: String = "BIOLOGICAL") {
+        addParentChild(
+            parentId = personId,
+            childId = childId,
+            meta = meta,
+            success = "Child relationship saved (${relationshipMetaMessage(meta)})"
+        )
     }
 
-    private fun addParentChild(parentId: String, childId: String, success: String) {
+    private fun addParentChild(parentId: String, childId: String, meta: String, success: String) {
         viewModelScope.launch {
             _uiState.update { it.copy(updating = true, error = null, message = null) }
             repository.queueParentChild(
@@ -277,7 +287,7 @@ class PersonDetailViewModel(
                     spaceId = spaceId,
                     parentId = parentId,
                     childId = childId,
-                    meta = "BIOLOGICAL"
+                    meta = meta
                 ),
                 focusPersonId = personId
             ).onSuccess {
@@ -310,6 +320,22 @@ class PersonDetailViewModel(
         }
     }
 
+    fun deleteRelationship(relationshipId: String) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(updating = true, error = null, message = null) }
+            repository.deleteRelationship(spaceId, relationshipId)
+                .onSuccess {
+                    refreshRelations()
+                    _uiState.update {
+                        it.copy(updating = false, message = "Relationship deleted")
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update { it.copy(updating = false, error = error.message) }
+                }
+        }
+    }
+
     class Factory(
         private val spaceId: String,
         private val personId: String,
@@ -320,4 +346,10 @@ class PersonDetailViewModel(
             return PersonDetailViewModel(spaceId, personId, repository) as T
         }
     }
+}
+
+private fun relationshipMetaMessage(meta: String): String = when (meta) {
+    "ADOPTIVE" -> "adoptive"
+    "STEP" -> "step"
+    else -> "biological"
 }

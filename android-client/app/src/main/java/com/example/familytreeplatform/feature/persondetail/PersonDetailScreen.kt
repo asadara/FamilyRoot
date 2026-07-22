@@ -23,13 +23,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -38,6 +43,7 @@ import androidx.compose.material.pullrefresh.PullRefreshIndicator
 import androidx.compose.material.pullrefresh.pullRefresh
 import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +65,7 @@ import com.example.familytreeplatform.data.local.OfflineMutationType
 import com.example.familytreeplatform.models.MediaItem
 import com.example.familytreeplatform.models.PersonListItem
 import com.example.familytreeplatform.models.RelationsResponse
+import com.example.familytreeplatform.models.RelationItem
 import com.example.familytreeplatform.models.SourceItem
 
 @OptIn(ExperimentalMaterialApi::class)
@@ -94,6 +101,8 @@ fun PersonDetailScreen(
     var proposalNotes by rememberSaveable(person.personId) { mutableStateOf("") }
     var proposalReason by rememberSaveable(person.personId) { mutableStateOf("") }
     var relationQuery by rememberSaveable(person.personId) { mutableStateOf("") }
+    var pendingRelationshipDelete by rememberSaveable(person.personId) { mutableStateOf<String?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
 
     var overviewExpanded by rememberSaveable(person.personId) { mutableStateOf(true) }
     var syncExpanded by rememberSaveable(person.personId) { mutableStateOf(false) }
@@ -116,6 +125,31 @@ fun PersonDetailScreen(
         refreshing = state.refreshing,
         onRefresh = viewModel::refresh
     )
+
+    LaunchedEffect(state.message, state.error) {
+        val feedback = state.error?.let(::personErrorMessage)
+            ?: state.message?.let(::personMessage)
+        if (!feedback.isNullOrBlank()) snackbarHostState.showSnackbar(feedback)
+    }
+
+    pendingRelationshipDelete?.let { relationshipId ->
+        AlertDialog(
+            onDismissRequest = { pendingRelationshipDelete = null },
+            title = { Text("Hapus hubungan keluarga?") },
+            text = {
+                Text("Garis hubungan akan dihapus dari pohon keluarga. Profil person tetap tersimpan.")
+            },
+            confirmButton = {
+                Button(onClick = {
+                    pendingRelationshipDelete = null
+                    viewModel.deleteRelationship(relationshipId)
+                }) { Text("Hapus hubungan") }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRelationshipDelete = null }) { Text("Batal") }
+            }
+        )
+    }
 
     Box(
         modifier = modifier
@@ -261,10 +295,12 @@ fun PersonDetailScreen(
                         query = relationQuery,
                         onQueryChange = { relationQuery = it },
                         targets = relationTargets,
+                        people = state.people,
                         updating = state.updating,
-                        onAddParent = viewModel::addParent,
-                        onAddChild = viewModel::addChild,
+                        onAddParent = { targetId, meta -> viewModel.addParent(targetId, meta) },
+                        onAddChild = { targetId, meta -> viewModel.addChild(targetId, meta) },
                         onAddSpouse = viewModel::addSpouse,
+                        onDeleteRelationship = { pendingRelationshipDelete = it },
                         onFindPath = viewModel::findPathTo,
                         pathLabel = state.path?.let { path ->
                             if (path.found) {
@@ -284,6 +320,10 @@ fun PersonDetailScreen(
             modifier = Modifier.align(Alignment.TopCenter),
             backgroundColor = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.primary
+        )
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)
         )
     }
 }
@@ -701,10 +741,12 @@ private fun RelationsSection(
     query: String,
     onQueryChange: (String) -> Unit,
     targets: List<PersonListItem>,
+    people: List<PersonListItem>,
     updating: Boolean,
-    onAddParent: (String) -> Unit,
-    onAddChild: (String) -> Unit,
+    onAddParent: (String, String) -> Unit,
+    onAddChild: (String, String) -> Unit,
     onAddSpouse: (String) -> Unit,
+    onDeleteRelationship: (String) -> Unit,
     onFindPath: (String) -> Unit,
     pathLabel: String?
 ) {
@@ -714,6 +756,23 @@ private fun RelationsSection(
             RelationCount("Orang tua", it.parents.size)
             RelationCount("Anak", it.children.size)
             RelationCount("Pasangan", it.spouses.size)
+        }
+        val peopleById = people.associateBy(PersonListItem::personId)
+        val existing = buildList {
+            addAll(it.parents.map { relation -> ExistingRelation(relation, "Orang tua", relation.fromPersonId) })
+            addAll(it.children.map { relation -> ExistingRelation(relation, "Anak", relation.toPersonId) })
+            addAll(it.spouses.map { relation ->
+                val otherId = if (relation.fromPersonId == it.personId) relation.toPersonId else relation.fromPersonId
+                ExistingRelation(relation, "Pasangan", otherId)
+            })
+        }
+        existing.forEach { item ->
+            ExistingRelationshipRow(
+                item = item,
+                personName = peopleById[item.otherPersonId]?.fullName ?: "Person keluarga",
+                enabled = !updating,
+                onDelete = { onDeleteRelationship(item.relationship.relationshipId) }
+            )
         }
     }
     OutlinedTextField(
@@ -731,8 +790,8 @@ private fun RelationsSection(
             RelationTargetRow(
                 target = target,
                 enabled = !updating,
-                onAddParent = { onAddParent(target.personId) },
-                onAddChild = { onAddChild(target.personId) },
+                onAddParent = { meta -> onAddParent(target.personId, meta) },
+                onAddChild = { meta -> onAddChild(target.personId, meta) },
                 onAddSpouse = { onAddSpouse(target.personId) },
                 onFindPath = { onFindPath(target.personId) }
             )
@@ -766,11 +825,12 @@ private fun RelationCount(label: String, value: Int) {
 private fun RelationTargetRow(
     target: PersonListItem,
     enabled: Boolean,
-    onAddParent: () -> Unit,
-    onAddChild: () -> Unit,
+    onAddParent: (String) -> Unit,
+    onAddChild: (String) -> Unit,
     onAddSpouse: () -> Unit,
     onFindPath: () -> Unit
 ) {
+    var moreExpanded by rememberSaveable(target.personId) { mutableStateOf(false) }
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
@@ -792,11 +852,66 @@ private fun RelationTargetRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth().padding(top = 9.dp).horizontalScroll(rememberScrollState())
             ) {
-                OutlinedButton(enabled = enabled, onClick = onAddParent) { Text("Orang tua") }
-                OutlinedButton(enabled = enabled, onClick = onAddChild) { Text("Anak") }
+                OutlinedButton(enabled = enabled, onClick = { onAddParent("BIOLOGICAL") }) { Text("Orang tua") }
+                OutlinedButton(enabled = enabled, onClick = { onAddChild("BIOLOGICAL") }) { Text("Anak") }
                 OutlinedButton(enabled = enabled, onClick = onAddSpouse) { Text("Pasangan") }
+                Box {
+                    OutlinedButton(enabled = enabled, onClick = { moreExpanded = true }) { Text("Lainnya") }
+                    DropdownMenu(
+                        expanded = moreExpanded,
+                        onDismissRequest = { moreExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Orang tua adopsi") },
+                            onClick = { moreExpanded = false; onAddParent("ADOPTIVE") }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Orang tua tiri") },
+                            onClick = { moreExpanded = false; onAddParent("STEP") }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Anak adopsi") },
+                            onClick = { moreExpanded = false; onAddChild("ADOPTIVE") }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Anak tiri") },
+                            onClick = { moreExpanded = false; onAddChild("STEP") }
+                        )
+                    }
+                }
                 TextButton(enabled = enabled, onClick = onFindPath) { Text("Cari jalur") }
             }
+        }
+    }
+}
+
+private data class ExistingRelation(
+    val relationship: RelationItem,
+    val roleLabel: String,
+    val otherPersonId: String
+)
+
+@Composable
+private fun ExistingRelationshipRow(
+    item: ExistingRelation,
+    personName: String,
+    enabled: Boolean,
+    onDelete: () -> Unit
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("${item.roleLabel} · $personName", style = MaterialTheme.typography.titleSmall)
+            Text(
+                relationshipMetaLabel(item.relationship.meta),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        TextButton(enabled = enabled, onClick = onDelete) {
+            Text("Hapus", color = MaterialTheme.colorScheme.error)
         }
     }
 }
@@ -870,8 +985,22 @@ internal fun personMessage(message: String): String = when {
     message.contains("Source added", true) -> "Catatan sumber berhasil ditambahkan."
     message.contains("Media added", true) -> "Tautan kenangan berhasil ditambahkan."
     message.contains("Proposal submitted", true) -> "Usulan berhasil dikirim untuk ditinjau keluarga."
+    message.contains("Parent relationship saved", true) -> "Hubungan orang tua berhasil ditentukan dan menunggu sinkronisasi."
+    message.contains("Child relationship saved", true) -> "Hubungan anak berhasil ditentukan dan menunggu sinkronisasi."
+    message.contains("Spouse saved", true) -> "Hubungan pasangan berhasil ditentukan dan menunggu sinkronisasi."
+    message.contains("Relationship deleted", true) -> "Hubungan keluarga berhasil dihapus."
     message.contains("sync queued", true) -> "Perubahan disimpan di perangkat dan masuk antrean sinkronisasi."
     else -> message
+}
+
+internal fun relationshipMetaLabel(meta: String?): String = when (meta) {
+    "BIOLOGICAL" -> "Biologis"
+    "ADOPTIVE" -> "Adopsi"
+    "STEP" -> "Tiri"
+    "MARRIED" -> "Menikah"
+    "DIVORCED" -> "Bercerai"
+    "WIDOWED" -> "Duda/janda"
+    else -> "Hubungan keluarga"
 }
 
 internal fun personErrorMessage(error: String): String = when {

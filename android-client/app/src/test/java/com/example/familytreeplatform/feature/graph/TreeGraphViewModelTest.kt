@@ -2,6 +2,7 @@ package com.example.familytreeplatform.feature.graph
 
 import com.example.familytreeplatform.models.ExportRelationship
 import com.example.familytreeplatform.models.PersonListItem
+import com.example.familytreeplatform.familyGenerationLevels
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -52,6 +53,24 @@ class TreeGraphViewModelTest {
         assertEquals(null, selected.inspectedPersonId)
         assertEquals(null, clearGraphSelection(selected).selectedPersonId)
         assertEquals("self", clearGraphSelection(selected).centerPersonId)
+    }
+
+    @Test
+    fun `person cache emission reveals first card after empty relationship cache arrived`() {
+        val initial = TreeGraphUiState(
+            centerPersonId = null,
+            persons = emptyList(),
+            relationships = emptyList()
+        )
+
+        val updated = updateGraphPersons(
+            initial,
+            listOf(person("first", "Person pertama", "2026-07-22T00:00:00Z"))
+        )
+
+        assertEquals("first", updated.centerPersonId)
+        assertEquals("first", updated.relations?.personId)
+        assertEquals(listOf("first"), updated.explorationHistory)
     }
 
     @Test
@@ -141,6 +160,23 @@ class TreeGraphViewModelTest {
     }
 
     @Test
+    fun `generation grouping places siblings and spouses with the center`() {
+        val relationships = listOf(
+            relationship("parent-center", "PARENT_CHILD", "parent", "center"),
+            relationship("parent-sibling", "PARENT_CHILD", "parent", "sibling"),
+            relationship("center-child", "PARENT_CHILD", "center", "child"),
+            relationship("center-spouse", "SPOUSE", "center", "spouse")
+        )
+
+        val levels = familyGenerationLevels("center", relationships)
+
+        assertEquals(-1, levels["parent"])
+        assertEquals(0, levels["sibling"])
+        assertEquals(0, levels["spouse"])
+        assertEquals(1, levels["child"])
+    }
+
+    @Test
     fun `search result advances exploration focus without showing graph path automatically`() {
         val state = TreeGraphUiState(
             centerPersonId = "parent",
@@ -173,6 +209,87 @@ class TreeGraphViewModelTest {
         )
 
         assertEquals(false, findShortestRelationshipPath("a", "b", people, emptyList()).found)
+    }
+
+    @Test
+    fun `integrity audit recommends removing the newest contradictory relationship`() {
+        val people = listOf(
+            person("agustya", "Agustya", "2026-01-01"),
+            person("nur", "Nur", "2026-01-01")
+        )
+        val spouse = relationship("spouse", "SPOUSE", "agustya", "nur")
+            .copy(createdAt = "2026-07-21T06:57:29Z")
+        val accidentalParent = relationship("parent", "PARENT_CHILD", "agustya", "nur")
+            .copy(createdAt = "2026-07-21T11:54:20Z", meta = "BIOLOGICAL")
+
+        val conflict = detectRelationshipIntegrityConflicts(
+            people,
+            listOf(spouse, accidentalParent)
+        ).single()
+
+        assertEquals("parent", conflict.recommendedRelationshipId)
+        assertTrue(conflict.title.contains("Agustya"))
+        assertTrue(conflict.recommendation.contains("ditambahkan paling akhir"))
+    }
+
+    @Test
+    fun `relationship validation blocks spouse parent overlap and ancestry loops`() {
+        val relationships = listOf(
+            relationship("grandparent-parent", "PARENT_CHILD", "grandparent", "parent"),
+            relationship("parent-child", "PARENT_CHILD", "parent", "child"),
+            relationship("partner", "SPOUSE", "a", "b")
+        )
+
+        assertTrue(
+            validateProposedRelationship(
+                "a",
+                "b",
+                ExistingRelationKind.TARGET_CHILD,
+                "BIOLOGICAL",
+                relationships
+            )?.contains("pasangan") == true
+        )
+        assertTrue(
+            validateProposedRelationship(
+                "grandparent",
+                "child",
+                ExistingRelationKind.PARTNER,
+                "MARRIED",
+                relationships
+            )?.contains("jalur leluhur") == true
+        )
+        assertTrue(
+            validateProposedRelationship(
+                "child",
+                "grandparent",
+                ExistingRelationKind.TARGET_CHILD,
+                "BIOLOGICAL",
+                relationships
+            )?.contains("lingkaran") == true
+        )
+    }
+
+    @Test
+    fun `integrity audit reports more than two biological parents`() {
+        val people = listOf(
+            person("child", "Anak", "2026-01-01"),
+            person("p1", "P1", "2026-01-01"),
+            person("p2", "P2", "2026-01-01"),
+            person("p3", "P3", "2026-01-01")
+        )
+        val relationships = listOf(
+            relationship("r1", "PARENT_CHILD", "p1", "child")
+                .copy(meta = "BIOLOGICAL", createdAt = "2026-01-01"),
+            relationship("r2", "PARENT_CHILD", "p2", "child")
+                .copy(meta = "BIOLOGICAL", createdAt = "2026-01-02"),
+            relationship("r3", "PARENT_CHILD", "p3", "child")
+                .copy(meta = "BIOLOGICAL", createdAt = "2026-01-03")
+        )
+
+        val conflict = detectRelationshipIntegrityConflicts(people, relationships).single()
+
+        assertEquals("r3", conflict.recommendedRelationshipId)
+        assertTrue(conflict.title.contains("lebih dari dua"))
     }
 
     @Test

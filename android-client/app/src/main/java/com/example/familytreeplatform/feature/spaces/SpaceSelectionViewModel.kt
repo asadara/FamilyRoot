@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.familytreeplatform.SessionStore
 import com.example.familytreeplatform.models.FamilySpace
 import com.example.familytreeplatform.models.InvitationPreview
+import com.example.familytreeplatform.models.PersonRequest
 import com.example.familytreeplatform.repository.PersonRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,6 +17,8 @@ import kotlinx.coroutines.launch
 data class SpaceSelectionUiState(
     val spaces: List<FamilySpace> = emptyList(),
     val newSpaceName: String = "",
+    val firstPersonName: String = "",
+    val firstPersonGender: String = "UNKNOWN",
     val invitationCode: String = "",
     val invitationPreview: InvitationPreview? = null,
     val loadingSpaces: Boolean = true,
@@ -40,6 +43,14 @@ class SpaceSelectionViewModel(private val repository: PersonRepository) : ViewMo
     }
 
     fun setNewSpaceName(value: String) = _uiState.update { it.copy(newSpaceName = value, error = null) }
+
+    fun setFirstPersonName(value: String) = _uiState.update {
+        it.copy(firstPersonName = value, error = null)
+    }
+
+    fun setFirstPersonGender(value: String) = _uiState.update {
+        it.copy(firstPersonGender = value, error = null)
+    }
 
     fun setInvitationCode(value: String) = _uiState.update {
         it.copy(invitationCode = value, invitationPreview = null, invitationError = null)
@@ -79,12 +90,33 @@ class SpaceSelectionViewModel(private val repository: PersonRepository) : ViewMo
     }
 
     fun createSpace() {
-        val name = _uiState.value.newSpaceName.trim()
-        if (name.isBlank() || _uiState.value.processing) return
+        val state = _uiState.value
+        val name = state.newSpaceName.trim()
+        val firstPersonName = state.firstPersonName.trim()
+        if (name.isBlank() || firstPersonName.isBlank() || state.processing) return
         viewModelScope.launch {
             _uiState.update { it.copy(processing = true, error = null) }
             repository.createSpace(name)
-                .onSuccess { SessionStore.selectSpace(it.spaceId, it.name, it.role) }
+                .onSuccess { space ->
+                    repository.createPerson(
+                        PersonRequest(
+                            spaceId = space.spaceId,
+                            firstName = firstPersonName,
+                            nickName = firstPersonName.substringBefore(' '),
+                            gender = state.firstPersonGender
+                        )
+                    ).onSuccess {
+                        SessionStore.selectSpace(space.spaceId, space.name, space.role ?: "OWNER")
+                    }.onFailure { error ->
+                        _uiState.update {
+                            it.copy(
+                                processing = false,
+                                error = "Silsilah berhasil dibuat, tetapi person pertama belum tersimpan: ${error.message}"
+                            )
+                        }
+                        refresh()
+                    }
+                }
                 .onFailure { error -> _uiState.update { it.copy(processing = false, error = error.message) } }
         }
     }

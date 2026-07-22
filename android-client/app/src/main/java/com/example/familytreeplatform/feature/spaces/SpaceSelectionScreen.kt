@@ -24,6 +24,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -279,8 +280,31 @@ private fun CreateFamilyCard(
             modifier = Modifier.fillMaxWidth(),
             singleLine = true
         )
+        OutlinedTextField(
+            value = state.firstPersonName,
+            onValueChange = viewModel::setFirstPersonName,
+            label = { Text("Nama person pertama") },
+            supportingText = { Text("Card ini langsung menjadi titik awal pohon keluarga.") },
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            singleLine = true
+        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+        ) {
+            listOf("MALE" to "Pria", "FEMALE" to "Wanita", "UNKNOWN" to "Belum tahu")
+                .forEach { (value, label) ->
+                    FilterChip(
+                        selected = state.firstPersonGender == value,
+                        onClick = { viewModel.setFirstPersonGender(value) },
+                        label = { Text(label) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+        }
         Button(
-            enabled = !state.processing && state.newSpaceName.isNotBlank(),
+            enabled = !state.processing && state.newSpaceName.isNotBlank() &&
+                state.firstPersonName.isNotBlank(),
             onClick = viewModel::createSpace,
             modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
         ) { Text(if (state.processing) "Membuat silsilah…" else "Buat silsilah") }

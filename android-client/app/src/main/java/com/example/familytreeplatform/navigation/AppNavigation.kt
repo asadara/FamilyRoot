@@ -43,6 +43,7 @@ import com.example.familytreeplatform.feature.spacesettings.SpaceSettingsScreen
 import com.example.familytreeplatform.feature.spacesettings.SpaceSettingsViewModel
 import com.example.familytreeplatform.feature.support.AboutScreen
 import com.example.familytreeplatform.feature.support.HelpScreen
+import com.example.familytreeplatform.data.local.OfflineMutationStatus
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.flowOf
 
@@ -79,10 +80,15 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
         spaceId?.let(repository::observePersons) ?: flowOf(emptyList())
     }
     val shellPeople by shellPeopleFlow.collectAsState(initial = emptyList())
-    val pendingSyncFlow = remember(spaceId) {
-        spaceId?.let(repository::observeOfflineMutationCount) ?: flowOf(0)
+    val syncMutationsFlow = remember(spaceId) {
+        spaceId?.let(repository::observeOfflineMutationsForSpace) ?: flowOf(emptyList())
     }
-    val pendingSyncCount by pendingSyncFlow.collectAsState(initial = 0)
+    val syncMutations by syncMutationsFlow.collectAsState(initial = emptyList())
+    val pendingSyncCount = syncMutations.count {
+        it.status == OfflineMutationStatus.PENDING || it.status == OfflineMutationStatus.SYNCING
+    }
+    val syncConflictCount = syncMutations.count { it.status == OfflineMutationStatus.CONFLICT }
+    val syncFailedCount = syncMutations.count { it.status == OfflineMutationStatus.FAILED }
     var requestedSearchPersonId by rememberSaveable { mutableStateOf<String?>(null) }
     val navigateTopLevel: (String) -> Unit = { route ->
         if (route == Routes.ABOUT || route == Routes.HELP) {
@@ -157,6 +163,8 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 userEmail = userEmail,
                 people = shellPeople,
                 pendingSyncCount = pendingSyncCount,
+                syncConflictCount = syncConflictCount,
+                syncFailedCount = syncFailedCount,
                 onSearchPerson = openSearchResult,
                 onOpenProfile = { navController.navigate(Routes.PROFILE) { launchSingleTop = true } },
                 onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
@@ -187,6 +195,8 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 userEmail = userEmail,
                 people = shellPeople,
                 pendingSyncCount = pendingSyncCount,
+                syncConflictCount = syncConflictCount,
+                syncFailedCount = syncFailedCount,
                 onSearchPerson = openSearchResult,
                 onOpenProfile = { navController.navigate(Routes.PROFILE) { launchSingleTop = true } },
                 onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
@@ -217,6 +227,8 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 userEmail = userEmail,
                 people = shellPeople,
                 pendingSyncCount = pendingSyncCount,
+                syncConflictCount = syncConflictCount,
+                syncFailedCount = syncFailedCount,
                 onSearchPerson = openSearchResult,
                 onOpenProfile = { navController.navigate(Routes.PROFILE) { launchSingleTop = true } },
                 onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
@@ -247,6 +259,8 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 userEmail = userEmail,
                 people = shellPeople,
                 pendingSyncCount = pendingSyncCount,
+                syncConflictCount = syncConflictCount,
+                syncFailedCount = syncFailedCount,
                 onSearchPerson = openSearchResult,
                 onOpenProfile = { navController.navigate(Routes.PROFILE) { launchSingleTop = true } },
                 onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) { launchSingleTop = true } },
@@ -268,6 +282,8 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 userEmail = userEmail,
                 people = shellPeople,
                 pendingSyncCount = pendingSyncCount,
+                syncConflictCount = syncConflictCount,
+                syncFailedCount = syncFailedCount,
                 onSearchPerson = openSearchResult,
                 onOpenProfile = { navController.navigate(Routes.PROFILE) { launchSingleTop = true } },
                 onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
@@ -298,6 +314,8 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 userEmail = userEmail,
                 people = shellPeople,
                 pendingSyncCount = pendingSyncCount,
+                syncConflictCount = syncConflictCount,
+                syncFailedCount = syncFailedCount,
                 onSearchPerson = openSearchResult,
                 onOpenProfile = { navController.navigate(Routes.PROFILE) { launchSingleTop = true } },
                 onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
@@ -333,6 +351,8 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 userEmail = userEmail,
                 people = shellPeople,
                 pendingSyncCount = pendingSyncCount,
+                syncConflictCount = syncConflictCount,
+                syncFailedCount = syncFailedCount,
                 onSearchPerson = openSearchResult,
                 onOpenProfile = { navController.navigate(Routes.PROFILE) { launchSingleTop = true } },
                 onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },

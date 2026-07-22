@@ -61,6 +61,9 @@ describe('Invitation and collaboration roles smoke (e2e)', () => {
       .expect(201);
     const token = invitation.body.token as string;
     expect(token).toEqual(expect.any(String));
+    expect(token).toMatch(
+      new RegExp(`^FR-${{ VIEWER: 'V', EDITOR: 'K', ADMIN: 'P' }[role]}-`),
+    );
 
     await request(app.getHttpServer())
       .get(`/spaces/invitations/${token}`)

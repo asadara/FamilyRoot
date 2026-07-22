@@ -137,6 +137,7 @@ export class SpacesService {
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + expiresInDays);
+    const roleCode = { VIEWER: 'V', EDITOR: 'K', ADMIN: 'P' }[role];
 
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
@@ -147,7 +148,7 @@ export class SpacesService {
                 spaceId,
                 role,
                 createdBy: actorUserId,
-                token: randomBytes(18).toString('base64url'),
+                token: `FR-${roleCode}-${randomBytes(18).toString('base64url')}`,
                 expiresAt,
               }),
             );

@@ -6,6 +6,7 @@ import android.net.Network
 import android.net.NetworkCapabilities
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.layout.Box
@@ -19,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -54,6 +56,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
@@ -93,6 +96,8 @@ internal fun FamilyRootNavigationShell(
     userEmail: String?,
     people: List<PersonListItem>,
     pendingSyncCount: Int,
+    syncConflictCount: Int = 0,
+    syncFailedCount: Int = 0,
     onSearchPerson: (String) -> Unit,
     onOpenProfile: () -> Unit = {},
     onOpenSettings: () -> Unit,
@@ -110,6 +115,8 @@ internal fun FamilyRootNavigationShell(
                 userEmail = userEmail,
                 people = people,
                 pendingSyncCount = pendingSyncCount,
+                syncConflictCount = syncConflictCount,
+                syncFailedCount = syncFailedCount,
                 compact = !useNavigationRail,
                 onSearchPerson = onSearchPerson,
                 onOpenProfile = onOpenProfile,
@@ -126,11 +133,27 @@ internal fun FamilyRootNavigationShell(
                             selected = currentRoute == destination.route,
                             onClick = { onNavigate(destination.route) },
                             icon = { ShellDestinationIcon(destination.icon) },
-                            label = { Text(destination.label) }
+                            label = {
+                                ShellNavigationLabel(
+                                    label = destination.label,
+                                    selected = currentRoute == destination.route
+                                )
+                            }
                         )
                     }
                     HorizontalDivider(modifier = Modifier.width(48.dp).padding(vertical = 4.dp))
-                    RailToolsMenu(onGraphAction = onGraphAction, onNavigate = onNavigate)
+                    RailToolsMenu(
+                        selected = currentRoute in setOf(Routes.ABOUT, Routes.HELP),
+                        onGraphAction = onGraphAction,
+                        onNavigate = onNavigate
+                    )
+                    Spacer(Modifier.weight(1f))
+                    Text(
+                        "\u00a9 sadar@studio\n2026",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
                 }
                 Column(modifier = Modifier.weight(1f).fillMaxSize()) {
                     appBar()
@@ -143,19 +166,37 @@ internal fun FamilyRootNavigationShell(
             Scaffold(
                 topBar = appBar,
                 bottomBar = {
-                    NavigationBar(
-                        modifier = Modifier.height(64.dp),
-                        windowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
-                    ) {
-                        topLevelDestinations.forEach { destination ->
-                            NavigationBarItem(
-                                selected = currentRoute == destination.route,
-                                onClick = { onNavigate(destination.route) },
-                                icon = { ShellDestinationIcon(destination.icon) },
-                                label = { Text(destination.label) }
+                    Column {
+                        NavigationBar(
+                            modifier = Modifier.height(64.dp),
+                            windowInsets = WindowInsets(0.dp, 0.dp, 0.dp, 0.dp)
+                        ) {
+                            topLevelDestinations.forEach { destination ->
+                                NavigationBarItem(
+                                    selected = currentRoute == destination.route,
+                                    onClick = { onNavigate(destination.route) },
+                                    icon = { ShellDestinationIcon(destination.icon) },
+                                    label = {
+                                        ShellNavigationLabel(
+                                            label = destination.label,
+                                            selected = currentRoute == destination.route
+                                        )
+                                    }
+                                )
+                            }
+                            CompactToolsMenu(
+                                selected = currentRoute in setOf(Routes.ABOUT, Routes.HELP),
+                                onGraphAction = onGraphAction,
+                                onNavigate = onNavigate
                             )
                         }
-                        CompactToolsMenu(onGraphAction = onGraphAction, onNavigate = onNavigate)
+                        Text(
+                            "\u00a9 sadar@studio 2026",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
                     }
                 }
             ) { innerPadding ->
@@ -172,6 +213,8 @@ private fun FamilyRootGlobalAppBar(
     userEmail: String?,
     people: List<PersonListItem>,
     pendingSyncCount: Int,
+    syncConflictCount: Int,
+    syncFailedCount: Int,
     compact: Boolean,
     onSearchPerson: (String) -> Unit,
     onOpenProfile: () -> Unit,
@@ -315,14 +358,16 @@ private fun FamilyRootGlobalAppBar(
                 Text(
                     text = when {
                         !online -> "Offline"
-                        pendingSyncCount > 0 -> "$pendingSyncCount antrean"
+                        syncConflictCount > 0 -> "$syncConflictCount konflik"
+                        syncFailedCount > 0 -> "$syncFailedCount gagal"
+                        pendingSyncCount > 0 -> "$pendingSyncCount menunggu sync"
                         else -> "Sinkron"
                     },
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (online) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.tertiary
+                    color = when {
+                        !online -> MaterialTheme.colorScheme.tertiary
+                        syncConflictCount > 0 || syncFailedCount > 0 -> MaterialTheme.colorScheme.error
+                        else -> MaterialTheme.colorScheme.primary
                     },
                     modifier = Modifier.padding(horizontal = 10.dp)
                 )
@@ -429,6 +474,7 @@ private fun FamilyRootGlobalAppBar(
 
 @Composable
 private fun RailToolsMenu(
+    selected: Boolean,
     onGraphAction: ((GraphShellAction) -> Unit)?,
     onNavigate: (String) -> Unit
 ) {
@@ -438,7 +484,7 @@ private fun RailToolsMenu(
             onClick = { expanded = true },
             modifier = Modifier.width(80.dp).height(40.dp)
         ) {
-            Text("Alat", style = MaterialTheme.typography.labelSmall, maxLines = 1)
+            ShellNavigationLabel("Alat", selected || expanded)
         }
         DropdownMenu(
             expanded = expanded,
@@ -455,12 +501,13 @@ private fun RailToolsMenu(
 
 @Composable
 private fun RowScope.CompactToolsMenu(
+    selected: Boolean,
     onGraphAction: ((GraphShellAction) -> Unit)?,
     onNavigate: (String) -> Unit
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     NavigationBarItem(
-        selected = false,
+        selected = selected || expanded,
         onClick = { expanded = true },
         icon = {
             Box {
@@ -477,7 +524,7 @@ private fun RowScope.CompactToolsMenu(
                 }
             }
         },
-        label = { Text("Alat") }
+        label = { ShellNavigationLabel("Alat", selected || expanded) }
     )
 }
 
@@ -539,13 +586,26 @@ private fun ColumnScope.ToolsMenuItems(
         onClick = {},
         enabled = false
     )
-    HorizontalDivider()
-    Text(
-        "\u00a9 sadar@studio 2026",
-        style = MaterialTheme.typography.labelSmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-    )
+}
+
+@Composable
+private fun ShellNavigationLabel(label: String, selected: Boolean) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.semantics { this.selected = selected }
+    ) {
+        Text(label, maxLines = 1)
+        Box(
+            modifier = Modifier
+                .padding(top = 3.dp)
+                .width(30.dp)
+                .height(3.dp)
+                .background(
+                    color = if (selected) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Transparent,
+                    shape = RoundedCornerShape(2.dp)
+                )
+        )
+    }
 }
 @Composable
 private fun rememberNetworkAvailable(): Boolean {

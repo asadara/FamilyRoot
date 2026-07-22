@@ -60,7 +60,14 @@ class SpaceSettingsViewModel(
     }
 
     fun setRole(value: String) {
-        _uiState.update { it.copy(role = value, invitationError = null, invitationMessage = null) }
+        _uiState.update {
+            it.copy(
+                role = value,
+                invitation = null,
+                invitationError = null,
+                invitationMessage = null
+            )
+        }
     }
 
     fun setExpiresInDays(value: String) {
