@@ -1,8 +1,22 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <!--
+        Android 12+ masks the splash icon to a circle. Keep the complete square
+        brand mark inside that circle by giving it a 288dp transparent canvas.
+    -->
     <item
-        android:width="176dp"
-        android:height="176dp"
+        android:width="288dp"
+        android:height="288dp">
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent" />
+            <size
+                android:width="288dp"
+                android:height="288dp" />
+        </shape>
+    </item>
+    <item
+        android:width="128dp"
+        android:height="128dp"
         android:drawable="@drawable/tredhah_mark_hd"
         android:gravity="center" />
 </layer-list>
