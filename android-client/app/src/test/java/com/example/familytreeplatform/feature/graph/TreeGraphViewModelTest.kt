@@ -3,6 +3,7 @@ package com.example.familytreeplatform.feature.graph
 import com.example.familytreeplatform.models.ExportRelationship
 import com.example.familytreeplatform.models.PersonListItem
 import com.example.familytreeplatform.familyGenerationLevels
+import com.example.familytreeplatform.unconnectedPersonIds
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -83,6 +84,49 @@ class TreeGraphViewModelTest {
         assertEquals("relative", inspected.selectedPersonId)
         assertEquals("relative", inspected.inspectedPersonId)
         assertEquals(null, clearGraphSelection(inspected).inspectedPersonId)
+    }
+
+    @Test
+    fun `focus action rebuilds graph around selected person`() {
+        val people = listOf(
+            person("aji", "Aji", "2026-01-01"),
+            person("anisa", "Anisa", "2026-01-01")
+        )
+        val spouse = relationship("spouse", "SPOUSE", "aji", "anisa")
+        val state = TreeGraphUiState(
+            centerPersonId = "aji",
+            persons = people,
+            relationships = listOf(spouse),
+            explorationHistory = listOf("aji")
+        )
+
+        val focused = focusGraphPerson(state, "anisa")
+
+        assertEquals("anisa", focused.centerPersonId)
+        assertEquals("anisa", focused.relations?.personId)
+        assertEquals(listOf("spouse"), focused.relations?.spouses?.map { it.relationshipId })
+        assertEquals(null, focused.inspectedPersonId)
+        assertEquals(listOf("aji", "anisa"), focused.explorationHistory)
+        assertEquals(
+            listOf("aji", "anisa"),
+            focusGraphPerson(focused, "anisa").explorationHistory
+        )
+    }
+
+    @Test
+    fun `new person without a relationship remains discoverable in graph`() {
+        val people = listOf(
+            person("parent", "Parent", "2026-01-01"),
+            person("child", "Child", "2026-01-02"),
+            person("new", "Person baru", "2026-01-03")
+        )
+        val relationships = listOf(
+            relationship("parent-child", "PARENT_CHILD", "parent", "child")
+        )
+
+        val unconnected = unconnectedPersonIds(people, relationships, visibleIds = setOf("parent"))
+
+        assertEquals(setOf("new"), unconnected)
     }
 
     @Test

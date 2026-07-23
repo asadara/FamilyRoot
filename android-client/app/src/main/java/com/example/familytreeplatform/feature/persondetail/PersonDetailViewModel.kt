@@ -68,6 +68,11 @@ class PersonDetailViewModel(
             }
         }
         viewModelScope.launch {
+            repository.observeProfilePhotoUrls(spaceId).collectLatest { photoUrls ->
+                _uiState.update { it.copy(profilePhotoUrl = photoUrls[personId]) }
+            }
+        }
+        viewModelScope.launch {
             repository.listPersons(spaceId)
         }
         refreshRelations()

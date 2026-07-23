@@ -40,6 +40,9 @@ data class TreeGraphUiState(
     val quickAddSaving: Boolean = false,
     val quickAddError: String? = null,
     val quickAddCompletedPersonId: String? = null,
+    val personCreateSaving: Boolean = false,
+    val personCreateError: String? = null,
+    val personCreateCompletedId: String? = null,
     val connectionSaving: Boolean = false,
     val connectionMessage: String? = null,
     val connectionError: String? = null,
@@ -68,6 +71,11 @@ class TreeGraphViewModel(
             repository.observeRelationships(spaceId).collectLatest { relationships ->
                 val graphRelationships = relationships.map(RelationItem::toExportRelationship)
                 _uiState.update { state -> updateGraphRelationships(state, graphRelationships) }
+            }
+        }
+        viewModelScope.launch {
+            repository.observeProfilePhotoUrls(spaceId).collectLatest { photoUrls ->
+                _uiState.update { it.copy(profilePhotoUrls = photoUrls) }
             }
         }
         refresh()
@@ -144,6 +152,10 @@ class TreeGraphViewModel(
         _uiState.update { inspectGraphPerson(it, personId) }
     }
 
+    fun focusPerson(personId: String) {
+        _uiState.update { focusGraphPerson(it, personId) }
+    }
+
     fun beginQuickAdd() {
         _uiState.update {
             it.copy(quickAddError = null, quickAddCompletedPersonId = null)
@@ -153,6 +165,60 @@ class TreeGraphViewModel(
     fun clearQuickAddFeedback() {
         _uiState.update {
             it.copy(quickAddError = null, quickAddCompletedPersonId = null)
+        }
+    }
+
+    fun beginPersonCreate() {
+        _uiState.update {
+            it.copy(personCreateError = null, personCreateCompletedId = null)
+        }
+    }
+
+    fun clearPersonCreateFeedback() {
+        _uiState.update {
+            it.copy(personCreateError = null, personCreateCompletedId = null)
+        }
+    }
+
+    fun createStandalonePerson(
+        firstName: String,
+        nickName: String,
+        gender: String
+    ) {
+        if (firstName.isBlank() || nickName.isBlank() || _uiState.value.personCreateSaving) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    personCreateSaving = true,
+                    personCreateError = null,
+                    personCreateCompletedId = null
+                )
+            }
+            repository.createPerson(
+                PersonRequest(
+                    spaceId = spaceId,
+                    firstName = firstName.trim(),
+                    nickName = nickName.trim(),
+                    gender = gender
+                )
+            ).onSuccess { person ->
+                _uiState.update {
+                    it.copy(
+                        personCreateSaving = false,
+                        personCreateError = null,
+                        personCreateCompletedId = person.personId,
+                        selectedPersonId = person.personId
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(
+                        personCreateSaving = false,
+                        personCreateError = error.message
+                            ?: "Person belum berhasil disimpan."
+                    )
+                }
+            }
         }
     }
 
@@ -437,6 +503,24 @@ internal fun inspectGraphPerson(state: TreeGraphUiState, personId: String): Tree
         relationshipPath = null,
         showRelationshipPathInGraph = false
     )
+
+internal fun focusGraphPerson(state: TreeGraphUiState, personId: String): TreeGraphUiState {
+    if (state.persons.none { it.personId == personId }) return state
+    return state.copy(
+        centerPersonId = personId,
+        selectedPersonId = personId,
+        inspectedPersonId = null,
+        relations = state.relationships.toRelationsResponse(personId),
+        explorationHistory = if (state.explorationHistory.lastOrNull() == personId) {
+            state.explorationHistory
+        } else {
+            state.explorationHistory + personId
+        },
+        explorationBreadcrumbVisible = true,
+        relationshipPath = null,
+        showRelationshipPathInGraph = false
+    )
+}
 
 internal fun clearGraphSelection(state: TreeGraphUiState): TreeGraphUiState =
     state.copy(selectedPersonId = null, inspectedPersonId = null)

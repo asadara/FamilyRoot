@@ -18,7 +18,7 @@ fun TredhahLogo(
     contentDescription: String? = "Logo ${TredhahBrand.NAME}"
 ) {
     Image(
-        painter = painterResource(R.drawable.tredhah_mark),
+        painter = painterResource(R.drawable.tredhah_mark_hd),
         contentDescription = contentDescription,
         contentScale = ContentScale.Fit,
         modifier = modifier

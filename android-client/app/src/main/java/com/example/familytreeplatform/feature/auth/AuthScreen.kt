@@ -268,7 +268,6 @@ private fun AuthForm(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 12.dp)
             )
-            if (BuildConfig.DEBUG) DemoAccounts(state.loading, viewModel::signInDemo)
         }
     }
 }
@@ -336,28 +335,6 @@ private fun AuthModeSelector(mode: AuthMode, onMode: (AuthMode) -> Unit) {
 private fun AuthModeButton(label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
     if (selected) Button(onClick = onClick, modifier = modifier) { Text(label) }
     else TextButton(onClick = onClick, modifier = modifier) { Text(label) }
-}
-
-@Composable
-private fun DemoAccounts(loading: Boolean, onDemo: (String) -> Unit) {
-    Spacer(Modifier.height(16.dp))
-    Text("Akun demo pengembangan", style = MaterialTheme.typography.titleMedium)
-    Text("Pilih peran untuk masuk tanpa mengetik.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 10.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            DemoButton("Ayah", "ayah@example.test", loading, onDemo, Modifier.weight(1f))
-            DemoButton("Ibu", "ibu@example.test", loading, onDemo, Modifier.weight(1f))
-        }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            DemoButton("Anak", "anak@example.test", loading, onDemo, Modifier.weight(1f))
-            DemoButton("Kakek", "kakek@example.test", loading, onDemo, Modifier.weight(1f))
-        }
-    }
-}
-
-@Composable
-private fun DemoButton(label: String, email: String, loading: Boolean, onDemo: (String) -> Unit, modifier: Modifier) {
-    OutlinedButton(enabled = !loading, onClick = { onDemo(email) }, modifier = modifier) { Text(label) }
 }
 
 internal fun authErrorMessage(message: String?): String {

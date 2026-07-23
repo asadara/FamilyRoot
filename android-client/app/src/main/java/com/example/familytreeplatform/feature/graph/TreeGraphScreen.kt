@@ -56,7 +56,10 @@ fun TreeGraphScreen(
     val centerPersonId = state.centerPersonId
     val context = LocalContext.current
     var resetViewRequest by rememberSaveable { mutableIntStateOf(0) }
+    var revealPersonRequest by rememberSaveable { mutableIntStateOf(0) }
+    var revealPersonId by rememberSaveable { mutableStateOf<String?>(null) }
     var quickAddRequest by remember { mutableStateOf<GraphQuickAddRequest?>(null) }
+    var addPersonDialogVisible by rememberSaveable { mutableStateOf(false) }
     var connectionRequest by remember { mutableStateOf<GraphConnectionRequest?>(null) }
     var integrityDialogVisible by rememberSaveable { mutableStateOf(false) }
     var pendingIntegrityDeletion by remember {
@@ -103,6 +106,19 @@ fun TreeGraphScreen(
         if (state.quickAddCompletedPersonId != null) {
             quickAddRequest = null
             viewModel.clearQuickAddFeedback()
+        }
+    }
+
+    LaunchedEffect(state.personCreateCompletedId, state.persons) {
+        val completedId = state.personCreateCompletedId
+        if (completedId != null && state.persons.any { it.personId == completedId }) {
+            addPersonDialogVisible = false
+            revealPersonId = completedId
+            revealPersonRequest++
+            viewModel.clearPersonCreateFeedback()
+            snackbarHostState.showSnackbar(
+                "Person berhasil ditambahkan. Card tampil di bagian Belum terhubung."
+            )
         }
     }
 
@@ -158,9 +174,16 @@ fun TreeGraphScreen(
                     relationshipPath = state.relationshipPath,
                     showRelationshipPathInGraph = state.showRelationshipPathInGraph,
                     resetViewRequest = resetViewRequest,
+                    revealPersonId = revealPersonId,
+                    revealPersonRequest = revealPersonRequest,
                     onSelectPerson = viewModel::selectPerson,
                     onInspectPerson = viewModel::inspectPerson,
+                    onFocusPerson = viewModel::focusPerson,
                     canEditRelationships = canEditRelationships,
+                    onAddPersonRequest = {
+                        viewModel.beginPersonCreate()
+                        addPersonDialogVisible = true
+                    },
                     onQuickAddRequest = { request ->
                         viewModel.beginQuickAdd()
                         quickAddRequest = request
@@ -203,6 +226,17 @@ fun TreeGraphScreen(
                         startDate
                     )
                 }
+            )
+        }
+        if (addPersonDialogVisible) {
+            GraphAddPersonDialog(
+                saving = state.personCreateSaving,
+                error = state.personCreateError,
+                onDismiss = {
+                    addPersonDialogVisible = false
+                    viewModel.clearPersonCreateFeedback()
+                },
+                onSave = viewModel::createStandalonePerson
             )
         }
         connectionRequest?.let { request ->

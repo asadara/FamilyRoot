@@ -54,13 +54,6 @@ class AuthViewModel(private val repository: PersonRepository) : ViewModel() {
         )
     }
 
-    fun signInDemo(email: String) {
-        _uiState.update {
-            it.copy(mode = AuthMode.SIGN_IN, email = email, password = "Test123456!", error = null)
-        }
-        authenticate(email, "Test123456!", displayName = null)
-    }
-
     fun beginGoogleSignIn(): Boolean {
         if (_uiState.value.loading) return false
         if (BuildConfig.GOOGLE_WEB_CLIENT_ID.isBlank()) {

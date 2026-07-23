@@ -84,9 +84,12 @@ import com.example.familytreeplatform.models.ParentChildMutationPayload
 import com.example.familytreeplatform.models.SpouseMutationPayload
 import com.example.familytreeplatform.sync.OfflineSyncScheduler
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -111,6 +114,8 @@ class PersonRepository(
     private val apiService: ApiService
     private val sessionApiService: ApiService
     private val refreshLock = Any()
+    private val profilePhotoUrlsBySpace =
+        MutableStateFlow<Map<String, Map<String, String>>>(emptyMap())
 
     init {
         val logging = HttpLoggingInterceptor().apply {
@@ -612,8 +617,18 @@ class PersonRepository(
     suspend fun createMedia(personId: String, request: MediaRequest): Result<MediaItem> =
         apiResult { apiService.createMedia(personId, request) }
 
+    fun observeProfilePhotoUrls(spaceId: String): Flow<Map<String, String>> =
+        profilePhotoUrlsBySpace
+            .map { photosBySpace -> photosBySpace[spaceId].orEmpty() }
+            .distinctUntilChanged()
+
     suspend fun listProfilePhotos(spaceId: String): Result<List<ProfilePhotoItem>> =
         apiResult { apiService.listProfilePhotos(spaceId) }
+            .onSuccess { photos ->
+                profilePhotoUrlsBySpace.update { current ->
+                    current + (spaceId to photos.associate { it.personId to it.url })
+                }
+            }
 
     suspend fun uploadProfilePhoto(
         spaceId: String,

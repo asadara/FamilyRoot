@@ -306,12 +306,185 @@ internal fun planProgressivePlacements(
         placeUnit(unit, UnitOrigin(rightEdge + siblingGap - unit.minX, fallbackY))
     }
 
-    return buildMap {
+    val initialPlacements = buildMap {
         units.values.forEach { unit ->
             val origin = placedOrigins.getValue(unit.id)
             unit.personIds.forEach { personId -> put(personId, unit.rectFor(personId, origin)) }
         }
     }
+    return refineFamilyBlockPlacements(
+        initialPlacements = initialPlacements,
+        basePositions = basePositions,
+        components = components,
+        componentRelationships = componentRelationships,
+        primaryUnitId = primaryUnitId,
+        siblingGap = siblingGap
+    )
+}
+
+/**
+ * Reflows each recorded birth family as one horizontal block. The child branches
+ * are measured using their complete visible descendant bounds, then packed with
+ * one global card gap. A birth family connected to the primary partnership grows
+ * away from that partnership, so the two biological families cannot interleave.
+ */
+private fun refineFamilyBlockPlacements(
+    initialPlacements: Map<String, LineagePlacementRect>,
+    basePositions: Map<String, LineagePlacementRect>,
+    components: PartnershipComponents,
+    componentRelationships: List<ComponentRelationship>,
+    primaryUnitId: String?,
+    siblingGap: Float
+): Map<String, LineagePlacementRect> {
+    if (
+        primaryUnitId == null ||
+        componentRelationships.isEmpty() ||
+        initialPlacements.size > 512
+    ) return initialPlacements
+
+    val placements = initialPlacements.toMutableMap()
+    val childComponentsByParent = componentRelationships
+        .groupBy { it.fromComponentId }
+        .mapValues { (_, relationships) ->
+            relationships.map { it.toComponentId }.distinct()
+        }
+
+    fun componentBounds(componentIds: Set<String>): LineagePlacementRect {
+        val rects = componentIds
+            .flatMap { components.personIdsByComponent[it].orEmpty() }
+            .mapNotNull(placements::get)
+        return LineagePlacementRect(
+            x = rects.minOf { it.left },
+            y = rects.minOf { it.top },
+            width = rects.maxOf { it.right } - rects.minOf { it.left },
+            height = rects.maxOf { it.bottom } - rects.minOf { it.top }
+        )
+    }
+
+    fun shiftComponents(componentIds: Set<String>, dx: Float) {
+        componentIds
+            .flatMap { components.personIdsByComponent[it].orEmpty() }
+            .forEach { personId ->
+                placements[personId] = placements.getValue(personId).shifted(dx)
+            }
+    }
+
+    fun descendantBlock(startId: String, blockedParentId: String): Set<String> {
+        if (startId == primaryUnitId) return setOf(startId)
+        val result = linkedSetOf<String>()
+        val queue = ArrayDeque<String>().apply { add(startId) }
+        while (queue.isNotEmpty()) {
+            val componentId = queue.removeFirst()
+            if (
+                componentId == blockedParentId ||
+                componentId == primaryUnitId ||
+                !result.add(componentId)
+            ) continue
+            childComponentsByParent[componentId].orEmpty().forEach(queue::addLast)
+        }
+        return result
+    }
+
+    val parentOrder = childComponentsByParent.keys.sortedWith(
+        compareByDescending<String> { it == primaryUnitId }
+            .thenByDescending { parentId ->
+                primaryUnitId in childComponentsByParent[parentId].orEmpty()
+            }
+            .thenBy { parentId -> componentBounds(setOf(parentId)).top }
+            .thenBy { it }
+    )
+
+    parentOrder.forEach { parentId ->
+        val childIds = childComponentsByParent[parentId].orEmpty()
+        if (childIds.size < 2) return@forEach
+        val childBlocks = childIds.map { childId ->
+            childId to descendantBlock(childId, parentId)
+        }
+        val componentSets = childBlocks.map { it.second }
+        val occupiedMoreThanOnce = componentSets
+            .flatMap { it }
+            .groupingBy { it }
+            .eachCount()
+            .any { (_, count) -> count > 1 }
+        if (occupiedMoreThanOnce) return@forEach
+
+        val parentConnections = componentRelationships.filter {
+            it.fromComponentId == parentId && it.toComponentId in childIds
+        }
+        val sourceRects = parentConnections
+            .map { it.relationship.fromPersonId }
+            .distinct()
+            .mapNotNull(placements::get)
+        if (sourceRects.isEmpty()) return@forEach
+        val sourceCenterX = sourceRects.map { it.centerX }.average().toFloat()
+        val primaryChild = childBlocks.firstOrNull { it.first == primaryUnitId }
+
+        if (primaryChild == null) {
+            val orderedBlocks = childBlocks.sortedWith(
+                compareBy<Pair<String, Set<String>>> {
+                    componentBounds(it.second).left
+                }.thenBy { it.first }
+            )
+            val widths = orderedBlocks.map { componentBounds(it.second).width }
+            val totalWidth = widths.sum() + siblingGap * (widths.size - 1)
+            var cursor = sourceCenterX - totalWidth / 2f
+            orderedBlocks.forEachIndexed { index, (_, blockIds) ->
+                val bounds = componentBounds(blockIds)
+                shiftComponents(blockIds, cursor - bounds.left)
+                cursor += widths[index] + siblingGap
+            }
+            return@forEach
+        }
+
+        val targetPersonId = parentConnections
+            .firstOrNull { it.toComponentId == primaryUnitId }
+            ?.relationship
+            ?.toPersonId
+        val targetRect = targetPersonId?.let(placements::get) ?: return@forEach
+        val primaryBounds = componentBounds(setOf(primaryUnitId))
+        val direction = if (targetRect.centerX <= primaryBounds.centerX) -1 else 1
+        val outwardBlocks = childBlocks
+            .filterNot { it.first == primaryUnitId }
+            .sortedWith(
+                compareBy<Pair<String, Set<String>>> {
+                    componentBounds(it.second).left
+                }.thenBy { it.first }
+            )
+
+        if (direction < 0) {
+            var cursor = targetRect.left - siblingGap
+            outwardBlocks.asReversed().forEach { (_, blockIds) ->
+                val bounds = componentBounds(blockIds)
+                shiftComponents(blockIds, cursor - bounds.right)
+                cursor -= bounds.width + siblingGap
+            }
+        } else {
+            var cursor = targetRect.right + siblingGap
+            outwardBlocks.forEach { (_, blockIds) ->
+                val bounds = componentBounds(blockIds)
+                shiftComponents(blockIds, cursor - bounds.left)
+                cursor += bounds.width + siblingGap
+            }
+        }
+
+        val familyRects = outwardBlocks.map { componentBounds(it.second) } + targetRect
+        val familyCenterX = (
+            familyRects.minOf { it.left } + familyRects.maxOf { it.right }
+            ) / 2f
+        val parentBounds = componentBounds(setOf(parentId))
+        shiftComponents(setOf(parentId), familyCenterX - parentBounds.centerX)
+    }
+
+    // The primary card remains the stable visual focus even when base rows are reflowed.
+    val primaryBasePerson = components.personIdsByComponent
+        .getValue(primaryUnitId)
+        .firstOrNull(basePositions::containsKey)
+    if (primaryBasePerson != null) {
+        val base = basePositions.getValue(primaryBasePerson)
+        val placed = placements.getValue(primaryBasePerson)
+        shiftComponents(setOf(primaryUnitId), base.x - placed.x)
+    }
+    return placements
 }
 
 private data class UnitOrigin(val x: Float, val y: Float) {

@@ -119,6 +119,7 @@ internal fun FamilyRootNavigationShell(
                 syncFailedCount = syncFailedCount,
                 compact = !useNavigationRail,
                 onSearchPerson = onSearchPerson,
+                onOpenSyncDetails = { onNavigate(Routes.ACTIVITY) },
                 onOpenProfile = onOpenProfile,
                 onOpenSettings = onOpenSettings,
                 onSignOut = onSignOut
@@ -217,6 +218,7 @@ private fun FamilyRootGlobalAppBar(
     syncFailedCount: Int,
     compact: Boolean,
     onSearchPerson: (String) -> Unit,
+    onOpenSyncDetails: () -> Unit,
     onOpenProfile: () -> Unit,
     onOpenSettings: () -> Unit,
     onSignOut: () -> Unit
@@ -224,6 +226,7 @@ private fun FamilyRootGlobalAppBar(
     var searchExpanded by rememberSaveable { mutableStateOf(false) }
     var query by rememberSaveable { mutableStateOf("") }
     var accountMenuExpanded by rememberSaveable { mutableStateOf(false) }
+    var syncMenuExpanded by rememberSaveable { mutableStateOf(false) }
     val searchFocusRequester = remember { FocusRequester() }
     val keyboardController = LocalSoftwareKeyboardController.current
     val focusManager = LocalFocusManager.current
@@ -355,22 +358,67 @@ private fun FamilyRootGlobalAppBar(
                     focusManager.clearFocus()
                 }) { Text("Batal") }
             } else {
-                Text(
-                    text = when {
-                        !online -> "Offline"
-                        syncConflictCount > 0 -> "$syncConflictCount konflik"
-                        syncFailedCount > 0 -> "$syncFailedCount gagal"
-                        pendingSyncCount > 0 -> "$pendingSyncCount menunggu sync"
-                        else -> "Sinkron"
-                    },
-                    style = MaterialTheme.typography.labelSmall,
-                    color = when {
-                        !online -> MaterialTheme.colorScheme.tertiary
-                        syncConflictCount > 0 || syncFailedCount > 0 -> MaterialTheme.colorScheme.error
-                        else -> MaterialTheme.colorScheme.primary
-                    },
-                    modifier = Modifier.padding(horizontal = 10.dp)
-                )
+                val syncLabel = when {
+                    !online -> "Offline"
+                    syncConflictCount > 0 -> "$syncConflictCount konflik"
+                    syncFailedCount > 0 -> "$syncFailedCount gagal"
+                    pendingSyncCount > 0 -> "$pendingSyncCount menunggu"
+                    else -> "Tersinkron"
+                }
+                val syncColor = when {
+                    !online -> MaterialTheme.colorScheme.tertiary
+                    syncConflictCount > 0 || syncFailedCount > 0 -> MaterialTheme.colorScheme.error
+                    else -> MaterialTheme.colorScheme.primary
+                }
+                Box {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = syncColor.copy(alpha = 0.12f),
+                        modifier = Modifier
+                            .padding(horizontal = 6.dp)
+                            .semantics {
+                                contentDescription = "Status sinkronisasi: $syncLabel. Ketuk untuk penjelasan"
+                            }
+                            .clickable { syncMenuExpanded = true }
+                    ) {
+                        Text(
+                            syncLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = syncColor,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 7.dp)
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = syncMenuExpanded,
+                        onDismissRequest = { syncMenuExpanded = false },
+                        modifier = Modifier.width(300.dp)
+                    ) {
+                        Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp)) {
+                            Text("Status sinkronisasi", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                when {
+                                    !online -> "Perubahan tetap disimpan di tablet dan akan dikirim otomatis saat internet kembali."
+                                    syncConflictCount > 0 -> "$syncConflictCount perubahan perlu dipilih antara versi tablet dan server."
+                                    syncFailedCount > 0 -> "$syncFailedCount perubahan gagal dikirim dan dapat dicoba kembali dari Aktivitas."
+                                    pendingSyncCount > 0 -> "$pendingSyncCount perubahan tersimpan di tablet dan sedang menunggu pengiriman otomatis."
+                                    else -> "Semua perubahan lokal sudah tersimpan di server. Tidak ada tindakan yang diperlukan."
+                                },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = 4.dp)
+                            )
+                        }
+                        HorizontalDivider()
+                        DropdownMenuItem(
+                            text = { Text("Lihat aktivitas sinkronisasi") },
+                            onClick = {
+                                syncMenuExpanded = false
+                                onOpenSyncDetails()
+                            }
+                        )
+                    }
+                }
                 if (!compact) {
                     Column(
                         horizontalAlignment = Alignment.End,

@@ -8,9 +8,9 @@
     <application
         android:name=".FamilyTreeApplication"
         android:allowBackup="false"
-        android:icon="@drawable/tredhah_mark"
+        android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
-        android:roundIcon="@drawable/tredhah_mark"
+        android:roundIcon="@mipmap/ic_launcher"
         android:supportsRtl="true"
         android:theme="@style/Theme.FamilyTreePlatform"
         android:usesCleartextTraffic="false"

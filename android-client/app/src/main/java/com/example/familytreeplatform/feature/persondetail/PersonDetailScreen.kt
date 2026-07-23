@@ -31,6 +31,8 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -908,6 +910,10 @@ private fun RelationTargetRow(
     onFindPath: () -> Unit
 ) {
     var moreExpanded by rememberSaveable(target.personId) { mutableStateOf(false) }
+    var selectedChoiceKey by rememberSaveable(target.personId) { mutableStateOf<String?>(null) }
+    val selectedChoice = relationshipChoices.firstOrNull { it.key == selectedChoiceKey }
+    val primaryChoices = relationshipChoices.take(3)
+    val otherChoices = relationshipChoices.drop(3)
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
@@ -929,38 +935,104 @@ private fun RelationTargetRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier.fillMaxWidth().padding(top = 9.dp).horizontalScroll(rememberScrollState())
             ) {
-                OutlinedButton(enabled = enabled, onClick = { onAddParent("BIOLOGICAL") }) { Text("Orang tua") }
-                OutlinedButton(enabled = enabled, onClick = { onAddChild("BIOLOGICAL") }) { Text("Anak") }
-                OutlinedButton(enabled = enabled, onClick = onAddSpouse) { Text("Pasangan") }
+                primaryChoices.forEach { choice ->
+                    RelationshipChoiceChip(
+                        choice = choice,
+                        selected = selectedChoiceKey == choice.key,
+                        enabled = enabled,
+                        onSelect = { selectedChoiceKey = choice.key }
+                    )
+                }
                 Box {
-                    OutlinedButton(enabled = enabled, onClick = { moreExpanded = true }) { Text("Lainnya") }
+                    FilterChip(
+                        selected = selectedChoice in otherChoices,
+                        enabled = enabled,
+                        onClick = { moreExpanded = true },
+                        label = { Text(selectedChoice?.takeIf { it in otherChoices }?.label ?: "Lainnya") },
+                        colors = relationshipChoiceColors()
+                    )
                     DropdownMenu(
                         expanded = moreExpanded,
                         onDismissRequest = { moreExpanded = false }
                     ) {
-                        DropdownMenuItem(
-                            text = { Text("Orang tua adopsi") },
-                            onClick = { moreExpanded = false; onAddParent("ADOPTIVE") }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Orang tua tiri") },
-                            onClick = { moreExpanded = false; onAddParent("STEP") }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Anak adopsi") },
-                            onClick = { moreExpanded = false; onAddChild("ADOPTIVE") }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Anak tiri") },
-                            onClick = { moreExpanded = false; onAddChild("STEP") }
-                        )
+                        otherChoices.forEach { choice ->
+                            DropdownMenuItem(
+                                text = { Text(choice.label) },
+                                onClick = {
+                                    selectedChoiceKey = choice.key
+                                    moreExpanded = false
+                                }
+                            )
+                        }
                     }
                 }
+            }
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            ) {
+                Button(
+                    enabled = enabled && selectedChoice != null,
+                    onClick = {
+                        when (selectedChoice?.kind) {
+                            RelationChoiceKind.PARENT -> onAddParent(selectedChoice.meta)
+                            RelationChoiceKind.CHILD -> onAddChild(selectedChoice.meta)
+                            RelationChoiceKind.SPOUSE -> onAddSpouse()
+                            null -> Unit
+                        }
+                    }
+                ) { Text("Simpan hubungan") }
                 TextButton(enabled = enabled, onClick = onFindPath) { Text("Cari jalur") }
             }
         }
     }
 }
+
+private enum class RelationChoiceKind { PARENT, CHILD, SPOUSE }
+
+private data class RelationChoice(
+    val key: String,
+    val label: String,
+    val kind: RelationChoiceKind,
+    val meta: String
+)
+
+private val relationshipChoices = listOf(
+    RelationChoice("PARENT_BIOLOGICAL", "Orang tua", RelationChoiceKind.PARENT, "BIOLOGICAL"),
+    RelationChoice("CHILD_BIOLOGICAL", "Anak", RelationChoiceKind.CHILD, "BIOLOGICAL"),
+    RelationChoice("SPOUSE", "Pasangan", RelationChoiceKind.SPOUSE, "MARRIED"),
+    RelationChoice("PARENT_ADOPTIVE", "Orang tua adopsi", RelationChoiceKind.PARENT, "ADOPTIVE"),
+    RelationChoice("PARENT_STEP", "Orang tua tiri", RelationChoiceKind.PARENT, "STEP"),
+    RelationChoice("CHILD_ADOPTIVE", "Anak adopsi", RelationChoiceKind.CHILD, "ADOPTIVE"),
+    RelationChoice("CHILD_STEP", "Anak tiri", RelationChoiceKind.CHILD, "STEP")
+)
+
+@Composable
+private fun RelationshipChoiceChip(
+    choice: RelationChoice,
+    selected: Boolean,
+    enabled: Boolean,
+    onSelect: () -> Unit
+) {
+    FilterChip(
+        selected = selected,
+        enabled = enabled,
+        onClick = onSelect,
+        label = { Text(choice.label) },
+        colors = relationshipChoiceColors()
+    )
+}
+
+@Composable
+private fun relationshipChoiceColors() = FilterChipDefaults.filterChipColors(
+    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.68f),
+    labelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.76f),
+    selectedContainerColor = MaterialTheme.colorScheme.primary,
+    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+    disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
+    disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.42f)
+)
 
 private data class ExistingRelation(
     val relationship: RelationItem,

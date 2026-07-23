@@ -34,6 +34,75 @@ data class GraphQuickAddRequest(
 )
 
 @Composable
+fun GraphAddPersonDialog(
+    saving: Boolean,
+    error: String?,
+    onDismiss: () -> Unit,
+    onSave: (firstName: String, nickName: String, gender: String) -> Unit
+) {
+    var firstName by rememberSaveable { mutableStateOf("") }
+    var nickName by rememberSaveable { mutableStateOf("") }
+    var gender by rememberSaveable { mutableStateOf("UNKNOWN") }
+    val canSave = firstName.isNotBlank() && nickName.isNotBlank() && !saving
+
+    AlertDialog(
+        onDismissRequest = { if (!saving) onDismiss() },
+        title = { Text("Tambah person baru") },
+        text = {
+            Column {
+                Text(
+                    "Card akan langsung muncul di workspace pada bagian Belum terhubung. " +
+                        "Hubungan keluarga dapat ditentukan setelahnya."
+                )
+                OutlinedTextField(
+                    value = firstName,
+                    onValueChange = { firstName = it },
+                    label = { Text("Nama depan") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+                )
+                OutlinedTextField(
+                    value = nickName,
+                    onValueChange = { nickName = it },
+                    label = { Text("Nama akrab keluarga") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                )
+                Text("Gender", modifier = Modifier.padding(top = 10.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+                ) {
+                    GenderButton("MALE", "Pria", gender) { gender = it }
+                    GenderButton("FEMALE", "Wanita", gender) { gender = it }
+                    GenderButton("UNKNOWN", "Belum tahu", gender) { gender = it }
+                }
+                error?.let {
+                    Text(
+                        it,
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(top = 10.dp)
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = canSave,
+                onClick = {
+                    onSave(firstName.trim(), nickName.trim(), gender)
+                }
+            ) {
+                Text(if (saving) "Menyimpan…" else "Simpan person")
+            }
+        },
+        dismissButton = {
+            TextButton(enabled = !saving, onClick = onDismiss) { Text("Batal") }
+        }
+    )
+}
+
+@Composable
 fun GraphQuickAddDialog(
     request: GraphQuickAddRequest,
     saving: Boolean,
