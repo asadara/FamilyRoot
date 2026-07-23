@@ -283,8 +283,10 @@ private fun CreateFamilyCard(
         OutlinedTextField(
             value = state.firstPersonName,
             onValueChange = viewModel::setFirstPersonName,
-            label = { Text("Nama person pertama") },
-            supportingText = { Text("Card ini langsung menjadi titik awal pohon keluarga.") },
+            label = { Text("Nama lengkap person pertama") },
+            supportingText = {
+                Text("Card awal memakai kata pertama sebagai nama panggilan; dapat diubah di profil.")
+            },
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
             singleLine = true
         )

@@ -285,7 +285,7 @@ export class RelationshipsService {
     personAId: string,
     personBId: string,
     meta: 'MARRIED' | 'DIVORCED' | 'WIDOWED',
-    startDate: string,
+    startDate: string | null | undefined,
     endDate?: string | null,
     actorUserId?: string,
     clientMutationId?: string,
@@ -300,7 +300,7 @@ export class RelationshipsService {
       fromPersonId,
       toPersonId,
       meta,
-      startDate,
+      startDate: startDate ?? null,
       endDate: endDate ?? null,
     });
     const priorMutation = await this.relationsRepo.manager.findOne(
@@ -321,7 +321,7 @@ export class RelationshipsService {
     if (personAId === personBId) {
       throw new BadRequestException('Spouse cannot be the same person');
     }
-    if (endDate && endDate < startDate) {
+    if (endDate && startDate && endDate < startDate) {
       throw new BadRequestException('endDate must be >= startDate');
     }
 
@@ -372,7 +372,7 @@ export class RelationshipsService {
       fromPersonId,
       toPersonId,
       meta,
-      startDate,
+      startDate: startDate ?? null,
       endDate: endDate ?? null,
     });
 

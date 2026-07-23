@@ -1,5 +1,6 @@
 package com.example.familytreeplatform.feature.persondetail
 
+import android.app.DatePickerDialog
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -31,6 +32,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -58,6 +60,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -74,6 +77,7 @@ import com.example.familytreeplatform.models.RelationsResponse
 import com.example.familytreeplatform.models.RelationItem
 import com.example.familytreeplatform.models.SourceItem
 import coil.compose.SubcomposeAsyncImage
+import java.util.Calendar
 
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
@@ -96,8 +100,32 @@ fun PersonDetailScreen(
         return
     }
 
+    var fullName by rememberSaveable(person.personId, person.fullName) {
+        mutableStateOf(person.fullName)
+    }
+    var nickName by rememberSaveable(person.personId, person.nickName) {
+        mutableStateOf(
+            person.nickName?.takeIf(String::isNotBlank)
+                ?: person.fullName.substringBefore(' ')
+        )
+    }
+    var gender by rememberSaveable(person.personId, person.gender) {
+        mutableStateOf(person.gender ?: "UNKNOWN")
+    }
+    var birthDate by rememberSaveable(person.personId, person.birthDate) {
+        mutableStateOf(person.birthDate.orEmpty())
+    }
     var birthPlace by rememberSaveable(person.personId, person.birthPlace) {
         mutableStateOf(person.birthPlace.orEmpty())
+    }
+    var lifeStatus by rememberSaveable(person.personId, person.lifeStatus) {
+        mutableStateOf(person.lifeStatus)
+    }
+    var deceasedAt by rememberSaveable(person.personId, person.deceasedAt) {
+        mutableStateOf(person.deceasedAt.orEmpty())
+    }
+    var deathPlace by rememberSaveable(person.personId, person.deathPlace) {
+        mutableStateOf(person.deathPlace.orEmpty())
     }
     var profileNotes by rememberSaveable(person.personId, person.notes) {
         mutableStateOf(person.notes.orEmpty())
@@ -172,7 +200,12 @@ fun PersonDetailScreen(
         contentAlignment = Alignment.TopCenter
     ) {
         LazyColumn(
-            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 16.dp),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                top = 16.dp,
+                end = 16.dp,
+                bottom = 96.dp
+            ),
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize().widthIn(max = 1040.dp)
         ) {
@@ -206,15 +239,43 @@ fun PersonDetailScreen(
                 ) {
                     OverviewSection(
                         person = person,
+                        fullName = fullName,
+                        onFullNameChange = { fullName = it },
+                        nickName = nickName,
+                        onNickNameChange = { nickName = it },
+                        gender = gender,
+                        onGenderChange = { gender = it },
+                        birthDate = birthDate,
+                        onBirthDateChange = { birthDate = it },
                         birthPlace = birthPlace,
                         onBirthPlaceChange = { birthPlace = it },
+                        lifeStatus = lifeStatus,
+                        onLifeStatusChange = { lifeStatus = it },
+                        deceasedAt = deceasedAt,
+                        onDeceasedAtChange = { deceasedAt = it },
+                        deathPlace = deathPlace,
+                        onDeathPlaceChange = { deathPlace = it },
                         notes = profileNotes,
                         onNotesChange = { profileNotes = it },
+                        canEdit = canEditProfile,
                         updating = state.updating,
                         claiming = state.claiming,
                         claimStatus = state.claim?.status,
-                        onSave = { viewModel.updateProfile(birthPlace, profileNotes) },
-                        onLifeStatusChange = viewModel::updateLifeStatus,
+                        onSave = {
+                            viewModel.updateProfile(
+                                PersonProfileEditInput(
+                                    fullName = fullName,
+                                    nickName = nickName,
+                                    gender = gender,
+                                    birthDate = birthDate,
+                                    birthPlace = birthPlace,
+                                    lifeStatus = lifeStatus,
+                                    deceasedAt = deceasedAt,
+                                    deathPlace = deathPlace,
+                                    notes = profileNotes
+                                )
+                            )
+                        },
                         onClaim = viewModel::claimAsMe
                     )
                 }
@@ -249,6 +310,7 @@ fun PersonDetailScreen(
                         onTitleChange = { sourceTitle = it },
                         note = sourceNote,
                         onNoteChange = { sourceNote = it },
+                        canEdit = canEditProfile,
                         updating = state.updating,
                         onAdd = {
                             viewModel.addSource(sourceTitle, sourceNote)
@@ -272,6 +334,7 @@ fun PersonDetailScreen(
                         onLabelChange = { mediaLabel = it },
                         uri = mediaUri,
                         onUriChange = { mediaUri = it },
+                        canEdit = canEditProfile,
                         updating = state.updating,
                         onAdd = {
                             viewModel.addMedia(mediaLabel, mediaUri)
@@ -293,6 +356,7 @@ fun PersonDetailScreen(
                         onNotesChange = { proposalNotes = it },
                         reason = proposalReason,
                         onReasonChange = { proposalReason = it },
+                        canEdit = canEditProfile,
                         updating = state.updating,
                         onSubmit = {
                             viewModel.proposeNotes(proposalNotes, proposalReason)
@@ -317,6 +381,7 @@ fun PersonDetailScreen(
                         onQueryChange = { relationQuery = it },
                         targets = relationTargets,
                         people = state.people,
+                        canEdit = canEditProfile,
                         updating = state.updating,
                         onAddParent = { targetId, meta -> viewModel.addParent(targetId, meta) },
                         onAddChild = { targetId, meta -> viewModel.addChild(targetId, meta) },
@@ -341,6 +406,12 @@ fun PersonDetailScreen(
             modifier = Modifier.align(Alignment.TopCenter),
             backgroundColor = MaterialTheme.colorScheme.surface,
             contentColor = MaterialTheme.colorScheme.primary
+        )
+        ExtendedFloatingActionButton(
+            onClick = onBack,
+            text = { Text("Kembali ke Pohon") },
+            icon = { Text("↶") },
+            modifier = Modifier.align(Alignment.BottomEnd).padding(18.dp)
         )
         SnackbarHost(
             hostState = snackbarHostState,
@@ -568,45 +639,160 @@ private fun PersonProfileSection(
 @Composable
 private fun OverviewSection(
     person: PersonListItem,
+    fullName: String,
+    onFullNameChange: (String) -> Unit,
+    nickName: String,
+    onNickNameChange: (String) -> Unit,
+    gender: String,
+    onGenderChange: (String) -> Unit,
+    birthDate: String,
+    onBirthDateChange: (String) -> Unit,
     birthPlace: String,
     onBirthPlaceChange: (String) -> Unit,
+    lifeStatus: String,
+    onLifeStatusChange: (String) -> Unit,
+    deceasedAt: String,
+    onDeceasedAtChange: (String) -> Unit,
+    deathPlace: String,
+    onDeathPlaceChange: (String) -> Unit,
     notes: String,
     onNotesChange: (String) -> Unit,
+    canEdit: Boolean,
     updating: Boolean,
     claiming: Boolean,
     claimStatus: String?,
     onSave: () -> Unit,
-    onLifeStatusChange: (String) -> Unit,
     onClaim: () -> Unit
 ) {
-    Text("Status kehidupan", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    if (!canEdit) {
+        Surface(
+            shape = RoundedCornerShape(14.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.62f),
+            modifier = Modifier.fillMaxWidth().padding(bottom = 14.dp)
+        ) {
+            Text(
+                "Akses Viewer hanya dapat membaca profil. Minta peran Kontributor atau Pengelola untuk mengubah data.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(13.dp)
+            )
+        }
+    }
+    OutlinedTextField(
+        value = fullName,
+        onValueChange = { if (canEdit) onFullNameChange(it) },
+        readOnly = !canEdit,
+        label = { Text("Nama lengkap") },
+        supportingText = {
+            Text("Nama yang disimpan pada profil dan digunakan dalam pencarian.")
+        },
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true
+    )
+    OutlinedTextField(
+        value = nickName,
+        onValueChange = { if (canEdit) onNickNameChange(it) },
+        readOnly = !canEdit,
+        label = { Text("Nama panggilan di card") },
+        supportingText = {
+            Text("Nama singkat yang tampil di workspace, misalnya Aji atau Bude Ani.")
+        },
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        singleLine = true
+    )
+    Text(
+        "Gender",
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 12.dp)
+    )
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp).horizontalScroll(rememberScrollState())
+    ) {
+        listOf("MALE" to "Pria", "FEMALE" to "Wanita", "UNKNOWN" to "Belum tahu")
+            .forEach { (value, label) ->
+                ProfileChoice(
+                    label,
+                    selected = gender == value,
+                    enabled = canEdit && !updating
+                ) { onGenderChange(value) }
+            }
+    }
+    ProfileDateField(
+        label = "Tanggal lahir (opsional)",
+        value = birthDate,
+        enabled = canEdit && !updating,
+        onValueChange = onBirthDateChange,
+        modifier = Modifier.padding(top = 10.dp)
+    )
+    OutlinedTextField(
+        value = birthPlace,
+        onValueChange = { if (canEdit) onBirthPlaceChange(it) },
+        readOnly = !canEdit,
+        label = { Text("Tempat lahir") },
+        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+        singleLine = true
+    )
+    Text(
+        "Status kehidupan",
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 14.dp)
+    )
     Row(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp).horizontalScroll(rememberScrollState())
     ) {
         listOf("ALIVE" to "Aktif", "DECEASED" to "Historis", "UNKNOWN" to "Belum diketahui").forEach { (value, label) ->
-            ProfileChoice(label, selected = person.lifeStatus == value, enabled = !updating) {
-                if (person.lifeStatus != value) onLifeStatusChange(value)
+            ProfileChoice(
+                label,
+                selected = lifeStatus == value,
+                enabled = canEdit && !updating
+            ) {
+                if (lifeStatus != value) onLifeStatusChange(value)
             }
         }
     }
-    OutlinedTextField(
-        value = birthPlace,
-        onValueChange = onBirthPlaceChange,
-        label = { Text("Tempat lahir") },
-        modifier = Modifier.fillMaxWidth().padding(top = 14.dp),
-        singleLine = true
-    )
+    if (lifeStatus == "DECEASED") {
+        ProfileDateField(
+            label = "Tanggal meninggal (opsional)",
+            value = deceasedAt,
+            enabled = canEdit && !updating,
+            onValueChange = onDeceasedAtChange,
+            modifier = Modifier.padding(top = 10.dp)
+        )
+        OutlinedTextField(
+            value = deathPlace,
+            onValueChange = { if (canEdit) onDeathPlaceChange(it) },
+            readOnly = !canEdit,
+            label = { Text("Tempat meninggal (opsional)") },
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            singleLine = true
+        )
+    }
     OutlinedTextField(
         value = notes,
-        onValueChange = onNotesChange,
+        onValueChange = { if (canEdit) onNotesChange(it) },
+        readOnly = !canEdit,
         label = { Text("Catatan profil") },
         supportingText = { Text("Informasi keluarga, bukan dokumen administratif formal") },
         modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
         minLines = 3
     )
+    val dirty =
+        fullName.trim() != person.fullName ||
+            nickName.trim() != person.nickName.orEmpty() ||
+            gender != person.gender.orEmpty() ||
+            birthDate != person.birthDate.orEmpty() ||
+            birthPlace.trim() != person.birthPlace.orEmpty() ||
+            lifeStatus != person.lifeStatus ||
+            deceasedAt != person.deceasedAt.orEmpty() ||
+            deathPlace.trim() != person.deathPlace.orEmpty() ||
+            notes.trim() != person.notes.orEmpty()
     Button(
-        enabled = !updating && (birthPlace.trim() != person.birthPlace.orEmpty() || notes.trim() != person.notes.orEmpty()),
+        enabled = canEdit && !updating && dirty &&
+            fullName.isNotBlank() && nickName.isNotBlank(),
         onClick = onSave,
         modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
     ) {
@@ -701,6 +887,7 @@ private fun SourcesSection(
     onTitleChange: (String) -> Unit,
     note: String,
     onNoteChange: (String) -> Unit,
+    canEdit: Boolean,
     updating: Boolean,
     onAdd: () -> Unit
 ) {
@@ -711,22 +898,24 @@ private fun SourcesSection(
     )
     sources.forEach { source -> ArchiveRow(source.title, source.note ?: "Catatan sumber keluarga") }
     if (sources.isEmpty()) EmptySectionMessage("Belum ada catatan sumber.")
-    OutlinedTextField(
-        value = title,
-        onValueChange = onTitleChange,
-        label = { Text("Judul sumber") },
-        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-        singleLine = true
-    )
-    OutlinedTextField(
-        value = note,
-        onValueChange = onNoteChange,
-        label = { Text("Catatan referensi") },
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        minLines = 2
-    )
-    Button(enabled = title.isNotBlank() && !updating, onClick = onAdd, modifier = Modifier.padding(top = 10.dp)) {
-        Text("Tambah catatan sumber")
+    if (canEdit) {
+        OutlinedTextField(
+            value = title,
+            onValueChange = onTitleChange,
+            label = { Text("Judul sumber") },
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            singleLine = true
+        )
+        OutlinedTextField(
+            value = note,
+            onValueChange = onNoteChange,
+            label = { Text("Catatan referensi") },
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            minLines = 2
+        )
+        Button(enabled = title.isNotBlank() && !updating, onClick = onAdd, modifier = Modifier.padding(top = 10.dp)) {
+            Text("Tambah catatan sumber")
+        }
     }
 }
 
@@ -737,6 +926,7 @@ private fun MediaSection(
     onLabelChange: (String) -> Unit,
     uri: String,
     onUriChange: (String) -> Unit,
+    canEdit: Boolean,
     updating: Boolean,
     onAdd: () -> Unit
 ) {
@@ -747,22 +937,24 @@ private fun MediaSection(
     )
     media.forEach { item -> ArchiveRow(item.label, item.uri) }
     if (media.isEmpty()) EmptySectionMessage("Belum ada tautan kenangan.")
-    OutlinedTextField(
-        value = label,
-        onValueChange = onLabelChange,
-        label = { Text("Label tautan") },
-        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-        singleLine = true
-    )
-    OutlinedTextField(
-        value = uri,
-        onValueChange = onUriChange,
-        label = { Text("URL eksternal") },
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        singleLine = true
-    )
-    Button(enabled = label.isNotBlank() && uri.isNotBlank() && !updating, onClick = onAdd, modifier = Modifier.padding(top = 10.dp)) {
-        Text("Tambah tautan")
+    if (canEdit) {
+        OutlinedTextField(
+            value = label,
+            onValueChange = onLabelChange,
+            label = { Text("Label tautan") },
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            singleLine = true
+        )
+        OutlinedTextField(
+            value = uri,
+            onValueChange = onUriChange,
+            label = { Text("URL eksternal") },
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            singleLine = true
+        )
+        Button(enabled = label.isNotBlank() && uri.isNotBlank() && !updating, onClick = onAdd, modifier = Modifier.padding(top = 10.dp)) {
+            Text("Tambah tautan")
+        }
     }
 }
 
@@ -786,6 +978,7 @@ private fun ProposalSection(
     onNotesChange: (String) -> Unit,
     reason: String,
     onReasonChange: (String) -> Unit,
+    canEdit: Boolean,
     updating: Boolean,
     onSubmit: () -> Unit
 ) {
@@ -794,22 +987,30 @@ private fun ProposalSection(
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
-    OutlinedTextField(
-        value = notes,
-        onValueChange = onNotesChange,
-        label = { Text("Catatan yang diusulkan") },
-        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
-        minLines = 3
-    )
-    OutlinedTextField(
-        value = reason,
-        onValueChange = onReasonChange,
-        label = { Text("Alasan atau konteks") },
-        modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-        minLines = 2
-    )
-    Button(enabled = notes.isNotBlank() && !updating, onClick = onSubmit, modifier = Modifier.padding(top = 10.dp)) {
-        Text("Kirim usulan")
+    if (canEdit) {
+        OutlinedTextField(
+            value = notes,
+            onValueChange = onNotesChange,
+            label = { Text("Catatan yang diusulkan") },
+            modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+            minLines = 3
+        )
+        OutlinedTextField(
+            value = reason,
+            onValueChange = onReasonChange,
+            label = { Text("Alasan atau konteks") },
+            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+            minLines = 2
+        )
+        Button(enabled = notes.isNotBlank() && !updating, onClick = onSubmit, modifier = Modifier.padding(top = 10.dp)) {
+            Text("Kirim usulan")
+        }
+    } else {
+        Text(
+            "Viewer dapat membaca profil, tetapi tidak dapat mengirim perubahan.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -821,6 +1022,7 @@ private fun RelationsSection(
     onQueryChange: (String) -> Unit,
     targets: List<PersonListItem>,
     people: List<PersonListItem>,
+    canEdit: Boolean,
     updating: Boolean,
     onAddParent: (String, String) -> Unit,
     onAddChild: (String, String) -> Unit,
@@ -849,7 +1051,7 @@ private fun RelationsSection(
             ExistingRelationshipRow(
                 item = item,
                 personName = peopleById[item.otherPersonId]?.fullName ?: "Person keluarga",
-                enabled = !updating,
+                enabled = canEdit && !updating,
                 onDelete = { onDeleteRelationship(item.relationship.relationshipId) }
             )
         }
@@ -867,8 +1069,9 @@ private fun RelationsSection(
     } else {
         targets.forEach { target ->
             RelationTargetRow(
-                target = target,
-                enabled = !updating,
+                        target = target,
+                        canEdit = canEdit,
+                        enabled = !updating,
                 onAddParent = { meta -> onAddParent(target.personId, meta) },
                 onAddChild = { meta -> onAddChild(target.personId, meta) },
                 onAddSpouse = { onAddSpouse(target.personId) },
@@ -903,6 +1106,7 @@ private fun RelationCount(label: String, value: Int) {
 @Composable
 private fun RelationTargetRow(
     target: PersonListItem,
+    canEdit: Boolean,
     enabled: Boolean,
     onAddParent: (String) -> Unit,
     onAddChild: (String) -> Unit,
@@ -939,14 +1143,14 @@ private fun RelationTargetRow(
                     RelationshipChoiceChip(
                         choice = choice,
                         selected = selectedChoiceKey == choice.key,
-                        enabled = enabled,
+                        enabled = enabled && canEdit,
                         onSelect = { selectedChoiceKey = choice.key }
                     )
                 }
                 Box {
                     FilterChip(
                         selected = selectedChoice in otherChoices,
-                        enabled = enabled,
+                        enabled = enabled && canEdit,
                         onClick = { moreExpanded = true },
                         label = { Text(selectedChoice?.takeIf { it in otherChoices }?.label ?: "Lainnya") },
                         colors = relationshipChoiceColors()
@@ -973,7 +1177,7 @@ private fun RelationTargetRow(
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
             ) {
                 Button(
-                    enabled = enabled && selectedChoice != null,
+                    enabled = enabled && canEdit && selectedChoice != null,
                     onClick = {
                         when (selectedChoice?.kind) {
                             RelationChoiceKind.PARENT -> onAddParent(selectedChoice.meta)
@@ -987,6 +1191,51 @@ private fun RelationTargetRow(
             }
         }
     }
+}
+
+@Composable
+private fun ProfileDateField(
+    label: String,
+    value: String,
+    enabled: Boolean,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val openPicker = {
+        val parts = value.split('-').mapNotNull(String::toIntOrNull)
+        val initial = Calendar.getInstance().apply {
+            if (parts.size == 3) set(parts[0], parts[1] - 1, parts[2])
+        }
+        DatePickerDialog(
+            context,
+            { _, year, month, day ->
+                onValueChange("%04d-%02d-%02d".format(year, month + 1, day))
+            },
+            initial.get(Calendar.YEAR),
+            initial.get(Calendar.MONTH),
+            initial.get(Calendar.DAY_OF_MONTH)
+        ).show()
+    }
+    OutlinedTextField(
+        value = value,
+        onValueChange = {},
+        readOnly = true,
+        label = { Text(label) },
+        supportingText = { Text("Format tersimpan: tahun-bulan-tanggal.") },
+        trailingIcon = {
+            if (enabled) {
+                Row {
+                    if (value.isNotBlank()) {
+                        TextButton(onClick = { onValueChange("") }) { Text("Hapus") }
+                    }
+                    TextButton(onClick = openPicker) { Text("Pilih") }
+                }
+            }
+        },
+        modifier = Modifier.fillMaxWidth().then(modifier),
+        singleLine = true
+    )
 }
 
 private enum class RelationChoiceKind { PARENT, CHILD, SPOUSE }

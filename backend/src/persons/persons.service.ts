@@ -146,7 +146,9 @@ export class PersonsService {
         'deceasedAt',
         'birthDate',
         'birthPlace',
+        'nickName',
         'gender',
+        'deathPlace',
         'notes',
         'version',
       ],
@@ -503,7 +505,7 @@ export class PersonsService {
       const beforePerson = JSON.stringify(person);
       const effectiveDeceasedAt =
         lifeStatus === 'DECEASED'
-          ? (deceasedAt ?? new Date().toISOString().slice(0, 10))
+          ? (deceasedAt ?? person.deceasedAt ?? null)
           : null;
 
       const updateResult = await manager
@@ -555,8 +557,7 @@ export class PersonsService {
       );
 
       if (lifeStatus === 'DECEASED') {
-        const endDate =
-          effectiveDeceasedAt ?? new Date().toISOString().slice(0, 10);
+        const endDate = effectiveDeceasedAt;
         const spouses = await manager.find(RelationshipEntity, {
           where: [
             {
@@ -612,19 +613,42 @@ export class PersonsService {
   async updateProfile(
     spaceId: string,
     personId: string,
-    birthPlace: string,
-    notes: string,
+    profile: {
+      fullName?: string;
+      nickName?: string;
+      gender?: 'MALE' | 'FEMALE' | 'UNKNOWN';
+      birthDate?: string;
+      birthPlace?: string;
+      deathPlace?: string;
+      notes?: string;
+    },
     actorUserId: string,
     expectedVersion: number,
     clientMutationId: string,
   ) {
-    const normalizedBirthPlace = birthPlace.trim() || null;
-    const normalizedNotes = notes.trim() || null;
+    const normalizedProfile = {
+      fullName: profile.fullName?.trim(),
+      nickName: profile.nickName?.trim(),
+      gender: profile.gender,
+      birthDate:
+        profile.birthDate === undefined
+          ? undefined
+          : profile.birthDate.trim() || null,
+      birthPlace:
+        profile.birthPlace === undefined
+          ? undefined
+          : profile.birthPlace.trim() || null,
+      deathPlace:
+        profile.deathPlace === undefined
+          ? undefined
+          : profile.deathPlace.trim() || null,
+      notes:
+        profile.notes === undefined ? undefined : profile.notes.trim() || null,
+    };
     const requestFingerprint = JSON.stringify({
       spaceId,
       personId,
-      birthPlace: normalizedBirthPlace,
-      notes: normalizedNotes,
+      profile: normalizedProfile,
       expectedVersion,
     });
 
@@ -659,20 +683,58 @@ export class PersonsService {
             version: person.version,
             lifeStatus: person.lifeStatus,
             deceasedAt: person.deceasedAt,
+            fullName: person.fullName,
+            nickName: person.nickName,
+            gender: person.gender,
+            birthDate: person.birthDate,
             birthPlace: person.birthPlace,
+            deathPlace: person.deathPlace,
             notes: person.notes,
             updatedAt: person.updatedAt,
           },
         });
       }
 
+      const nextBirthDate =
+        normalizedProfile.birthDate === undefined
+          ? person.birthDate
+          : normalizedProfile.birthDate;
+      if (
+        nextBirthDate &&
+        person.deceasedAt &&
+        person.deceasedAt < nextBirthDate
+      ) {
+        throw new BadRequestException(
+          'birthDate must be on or before deceasedAt',
+        );
+      }
       const beforePerson = JSON.stringify(person);
       const updateResult = await manager
         .createQueryBuilder()
         .update(PersonEntity)
         .set({
-          birthPlace: normalizedBirthPlace,
-          notes: normalizedNotes,
+          fullName: normalizedProfile.fullName ?? person.fullName,
+          firstName: normalizedProfile.fullName ?? person.firstName,
+          lastName:
+            normalizedProfile.fullName === undefined ? person.lastName : null,
+          nickName:
+            normalizedProfile.nickName === undefined
+              ? person.nickName
+              : normalizedProfile.nickName || null,
+          gender: normalizedProfile.gender ?? person.gender,
+          birthDate: nextBirthDate,
+          birthPlace:
+            normalizedProfile.birthPlace === undefined
+              ? person.birthPlace
+              : normalizedProfile.birthPlace,
+          deathPlace:
+            normalizedProfile.deathPlace === undefined
+              ? person.deathPlace
+              : normalizedProfile.deathPlace,
+          notes:
+            normalizedProfile.notes === undefined
+              ? person.notes
+              : normalizedProfile.notes,
           version: () => 'version + 1',
         })
         .where('personId = :personId', { personId })
@@ -692,7 +754,12 @@ export class PersonsService {
                 version: current.version,
                 lifeStatus: current.lifeStatus,
                 deceasedAt: current.deceasedAt,
+                fullName: current.fullName,
+                nickName: current.nickName,
+                gender: current.gender,
+                birthDate: current.birthDate,
                 birthPlace: current.birthPlace,
+                deathPlace: current.deathPlace,
                 notes: current.notes,
                 updatedAt: current.updatedAt,
               }

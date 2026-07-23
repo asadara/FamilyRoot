@@ -7,7 +7,12 @@ data class LifeStatusMutationPayload(
 
 data class ProfileMutationPayload(
     val birthPlace: String,
-    val notes: String
+    val notes: String,
+    val fullName: String? = null,
+    val nickName: String? = null,
+    val gender: String? = null,
+    val birthDate: String? = null,
+    val deathPlace: String? = null
 )
 
 data class ParentChildMutationPayload(
@@ -20,7 +25,7 @@ data class SpouseMutationPayload(
     val personAId: String,
     val personBId: String,
     val meta: String,
-    val startDate: String,
+    val startDate: String?,
     val endDate: String? = null
 )
 
@@ -29,7 +34,12 @@ data class PersonConflictSnapshot(
     val version: Int,
     val lifeStatus: String? = null,
     val deceasedAt: String? = null,
+    val fullName: String? = null,
+    val nickName: String? = null,
+    val gender: String? = null,
+    val birthDate: String? = null,
     val birthPlace: String? = null,
+    val deathPlace: String? = null,
     val notes: String? = null,
     val updatedAt: String? = null
 )

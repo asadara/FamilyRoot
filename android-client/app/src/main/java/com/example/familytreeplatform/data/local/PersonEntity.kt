@@ -1,9 +1,9 @@
 package com.example.familytreeplatform.data.local
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import androidx.room.ColumnInfo
 import com.example.familytreeplatform.models.PersonListItem
 import com.example.familytreeplatform.models.PersonResponse
 
@@ -19,6 +19,8 @@ data class PersonEntity(
     val birthPlace: String? = null,
     val gender: String?,
     val notes: String? = null,
+    val nickName: String? = null,
+    val deathPlace: String? = null,
     @ColumnInfo(defaultValue = "1") val version: Int = 1
 )
 
@@ -32,7 +34,9 @@ fun PersonEntity.toModel() = PersonListItem(
     birthPlace = birthPlace,
     gender = gender,
     notes = notes,
-    version = version
+    version = version,
+    nickName = nickName,
+    deathPlace = deathPlace
 )
 
 fun PersonListItem.toEntity(spaceId: String) = PersonEntity(
@@ -46,6 +50,8 @@ fun PersonListItem.toEntity(spaceId: String) = PersonEntity(
     birthPlace = birthPlace,
     gender = gender,
     notes = notes,
+    nickName = nickName,
+    deathPlace = deathPlace,
     version = version
 )
 
@@ -60,5 +66,7 @@ fun PersonResponse.toEntity() = PersonEntity(
     birthPlace = birthPlace,
     gender = gender,
     notes = notes,
+    nickName = nickName,
+    deathPlace = deathPlace,
     version = version
 )

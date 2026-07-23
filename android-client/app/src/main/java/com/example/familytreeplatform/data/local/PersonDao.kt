@@ -33,11 +33,39 @@ interface PersonDao {
     @Query("UPDATE persons SET lifeStatus = :lifeStatus, deceasedAt = :deceasedAt, version = :version WHERE personId = :personId")
     suspend fun applySyncedLifeStatus(personId: String, lifeStatus: String, deceasedAt: String?, version: Int)
 
-    @Query("UPDATE persons SET birthPlace = :birthPlace, notes = :notes WHERE personId = :personId")
-    suspend fun updateProfileLocally(personId: String, birthPlace: String?, notes: String?)
+    @Query(
+        """UPDATE persons SET fullName = :fullName, nickName = :nickName,
+            gender = :gender, birthDate = :birthDate, birthPlace = :birthPlace,
+            deathPlace = :deathPlace, notes = :notes WHERE personId = :personId"""
+    )
+    suspend fun updateProfileLocally(
+        personId: String,
+        fullName: String,
+        nickName: String?,
+        gender: String?,
+        birthDate: String?,
+        birthPlace: String?,
+        deathPlace: String?,
+        notes: String?
+    )
 
-    @Query("UPDATE persons SET birthPlace = :birthPlace, notes = :notes, version = :version WHERE personId = :personId")
-    suspend fun applySyncedProfile(personId: String, birthPlace: String?, notes: String?, version: Int)
+    @Query(
+        """UPDATE persons SET fullName = :fullName, nickName = :nickName,
+            gender = :gender, birthDate = :birthDate, birthPlace = :birthPlace,
+            deathPlace = :deathPlace, notes = :notes, version = :version
+            WHERE personId = :personId"""
+    )
+    suspend fun applySyncedProfile(
+        personId: String,
+        fullName: String,
+        nickName: String?,
+        gender: String?,
+        birthDate: String?,
+        birthPlace: String?,
+        deathPlace: String?,
+        notes: String?,
+        version: Int
+    )
 
     @Transaction
     suspend fun replaceSpace(spaceId: String, items: List<PersonEntity>) {

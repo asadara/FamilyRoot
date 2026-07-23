@@ -409,7 +409,7 @@ private fun AddPersonPanel(
             }
             Text("Tambah person", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(top = 12.dp))
             Text(
-                "Mulai dengan identitas yang paling dikenal keluarga. Detail lain dapat dilengkapi lewat inspector.",
+                "Nama lengkap disimpan di profil; nama panggilan dipakai agar card tetap ringkas.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
@@ -417,15 +417,18 @@ private fun AddPersonPanel(
             OutlinedTextField(
                 value = firstName,
                 onValueChange = onFirstNameChange,
-                label = { Text("Nama depan") },
+                label = { Text("Nama lengkap") },
+                supportingText = {
+                    Text("Tidak perlu dipisah menjadi nama depan dan nama belakang.")
+                },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true
             )
             OutlinedTextField(
                 value = nickName,
                 onValueChange = onNickNameChange,
-                label = { Text("Nama akrab keluarga") },
-                supportingText = { Text("Nama yang akan mudah dikenali pada card") },
+                label = { Text("Nama panggilan di card") },
+                supportingText = { Text("Contoh: Aji, Bude Ani, atau Pak Budi.") },
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                 singleLine = true
             )

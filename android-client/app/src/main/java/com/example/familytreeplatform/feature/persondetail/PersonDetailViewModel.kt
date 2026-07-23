@@ -43,6 +43,18 @@ data class PersonDetailUiState(
     val error: String? = null
 )
 
+data class PersonProfileEditInput(
+    val fullName: String,
+    val nickName: String,
+    val gender: String,
+    val birthDate: String,
+    val birthPlace: String,
+    val lifeStatus: String,
+    val deceasedAt: String,
+    val deathPlace: String,
+    val notes: String
+)
+
 class PersonDetailViewModel(
     private val spaceId: String,
     private val personId: String,
@@ -230,28 +242,69 @@ class PersonDetailViewModel(
         }
     }
 
-    fun updateLifeStatus(lifeStatus: String) {
-        viewModelScope.launch {
-            _uiState.update { it.copy(updating = true, error = null, message = null) }
-            repository.queueLifeStatusUpdate(spaceId, personId, lifeStatus).onSuccess {
-                _uiState.update {
-                    it.copy(updating = false, message = "Saved locally; sync queued")
-                }
-            }.onFailure { error ->
-                _uiState.update { it.copy(updating = false, error = error.message) }
+    fun updateProfile(input: PersonProfileEditInput) {
+        val current = _uiState.value.person ?: return
+        profileEditValidationError(input)?.let { message ->
+            _uiState.update {
+                it.copy(error = message)
             }
+            return
         }
-    }
-
-    fun updateProfile(birthPlace: String, notes: String) {
+        val birthDate = input.birthDate.trim()
+        val deceasedAt = input.deceasedAt.trim()
         viewModelScope.launch {
             _uiState.update { it.copy(updating = true, error = null, message = null) }
-            repository.queueProfileUpdate(spaceId, personId, birthPlace, notes).onSuccess {
-                _uiState.update {
-                    it.copy(updating = false, message = "Profile saved locally; sync queued")
+            val profileChanged =
+                input.fullName.trim() != current.fullName ||
+                    input.nickName.trim() != current.nickName.orEmpty() ||
+                    input.gender != current.gender.orEmpty() ||
+                    birthDate != current.birthDate.orEmpty() ||
+                    input.birthPlace.trim() != current.birthPlace.orEmpty() ||
+                    input.deathPlace.trim() != current.deathPlace.orEmpty() ||
+                    input.notes.trim() != current.notes.orEmpty()
+            val normalizedDeceasedAt = deceasedAt.takeIf {
+                input.lifeStatus == "DECEASED"
+            }
+            val lifeChanged =
+                input.lifeStatus != current.lifeStatus ||
+                    normalizedDeceasedAt.orEmpty() != current.deceasedAt.orEmpty()
+
+            if (profileChanged) {
+                repository.queueProfileUpdate(
+                    spaceId = spaceId,
+                    personId = personId,
+                    fullName = input.fullName,
+                    nickName = input.nickName,
+                    gender = input.gender,
+                    birthDate = birthDate,
+                    birthPlace = input.birthPlace,
+                    deathPlace = input.deathPlace,
+                    notes = input.notes
+                ).getOrElse { error ->
+                    _uiState.update { it.copy(updating = false, error = error.message) }
+                    return@launch
                 }
-            }.onFailure { error ->
-                _uiState.update { it.copy(updating = false, error = error.message) }
+            }
+            if (lifeChanged) {
+                repository.queueLifeStatusUpdate(
+                    spaceId,
+                    personId,
+                    input.lifeStatus,
+                    normalizedDeceasedAt
+                ).getOrElse { error ->
+                    _uiState.update { it.copy(updating = false, error = error.message) }
+                    return@launch
+                }
+            }
+            _uiState.update {
+                it.copy(
+                    updating = false,
+                    message = if (profileChanged || lifeChanged) {
+                        "Profil tersimpan di tablet dan masuk antrean sinkronisasi."
+                    } else {
+                        "Tidak ada perubahan profil."
+                    }
+                )
             }
         }
     }
@@ -342,7 +395,7 @@ class PersonDetailViewModel(
                     personAId = personId,
                     personBId = spouseId,
                     meta = "MARRIED",
-                    startDate = "2020-01-01"
+                    startDate = null
                 ),
                 focusPersonId = personId
             ).onSuccess {
@@ -380,6 +433,16 @@ class PersonDetailViewModel(
             return PersonDetailViewModel(spaceId, personId, repository) as T
         }
     }
+}
+
+internal fun profileEditValidationError(input: PersonProfileEditInput): String? = when {
+    input.fullName.isBlank() || input.nickName.isBlank() ->
+        "Nama lengkap dan nama panggilan wajib diisi."
+    input.birthDate.isNotBlank() &&
+        input.deceasedAt.isNotBlank() &&
+        input.deceasedAt < input.birthDate ->
+        "Tanggal meninggal tidak boleh sebelum tanggal lahir."
+    else -> null
 }
 
 private fun relationshipMetaMessage(meta: String): String = when (meta) {

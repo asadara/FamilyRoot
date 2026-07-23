@@ -374,7 +374,12 @@ class PersonRepository(
     suspend fun queueProfileUpdate(
         spaceId: String,
         personId: String,
+        fullName: String,
+        nickName: String,
+        gender: String,
+        birthDate: String,
         birthPlace: String,
+        deathPlace: String,
         notes: String
     ): Result<OfflineMutationEntity> = runCatching {
         val localPersonDao = requireNotNull(personDao) { "Offline person cache is unavailable" }
@@ -383,7 +388,15 @@ class PersonRepository(
         }
         val dao = requireNotNull(mutationDao) { "Offline mutation queue is unavailable" }
         val now = System.currentTimeMillis()
-        val payload = ProfileMutationPayload(birthPlace.trim(), notes.trim())
+        val payload = ProfileMutationPayload(
+            birthPlace = birthPlace.trim(),
+            notes = notes.trim(),
+            fullName = fullName.trim(),
+            nickName = nickName.trim(),
+            gender = gender,
+            birthDate = birthDate.trim(),
+            deathPlace = deathPlace.trim()
+        )
         val mutation = OfflineMutationEntity(
             mutationId = UUID.randomUUID().toString(),
             spaceId = spaceId,
@@ -403,7 +416,12 @@ class PersonRepository(
         dao.upsert(mutation)
         localPersonDao.updateProfileLocally(
             personId,
+            requireNotNull(payload.fullName),
+            payload.nickName?.ifBlank { null },
+            payload.gender,
+            payload.birthDate?.ifBlank { null },
             payload.birthPlace.ifBlank { null },
+            payload.deathPlace?.ifBlank { null },
             payload.notes.ifBlank { null }
         )
         appContext?.let(OfflineSyncScheduler::enqueue)
@@ -485,7 +503,11 @@ class PersonRepository(
         val personB = requireNotNull(peopleDao.getById(request.personBId)) { "Second spouse is unavailable offline" }
         if (personA.gender == "MALE") require(personB.gender == "FEMALE") { "Spouse gender must be FEMALE for male" }
         if (personA.gender == "FEMALE") require(personB.gender == "MALE") { "Spouse gender must be MALE for female" }
-        require(request.endDate == null || request.endDate >= request.startDate) { "endDate must be >= startDate" }
+        require(
+            request.endDate == null ||
+                request.startDate == null ||
+                request.endDate >= request.startDate
+        ) { "endDate must be >= startDate" }
         val fromId = minOf(request.personAId, request.personBId)
         val toId = maxOf(request.personAId, request.personBId)
         val relationsDao = requireNotNull(relationshipDao) { "Offline relationship cache is unavailable" }
@@ -573,12 +595,23 @@ class PersonRepository(
                     snapshot.version
                 )
             }
-            OfflineMutationType.UPDATE_PROFILE -> personDao?.applySyncedProfile(
-                snapshot.personId,
-                snapshot.birthPlace,
-                snapshot.notes,
-                snapshot.version
-            )
+            OfflineMutationType.UPDATE_PROFILE -> {
+                val localDao = personDao
+                val local = localDao?.getById(snapshot.personId)
+                if (local != null) {
+                    localDao.applySyncedProfile(
+                        snapshot.personId,
+                        snapshot.fullName ?: local.fullName,
+                        snapshot.nickName,
+                        snapshot.gender,
+                        snapshot.birthDate,
+                        snapshot.birthPlace,
+                        snapshot.deathPlace,
+                        snapshot.notes,
+                        snapshot.version
+                    )
+                }
+            }
         }
         mutationDao?.rebasePendingForPerson(
             mutation.personId,
@@ -895,6 +928,11 @@ class PersonRepository(
                             spaceId = mutation.spaceId,
                             birthPlace = payload.birthPlace,
                             notes = payload.notes,
+                            fullName = payload.fullName,
+                            nickName = payload.nickName,
+                            gender = payload.gender,
+                            birthDate = payload.birthDate,
+                            deathPlace = payload.deathPlace,
                             expectedVersion = mutation.baseVersion,
                             clientMutationId = mutation.mutationId
                         )
@@ -930,7 +968,12 @@ class PersonRepository(
                         )
                         OfflineMutationType.UPDATE_PROFILE -> personDao?.applySyncedProfile(
                             mutation.personId,
+                            person.fullName,
+                            person.nickName,
+                            person.gender,
+                            person.birthDate,
                             person.birthPlace,
+                            person.deathPlace,
                             person.notes,
                             person.version
                         )
@@ -1134,11 +1177,26 @@ class PersonRepository(
                 OfflineMutationType.UPDATE_PROFILE -> runCatching {
                     Gson().fromJson(mutation.payloadJson, ProfileMutationPayload::class.java)
                 }.getOrNull()?.let { payload ->
-                    localDao?.updateProfileLocally(
-                        mutation.personId,
-                        payload.birthPlace.ifBlank { null },
-                        payload.notes.ifBlank { null }
-                    )
+                    localDao?.getById(mutation.personId)?.let { local ->
+                        localDao.updateProfileLocally(
+                            mutation.personId,
+                            payload.fullName ?: local.fullName,
+                            payload.nickName ?: local.nickName,
+                            payload.gender ?: local.gender,
+                            if (payload.birthDate == null) {
+                                local.birthDate
+                            } else {
+                                payload.birthDate.ifBlank { null }
+                            },
+                            payload.birthPlace.ifBlank { null },
+                            if (payload.deathPlace == null) {
+                                local.deathPlace
+                            } else {
+                                payload.deathPlace.ifBlank { null }
+                            },
+                            payload.notes.ifBlank { null }
+                        )
+                    }
                 }
                 OfflineMutationType.ADD_PARENT_CHILD -> runCatching {
                     Gson().fromJson(mutation.payloadJson, ParentChildMutationPayload::class.java)

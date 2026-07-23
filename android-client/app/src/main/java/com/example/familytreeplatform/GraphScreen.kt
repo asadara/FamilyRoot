@@ -1644,6 +1644,7 @@ fun GraphScreen(
                 PersonInspector(
                     person = person,
                     isGraphCenter = person.personId == centerPersonId,
+                    canEditProfile = canEditRelationships,
                     profilePhotoUrl = profilePhotoUrls[person.personId],
                     people = personById,
                     relationships = allRelationships,
@@ -1668,7 +1669,7 @@ private fun GraphLayout.toExportSnapshot(
         val person = people[tile.id]
         GraphExportTile(
             id = tile.id,
-            label = person?.let { familiarName(it.fullName) } ?: tile.label,
+            label = person?.let(::cardDisplayName) ?: tile.label,
             role = tile.role,
             x = tile.rect.x.value,
             y = tile.rect.y.value,
@@ -1792,7 +1793,7 @@ private fun ExplorationBreadcrumb(
                 )
                 personIds.forEach { personId ->
                     Text(
-                        "  ›  ${people[personId]?.let { familiarName(it.fullName) } ?: "Person"}",
+                        "  ›  ${people[personId]?.let(::cardDisplayName) ?: "Person"}",
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1
@@ -1839,7 +1840,7 @@ private fun PersonGraphCard(
         MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
     }
     val age = if (person.lifeStatus == "ALIVE") calculateAge(person.birthDate) else null
-    val shortName = familiarName(person.fullName)
+    val shortName = cardDisplayName(person)
 
     Surface(
         modifier = modifier
@@ -1966,6 +1967,7 @@ private fun FallbackAvatar(
 private fun PersonInspector(
     person: PersonListItem,
     isGraphCenter: Boolean,
+    canEditProfile: Boolean,
     profilePhotoUrl: String?,
     people: Map<String, PersonListItem>,
     relationships: List<ExportRelationship>,
@@ -2068,6 +2070,7 @@ private fun PersonInspector(
                     onToggle = { expanded["identity"] = expanded["identity"] != true }
                 ) {
                     InspectorValue("Nama lengkap", person.fullName)
+                    InspectorValue("Nama panggilan di card", person.nickName)
                     InspectorValue("Tanggal lahir", person.birthDate)
                     InspectorValue("Tempat lahir", person.birthPlace)
                     InspectorValue(
@@ -2117,7 +2120,7 @@ private fun PersonInspector(
             ) {
                 if (!isGraphCenter) {
                     Text(
-                        "Pohon akan ditata ulang dengan ${familiarName(person.fullName)} sebagai person utama.",
+                        "Pohon akan ditata ulang dengan ${cardDisplayName(person)} sebagai person utama.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
@@ -2129,10 +2132,18 @@ private fun PersonInspector(
                 ) {
                     if (!isGraphCenter) {
                         TextButton(onClick = onFocusPerson) {
-                            Text("Jadikan ${familiarName(person.fullName)} pusat pohon")
+                            Text("Jadikan ${cardDisplayName(person)} pusat pohon")
                         }
                     }
-                    TextButton(onClick = onOpenProfile) { Text("Lihat profil lengkap") }
+                    TextButton(onClick = onOpenProfile) {
+                        Text(
+                            if (canEditProfile) {
+                                "✎ Edit profil lengkap"
+                            } else {
+                                "Lihat profil lengkap"
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -2999,6 +3010,9 @@ private fun augmentLayoutWithRelationshipPath(
         height = maxOf(base.height + shiftY, maxY.dp + margin)
     )
 }
+
+internal fun cardDisplayName(person: PersonListItem): String =
+    person.nickName?.trim()?.takeIf(String::isNotBlank) ?: familiarName(person.fullName)
 
 private fun augmentLayoutWithUnconnectedPersons(
     base: GraphLayout,

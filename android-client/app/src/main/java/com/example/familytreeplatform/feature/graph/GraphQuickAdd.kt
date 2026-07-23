@@ -57,14 +57,18 @@ fun GraphAddPersonDialog(
                 OutlinedTextField(
                     value = firstName,
                     onValueChange = { firstName = it },
-                    label = { Text("Nama depan") },
+                    label = { Text("Nama lengkap") },
+                    supportingText = {
+                        Text("Tuliskan sesuai sebutan keluarga; tidak perlu dipisah depan/belakang.")
+                    },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
                 )
                 OutlinedTextField(
                     value = nickName,
                     onValueChange = { nickName = it },
-                    label = { Text("Nama akrab keluarga") },
+                    label = { Text("Nama panggilan di card") },
+                    supportingText = { Text("Contoh: Aji, Bude Ani, atau Pak Budi.") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 )
@@ -121,8 +125,7 @@ fun GraphQuickAddDialog(
         QuickRelationKind.CHILD -> "anak"
         QuickRelationKind.PARTNER -> "pasangan"
     }
-    val canSave = firstName.isNotBlank() && nickName.isNotBlank() &&
-        (request.kind != QuickRelationKind.PARTNER || DATE_PATTERN.matches(startDate)) && !saving
+    val canSave = firstName.isNotBlank() && nickName.isNotBlank() && !saving
 
     AlertDialog(
         onDismissRequest = { if (!saving) onDismiss() },
@@ -137,14 +140,18 @@ fun GraphQuickAddDialog(
                 OutlinedTextField(
                     value = firstName,
                     onValueChange = { firstName = it },
-                    label = { Text("Nama depan") },
+                    label = { Text("Nama lengkap") },
+                    supportingText = {
+                        Text("Tuliskan sesuai sebutan keluarga; tidak perlu dipisah depan/belakang.")
+                    },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
                 )
                 OutlinedTextField(
                     value = nickName,
                     onValueChange = { nickName = it },
-                    label = { Text("Nama akrab keluarga") },
+                    label = { Text("Nama panggilan di card") },
+                    supportingText = { Text("Nama singkat yang akan terlihat di workspace.") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                 )
@@ -178,16 +185,26 @@ fun GraphQuickAddDialog(
                         value = formatIndonesianDate(startDate).orEmpty(),
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("Tanggal mulai hubungan") },
+                        label = { Text("Tanggal pernikahan (opsional)") },
                         supportingText = {
-                            Text("Bukan tanggal lahir. Tanggal lahir dapat dilengkapi di profil.")
+                            Text("Biarkan kosong jika keluarga belum mengetahui tanggalnya.")
                         },
                         trailingIcon = {
-                            TextButton(
-                                enabled = !saving,
-                                onClick = openRelationshipDatePicker
-                            ) {
-                                Text("Pilih")
+                            Row {
+                                if (startDate.isNotBlank()) {
+                                    TextButton(
+                                        enabled = !saving,
+                                        onClick = { startDate = "" }
+                                    ) {
+                                        Text("Hapus")
+                                    }
+                                }
+                                TextButton(
+                                    enabled = !saving,
+                                    onClick = openRelationshipDatePicker
+                                ) {
+                                    Text("Pilih")
+                                }
                             }
                         },
                         singleLine = true,
@@ -217,7 +234,9 @@ fun GraphQuickAddDialog(
                         firstName.trim(),
                         nickName.trim(),
                         gender,
-                        startDate.takeIf { request.kind == QuickRelationKind.PARTNER }
+                        startDate.takeIf {
+                            request.kind == QuickRelationKind.PARTNER && it.isNotBlank()
+                        }
                     )
                 }
             ) {

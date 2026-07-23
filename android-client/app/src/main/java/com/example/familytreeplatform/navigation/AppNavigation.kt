@@ -91,7 +91,17 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
     val syncFailedCount = syncMutations.count { it.status == OfflineMutationStatus.FAILED }
     var requestedSearchPersonId by rememberSaveable { mutableStateOf<String?>(null) }
     val navigateTopLevel: (String) -> Unit = { route ->
-        if (route == Routes.ABOUT || route == Routes.HELP) {
+        if (route == Routes.GRAPH) {
+            val currentRoute = navController.currentDestination?.route
+            if (currentRoute != Routes.GRAPH) {
+                val returnedToExistingTree = navController.popBackStack(Routes.GRAPH, false)
+                if (!returnedToExistingTree) {
+                    navController.navigate(Routes.GRAPH) {
+                        launchSingleTop = true
+                    }
+                }
+            }
+        } else if (route == Routes.ABOUT || route == Routes.HELP) {
             navController.navigate(route) { launchSingleTop = true }
         } else {
             navController.navigate(route) {
@@ -360,7 +370,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
             ) { shellModifier ->
                 PersonDetailScreen(
                     viewModel = detailViewModel,
-                    onBack = { navController.popBackStack() },
+                    onBack = { navigateTopLevel(Routes.GRAPH) },
                     canEditProfile = spaceRole != null && spaceRole != "VIEWER",
                     modifier = shellModifier
                 )

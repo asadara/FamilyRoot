@@ -6,6 +6,18 @@ import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class GraphRelationshipLayoutTest {
+    @Test
+    fun `workspace card prioritizes family nickname over first word`() {
+        assertEquals(
+            "Bude Ani",
+            cardDisplayName(person("ani", "Anindita Kusuma", "1980-01-01").copy(nickName = "Bude Ani"))
+        )
+        assertEquals(
+            "Anindita",
+            cardDisplayName(person("ani", "Anindita Kusuma", "1980-01-01"))
+        )
+    }
+
     private val people = listOf(
         person("older", "Kakak", "1990-01-01"),
         person("center", "Tengah", "1995-01-01"),

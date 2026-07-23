@@ -68,9 +68,27 @@ fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             SupportSection(
                 title = "Tentang TR\u00eadhAH",
                 body = "TR\u00eadhAH adalah aplikasi silsilah keluarga kolaboratif untuk " +
-                    "mencatat hubungan, menjaga cerita keluarga, dan menjelajahi hubungan " +
-                    "antargenerasi dalam satu workspace. Huruf kapitalnya membentuk TRAH, " +
+                    "menyusun hubungan antargenerasi, merawat profil person, dan menyimpan " +
+                    "cerita keluarga dalam satu workspace. Huruf kapitalnya membentuk TRAH, " +
                     "sedangkan kata tr\u00eadh merujuk pada pohon silsilah dalam bahasa Jawa."
+            )
+        }
+        item {
+            SupportSection(
+                title = "Fitur utama",
+                body = "Workspace pohon interaktif dengan block keluarga, card berfoto, filter " +
+                    "generasi, pencarian jalur hubungan, penambahan person langsung, profil " +
+                    "lengkap, hubungan biologis/adopsi/tiri, pemeriksaan hubungan rancu, " +
+                    "aktivitas sinkronisasi, undangan berbasis peran, serta ekspor PDF dan PNG."
+            )
+        }
+        item {
+            SupportSection(
+                title = "Keunggulan",
+                body = "Penataan pohon menghitung ruang antarkeluarga agar garis lineage lebih " +
+                    "mudah dibaca. Perubahan disimpan lebih dahulu di perangkat, kemudian " +
+                    "disinkronkan saat koneksi tersedia. Sistem juga menjaga aturan hubungan " +
+                    "penting tanpa menghapus keputusan keluarga secara otomatis."
             )
         }
         item {
@@ -95,34 +113,49 @@ fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
 fun HelpScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
     val sections = listOf(
         "Memulai" to
-            "Masuk dengan akun Anda, pilih silsilah, lalu buka Pohon. Status Sinkron berarti " +
-            "data perangkat telah terhubung dengan server.",
+            "Masuk dengan akun Google atau akun yang tersedia, pilih atau buat silsilah, lalu " +
+            "buka Pohon. Person pertama langsung menjadi titik awal workspace.",
         "Menjelajahi pohon" to
             "Geser area kosong untuk berpindah, gunakan cubit dua jari untuk memperbesar atau " +
-            "memperkecil, dan gunakan Atur ulang graph bila ingin kembali ke tampilan awal.",
+            "memperkecil. Filter Semua, Satu generasi, Leluhur, atau Keturunan membantu " +
+            "memusatkan bacaan. Atur ulang graph mengembalikan viewport.",
         "Membuka person" to
             "Ketuk kartu sekali untuk memilih. Panah membuka hubungan yang sudah tercatat. " +
             "Ketuk kartu terpilih sekali lagi untuk membuka inspector. Ketuk area kosong untuk " +
             "melepas pilihan.",
-        "Menambah keluarga" to
-            "Tanda + menunjukkan arah hubungan yang belum mempunyai data: atas untuk orang tua, " +
-            "bawah untuk anak, dan samping untuk pasangan. Jalur lengkap tetap tersedia melalui " +
-            "Inspector, Profil, dan menu Keluarga.",
-        "Mengisi data" to
-            "Gunakan nama akrab agar kartu mudah dibaca. Tanggal mulai hubungan adalah tanggal " +
-            "dimulainya partnership atau pernikahan, bukan tanggal lahir. Tanggal lahir dan data " +
-            "rinci dapat dilengkapi melalui profil person.",
+        "Menambah person" to
+            "Tekan tombol Tambah person atau tekan lama area kosong. Nama lengkap tersimpan di " +
+            "profil, sedangkan nama panggilan tampil pada card. Person tanpa hubungan tetap " +
+            "muncul di kelompok Belum terhubung.",
+        "Menambah hubungan" to
+            "Pilih card lalu gunakan tanda +, tarik titik hubung ke card lain, atau buka bagian " +
+            "Keluarga & hubungan di profil. Pilihan mencakup orang tua/anak biologis, adopsi, " +
+            "tiri, dan pasangan. Tanggal pernikahan boleh dikosongkan jika belum diketahui.",
+        "Mengubah profil" to
+            "Buka Inspector lalu pilih Edit profil lengkap. Kontributor dan Pengelola dapat " +
+            "mengubah nama lengkap, nama panggilan card, gender, tanggal/tempat lahir, status " +
+            "kehidupan, data meninggal, foto, dan catatan. Viewer hanya dapat membaca.",
+        "Pusat pohon" to
+            "Jadikan [nama] pusat pohon berarti menata ulang silsilah dengan person tersebut " +
+            "sebagai person utama; bukan memindahkan card ke kiri. Pan dan zoom tetap aktif.",
+        "Memperbaiki hubungan" to
+            "Hubungan yang salah dapat dihapus dari Profil lengkap. Jika sistem menemukan " +
+            "hubungan ganda atau rancu, banner pemeriksaan menampilkan rekomendasi tanpa " +
+            "menghapus data secara otomatis.",
         "Bekerja offline" to
             "Perubahan dapat masuk ke antrean ketika perangkat offline. Aktifkan koneksi kembali " +
-            "dan tunggu status Sinkron. Gunakan tarik-untuk-memperbarui pada halaman yang " +
-            "menyediakannya bila data perangkat lain belum terlihat.",
+            "dan pantau label Tersinkron, Menunggu, Gagal, atau Konflik di header. Detail dan " +
+            "tindakan ulang tersedia melalui Aktivitas atau bagian Sinkronisasi profil.",
         "Undangan dan peran" to
-            "Pembaca hanya melihat data, kontributor dapat menambah atau mengubah, sedangkan " +
-            "pengelola dapat mengatur anggota serta undangan. Kontrol terkunci menandakan akses " +
-            "hanya baca.",
+            "Viewer hanya melihat data, Kontributor dapat menambah atau mengubah, sedangkan " +
+            "Pengelola/Pemilik dapat mengatur anggota dan undangan. Kode undangan dibedakan " +
+            "menurut peran akses.",
         "Export pohon" to
             "Buka Alat lalu pilih Ekspor PDF atau Ekspor PNG. Export mengikuti cabang, kartu, " +
-            "pasangan, dan connector yang sedang terlihat di workspace."
+            "pasangan, dan connector yang sedang terlihat di workspace.",
+        "Kembali ke Pohon" to
+            "Dari Profil lengkap, gunakan tombol Kembali ke Pohon yang selalu terlihat atau " +
+            "pilih menu Pohon. Anda tidak perlu menggulir kembali ke bagian atas."
     )
     SupportPage(
         title = "Petunjuk penggunaan",

@@ -20,9 +20,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 data class TreeGraphUiState(
     val centerPersonId: String? = null,
@@ -268,7 +265,7 @@ class TreeGraphViewModel(
                         personAId = sourcePersonId,
                         personBId = targetPersonId,
                         meta = meta,
-                        startDate = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+                        startDate = null
                     ),
                     focusPersonId = sourcePersonId
                 )
@@ -394,9 +391,7 @@ class TreeGraphViewModel(
                             personAId = request.anchorPersonId,
                             personBId = created.personId,
                             meta = "MARRIED",
-                            startDate = requireNotNull(startDate) {
-                                "Tanggal mulai hubungan diperlukan"
-                            }
+                            startDate = startDate
                         ),
                         focusPersonId = request.anchorPersonId
                     ).getOrThrow()

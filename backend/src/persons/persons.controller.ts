@@ -109,8 +109,7 @@ export class PersonsController {
     return this.personsService.updateProfile(
       dto.spaceId,
       personId,
-      dto.birthPlace,
-      dto.notes,
+      dto,
       actorUserId,
       dto.expectedVersion,
       dto.clientMutationId,

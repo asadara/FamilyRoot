@@ -7,6 +7,7 @@ import com.example.familytreeplatform.data.local.FamilyTreeDatabase
 import com.example.familytreeplatform.data.local.MIGRATION_1_2
 import com.example.familytreeplatform.data.local.MIGRATION_2_3
 import com.example.familytreeplatform.data.local.MIGRATION_3_4
+import com.example.familytreeplatform.data.local.MIGRATION_4_5
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -21,7 +22,7 @@ class FamilyTreeApplication : Application() {
         super.onCreate()
         SessionStore.initialize(this)
         val database = Room.databaseBuilder(this, FamilyTreeDatabase::class.java, "family-tree.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
             .build()
         container = AppContainer(
             database,

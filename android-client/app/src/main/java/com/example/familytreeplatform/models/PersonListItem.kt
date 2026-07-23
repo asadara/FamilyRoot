@@ -10,5 +10,7 @@ data class PersonListItem(
     val birthPlace: String? = null,
     val gender: String? = null,
     val notes: String? = null,
-    val version: Int = 1
+    val version: Int = 1,
+    val nickName: String? = null,
+    val deathPlace: String? = null
 )
