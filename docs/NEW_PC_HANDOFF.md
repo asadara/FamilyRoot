@@ -36,9 +36,17 @@ FAMILYROOT-MEMORY — baca PROJECT_MEMORY.md seluruhnya, pulihkan konteks projec
 periksa status Git terbaru, lalu konfirmasi pemahaman sebelum melakukan perubahan.
 ```
 
-Konteks kanonik berada di `PROJECT_MEMORY.md`, `PROJECT_BLUEPRINT.md`, dan dokumen
-keputusan yang dirujuk oleh memory. Riwayat chat lama tidak dibutuhkan untuk
-melanjutkan project.
+Konteks kanonik berada di `PROJECT_MEMORY.md`, `PROJECT_BLUEPRINT.md`,
+`docs/PROJECT_GAP_AUDIT_2026-07-24.md`, dan dokumen keputusan yang dirujuk oleh
+memory. Riwayat chat lama tidak dibutuhkan untuk melanjutkan project.
+
+Setelah konteks dipulihkan, pastikan sesi baru menyebutkan:
+
+- commit dan hubungan branch lokal terhadap `origin/main`;
+- fase fondasi yang sudah selesai;
+- backlog aktif dari audit terbaru;
+- item yang sengaja `DEFERRED` atau `SUPERSEDED`;
+- batas bahwa audit tidak otomatis memberi izin melakukan perubahan destruktif.
 
 ## 3. Siapkan backend dan data demo
 

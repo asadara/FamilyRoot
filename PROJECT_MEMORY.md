@@ -1,10 +1,12 @@
 # FamilyRoot — Project Memory dan Session Handoff
 
 > **Status:** Memori operasional aktif untuk melanjutkan pekerjaan lintas sesi chat
-> **Snapshot diperbarui:** 19 Juli 2026, Asia/Jakarta
+> **Snapshot diperbarui:** 24 Juli 2026, Asia/Jakarta
 > **Repository:** `asadara/FamilyRoot`
 > **Branch:** `main`
 > **Baseline sebelum implementasi frontend v2:** `b8679d3ca772cf3786a381e0716fedc4906f24da` (`feat: complete phase 4 data sustainability`)
+> **Baseline implementasi sebelum audit aktif:** `a79bbae04f872fb150a3eeb4cab7a3b1c549c128` (`fix: keep splash logo within safe area`)
+> **Audit/backlog aktif:** `docs/PROJECT_GAP_AUDIT_2026-07-24.md`
 > **Keyword pemulihan konteks:** `FAMILYROOT-MEMORY`
 > **Tidak menggantikan:** `PROJECT_BLUEPRINT.md`; dokumen ini merangkum keadaan implementasi dan keputusan kerja agar sesi baru dapat melanjutkan konteks dengan benar.
 
@@ -13,10 +15,12 @@
 Di sesi baru, buka workspace repository ini lalu kirim instruksi berikut:
 
 ```text
-FAMILYROOT-MEMORY — baca PROJECT_MEMORY.md seluruhnya, lalu PROJECT_BLUEPRINT.md,
+FAMILYROOT-MEMORY — baca PROJECT_MEMORY.md seluruhnya, lalu
+docs/PROJECT_GAP_AUDIT_2026-07-24.md, PROJECT_BLUEPRINT.md,
 android-client/ARCHITECTURE.md, dan docs/PHASE4_PRODUCTION_REVIEW.md. Periksa git
-status dan commit terbaru. Ringkas pemahaman serta kondisi aktual sebelum melakukan
-perubahan apa pun. Jangan gunakan Wireless ADB; pengujian tablet hanya melalui USB.
+status dan commit terbaru. Ringkas pemahaman, backlog aktif, serta kondisi aktual
+sebelum melakukan perubahan apa pun. Jangan gunakan Wireless ADB; pengujian tablet
+hanya melalui USB.
 ```
 
 Keyword tidak menyimpan memori secara magis di luar repository. Fungsinya adalah
@@ -26,7 +30,7 @@ menerima keyword wajib membaca file ini dari disk, bukan mengandalkan ingatan ch
 Urutan pemulihan yang aman:
 
 1. baca `PROJECT_MEMORY.md` sampai selesai;
-2. baca dokumen sumber sesuai daftar pada bagian 16;
+2. baca audit/backlog aktif dan dokumen sumber sesuai daftar pada bagian 16;
 3. jalankan `git status --short --branch` dan `git log -5 --oneline --decorate`;
 4. bandingkan keadaan aktual dengan snapshot dalam dokumen ini;
 5. laporkan pemahaman dan perbedaan yang ditemukan;
@@ -552,6 +556,12 @@ Aturan kerja repository:
 
 ## 14. Known Gaps dan Utang Dokumentasi
 
+> **Update audit 24 Juli 2026:** status gap dan urutan backlog terbaru berada di
+> `docs/PROJECT_GAP_AUDIT_2026-07-24.md`. Dokumen audit tersebut memisahkan pekerjaan
+> aktif, implementasi parsial, verifikasi eksternal, rencana deferred, dan keputusan
+> yang telah menggantikan rencana lama. Bila ringkasan historis di bawah berbeda dari
+> source atau audit terbaru, periksa Git history lalu gunakan keputusan paling baru.
+
 Hal berikut diketahui pada snapshot dan belum boleh disalahartikan sebagai pekerjaan
 yang sudah selesai:
 
@@ -786,16 +796,18 @@ Gunakan urutan otoritas berikut:
 
 1. `PROJECT_BLUEPRINT.md` — visi, prinsip, roadmap v1, dan progress tracker kanonik;
 2. `PROJECT_MEMORY.md` — snapshot implementasi, keputusan kerja, dan handoff sesi;
-3. `docs/FRONTEND_GRAPH_WORKSPACE_DECISION.md` — baseline produk frontend dan
+3. `docs/PROJECT_GAP_AUDIT_2026-07-24.md` — status implementasi dan backlog aktif
+   hasil audit terhadap rencana, source, API, migration, UI, dan test;
+4. `docs/FRONTEND_GRAPH_WORKSPACE_DECISION.md` — baseline produk frontend dan
    tata kelola data yang telah disepakati untuk arah Blueprint v2;
-4. `docs/CLOUD_PILOT_DECISION.md` — arah pilot Cloud Run + Supabase tanpa mengganti
+5. `docs/CLOUD_PILOT_DECISION.md` — arah pilot Cloud Run + Supabase tanpa mengganti
    arsitektur NestJS;
-5. `android-client/ARCHITECTURE.md` — keputusan arsitektur Android;
-6. `backend/API_CONTRACT.md` — kontrak endpoint, role, error, concurrency, portability;
-7. `docs/PHASE4_PRODUCTION_REVIEW.md` — privacy/security/performance/release review;
-8. `android-client/README.md` dan `backend/README.md` — runbook ringkas;
-9. source code dan automated tests — bukti implementasi aktual;
-10. Git history — bukti waktu dan commit perubahan.
+6. `android-client/ARCHITECTURE.md` — keputusan arsitektur Android;
+7. `backend/API_CONTRACT.md` — kontrak endpoint, role, error, concurrency, portability;
+8. `docs/PHASE4_PRODUCTION_REVIEW.md` — privacy/security/performance/release review;
+9. `android-client/README.md` dan `backend/README.md` — runbook ringkas;
+10. source code dan automated tests — bukti implementasi aktual;
+11. Git history — bukti waktu dan commit perubahan.
 
 File implementasi penting untuk verifikasi:
 
@@ -822,6 +834,8 @@ Saat menerima `FAMILYROOT-MEMORY`, agen harus mengonfirmasi hal berikut sebelum 
 - memahami database lokal tidak ikut Git;
 - memahami Phase 1–4 sudah selesai dan belum ada Phase 5;
 - memahami Blueprint v2 akan berfokus pada diskusi produk/UI/UX dan tetap terkait v1;
+- membaca `docs/PROJECT_GAP_AUDIT_2026-07-24.md` dan menyebut backlog aktif yang
+  relevan sebelum mengusulkan pekerjaan baru;
 - membaca risalah cloud dan frontend terbaru sebelum membuka kembali keputusan yang
   telah ditutup;
 - memahami lineage seed yang benar, khususnya Siti sebagai ibu kandung Raka dan Alya
