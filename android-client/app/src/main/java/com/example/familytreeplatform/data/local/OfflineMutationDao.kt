@@ -23,6 +23,9 @@ interface OfflineMutationDao {
     @Query("SELECT COUNT(*) FROM offline_mutations WHERE spaceId = :spaceId")
     suspend fun countForSpace(spaceId: String): Int
 
+    @Query("SELECT COUNT(*) FROM offline_mutations WHERE personId = :personId")
+    suspend fun countForPerson(personId: String): Int
+
     @Query("SELECT COUNT(*) FROM offline_mutations WHERE spaceId = :spaceId")
     fun observeCountForSpace(spaceId: String): Flow<Int>
 

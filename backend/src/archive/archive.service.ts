@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { ChangeLogEntity } from '../changes/change-log.entity';
 import { PersonEntity } from '../persons/person.entity';
 import { EditProposalEntity } from './edit-proposal.entity';
@@ -15,6 +15,7 @@ import { processUploadedImage } from './image-processor';
 import { OBJECT_STORAGE } from './storage/object-storage';
 import type { ObjectStorage } from './storage/object-storage';
 import { randomUUID } from 'node:crypto';
+import { PersonDeletionService } from '../persons/person-deletion.service';
 
 @Injectable()
 export class ArchiveService {
@@ -31,6 +32,7 @@ export class ArchiveService {
     private readonly changeRepo: Repository<ChangeLogEntity>,
     @Inject(OBJECT_STORAGE)
     private readonly objectStorage: ObjectStorage,
+    private readonly personDeletionService: PersonDeletionService,
   ) {}
 
   private async assertPerson(spaceId: string, personId: string) {
@@ -228,11 +230,25 @@ export class ArchiveService {
     };
   }
 
-  listProposals(spaceId: string) {
-    return this.proposalsRepo.find({
+  async listProposals(spaceId: string) {
+    const proposals = await this.proposalsRepo.find({
       where: { spaceId },
       order: { createdAt: 'DESC' },
     });
+    const personIds = [...new Set(proposals.map((item) => item.personId))];
+    const people = personIds.length
+      ? await this.personsRepo.find({
+          where: { spaceId, personId: In(personIds) },
+          select: ['personId', 'fullName'],
+        })
+      : [];
+    const names = new Map(
+      people.map((person) => [person.personId, person.fullName]),
+    );
+    return proposals.map((proposal) => ({
+      ...proposal,
+      personName: names.get(proposal.personId) ?? 'Person tidak ditemukan',
+    }));
   }
 
   async createProposal(
@@ -283,11 +299,33 @@ export class ArchiveService {
     if (!proposal) throw new NotFoundException('Proposal not found');
     if (proposal.status !== 'PENDING') return proposal;
 
-    const person = await this.assertPerson(spaceId, proposal.personId);
     return this.proposalsRepo.manager.transaction(async (manager) => {
-      const beforePerson = JSON.stringify(person);
-      person[proposal.field] = proposal.proposedValue;
-      const savedPerson = await manager.save(person);
+      if (proposal.field === 'DELETE_PERSON') {
+        await this.personDeletionService.softDeleteWithManager(
+          manager,
+          spaceId,
+          proposal.personId,
+          actorUserId,
+          proposal.proposalId,
+        );
+      } else {
+        const person = await this.assertPerson(spaceId, proposal.personId);
+        const beforePerson = JSON.stringify(person);
+        person[proposal.field] = proposal.proposedValue;
+        const savedPerson = await manager.save(person);
+        await manager.save(
+          manager.create(ChangeLogEntity, {
+            spaceId,
+            actorUserId,
+            entityType: 'PERSON',
+            entityId: savedPerson.personId,
+            operation: 'UPDATE',
+            note: `Approve proposal for ${proposal.field}`,
+            beforeJson: beforePerson,
+            afterJson: JSON.stringify(savedPerson),
+          }),
+        );
+      }
 
       const beforeProposal = JSON.stringify(proposal);
       proposal.status = 'APPROVED';
@@ -299,22 +337,13 @@ export class ArchiveService {
         manager.create(ChangeLogEntity, {
           spaceId,
           actorUserId,
-          entityType: 'PERSON',
-          entityId: savedPerson.personId,
-          operation: 'UPDATE',
-          note: `Approve proposal for ${proposal.field}`,
-          beforeJson: beforePerson,
-          afterJson: JSON.stringify(savedPerson),
-        }),
-      );
-      await manager.save(
-        manager.create(ChangeLogEntity, {
-          spaceId,
-          actorUserId,
           entityType: 'PROPOSAL',
           entityId: savedProposal.proposalId,
           operation: 'VERIFY',
-          note: 'Approve edit proposal',
+          note:
+            proposal.field === 'DELETE_PERSON'
+              ? 'Approve person deletion request'
+              : 'Approve edit proposal',
           beforeJson: beforeProposal,
           afterJson: JSON.stringify(savedProposal),
         }),

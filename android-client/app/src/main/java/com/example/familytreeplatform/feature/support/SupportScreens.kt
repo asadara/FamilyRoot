@@ -142,6 +142,11 @@ fun HelpScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             "Hubungan yang salah dapat dihapus dari Profil lengkap. Jika sistem menemukan " +
             "hubungan ganda atau rancu, banner pemeriksaan menampilkan rekomendasi tanpa " +
             "menghapus data secara otomatis.",
+        "Menghapus person dengan aman" to
+            "Di bagian paling bawah Profil lengkap, Pemilik dan Pengelola dapat meninjau " +
+            "dampak lalu menghapus person yang belum memiliki hubungan, klaim, media, sumber, " +
+            "usulan, atau perubahan lokal. Kontributor hanya dapat mengirim permintaan beserta " +
+            "alasan. Data terhubung tidak pernah dihapus otomatis dan jejak audit tetap disimpan.",
         "Bekerja offline" to
             "Perubahan dapat masuk ke antrean ketika perangkat offline. Aktifkan koneksi kembali " +
             "dan pantau label Tersinkron, Menunggu, Gagal, atau Konflik di header. Detail dan " +

@@ -28,7 +28,8 @@ Status yang digunakan:
 - `EXTERNAL VERIFY` — source siap atau pernah diuji, tetapi bukti layanan eksternal
   belum lengkap di repository;
 - `DEFERRED` — rencana jangka panjang yang belum menjadi fase implementasi aktif;
-- `SUPERSEDED` — rencana lama digantikan keputusan produk yang lebih baru.
+- `SUPERSEDED` — rencana lama digantikan keputusan produk yang lebih baru;
+- `DONE` — kontrak, implementasi, dan quality gate gap sudah ditutup.
 
 ## 2. Ringkasan hasil audit
 
@@ -42,41 +43,38 @@ workspace, drag untuk menghubungkan person, filter generasi, foto profil, edit p
 lengkap, undangan berbasis role, offline queue untuk mutasi inti tertentu, serta
 export/backup.
 
-Gap aktif terbesar berada pada:
+Gap aktif terbesar setelah penutupan hapus person berada pada:
 
-1. penghapusan person end-to-end;
-2. lifecycle akun, anggota, undangan, dan silsilah;
-3. privacy per person/field/scope dan claim kolektif;
-4. relasi `FOSTER` dan `GUARDIAN`;
-5. cakupan offline write di luar empat tipe mutation yang tersedia;
-6. penutupan dan bukti operasional cloud pilot.
+1. lifecycle akun, anggota, undangan, dan silsilah;
+2. privacy per person/field/scope dan claim kolektif;
+3. relasi `FOSTER` dan `GUARDIAN`;
+4. cakupan offline write di luar empat tipe mutation yang tersedia;
+5. penutupan dan bukti operasional cloud pilot.
 
 ## 3. Backlog aktif terprioritas
 
-### P1 — Hapus person yang aman (`PARTIAL`)
+### P1 — Hapus person yang aman (`DONE`, 28 Juli 2026)
 
-Backend sudah menyediakan `DELETE /persons/:personId` dan soft-delete, tetapi Android
-belum menyediakan endpoint, repository action, ViewModel action, confirmation flow,
-atau tombol hapus person.
+Keputusan final: `OWNER` dan `ADMIN` dapat menghapus langsung setelah pemeriksaan
+dampak; `EDITOR` hanya dapat mengirim permintaan beserta alasan; `VIEWER` tidak
+memperoleh aksi. Person hanya di-soft-delete bila tidak memiliki relationship, claim,
+media, source, proposal lain yang masih menunggu, atau mutation lokal.
 
-Gap yang harus ditutup:
+Relationship dan data terhubung tidak pernah dihapus diam-diam. Masing-masing harus
+diselesaikan melalui alur koreksi yang sesuai. Persetujuan permintaan Kontributor
+mengulang impact check dan melakukan soft-delete dalam transaksi yang sama. Card dan
+cache foto lokal baru dibersihkan setelah server mengonfirmasi keberhasilan; audit
+`PERSON/DELETE` tetap disimpan.
 
-- putuskan role final. Backend saat ini mengizinkan `OWNER` dan `ADMIN`, sedangkan
-  diskusi pengguna menyebut pemilik dan kontributor;
-- tampilkan ringkasan dampak sebelum konfirmasi: relationship, claim, media, source,
-  proposal, dan mutation yang terkait;
-- tentukan apakah relationship ikut ditandai terhapus, dipertahankan sebagai audit,
-  atau memerlukan koreksi satu per satu;
-- hapus card/cache lokal hanya setelah hasil server jelas dan tetap pertahankan audit;
-- lindungi person yang sedang diklaim, person pusat, atau person yang masih diperlukan
-  oleh struktur bersama sesuai keputusan produk;
-- tambahkan test izin, integrity, cache, graph, dan kegagalan jaringan.
+Bukti implementasi:
 
-Bukti implementasi parsial:
-
+- `backend/src/persons/person-deletion.service.ts`
 - `backend/src/persons/persons.controller.ts`
-- `backend/src/persons/persons.service.ts`
-- Android `network/ApiService.kt` belum mempunyai operasi delete person.
+- `backend/src/database/migrations/1753315200000-AddPersonDeletionProposal.ts`
+- Android `models/PersonDeletionModels.kt`, `network/ApiService.kt`,
+  `repository/PersonRepository.kt`, dan `feature/persondetail/`
+- kontrak role/integrity diuji di `backend/test/app.e2e-spec.ts`; helper role diuji
+  oleh unit test Android dan test cache DAO ditambahkan untuk connected test berikutnya.
 
 ### P2 — Lifecycle akun, anggota, undangan, dan silsilah (`ACTIVE`)
 
@@ -283,15 +281,14 @@ Jangan membuka ulang item berikut tanpa bug atau kebutuhan baru:
 
 Urutan default bila pengguna tidak menetapkan prioritas lain:
 
-1. desain dan implementasi hapus person yang aman;
-2. lifecycle membership/silsilah/account;
-3. privacy model dan claim kolektif;
-4. Foster/Guardian;
-5. perluasan offline queue;
-6. undangan tertarget/revoke;
-7. penutupan cloud pilot dan Security Advisor evidence;
-8. optimasi graph besar;
-9. pembaruan model profil/provenance dan fitur kolaborasi lanjutan.
+1. lifecycle membership/silsilah/account;
+2. privacy model dan claim kolektif;
+3. Foster/Guardian;
+4. perluasan offline queue;
+5. undangan tertarget/revoke;
+6. penutupan cloud pilot dan Security Advisor evidence;
+7. optimasi graph besar;
+8. pembaruan model profil/provenance dan fitur kolaborasi lanjutan.
 
 Setiap item tetap memerlukan persetujuan pengguna sebelum perubahan kode. Audit ini
 menjaga arah, bukan memberi izin otomatis untuk implementasi atau tindakan destruktif.

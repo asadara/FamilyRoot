@@ -1,5 +1,6 @@
 package com.example.familytreeplatform.feature.spacesettings
 
+import com.example.familytreeplatform.models.ProposalItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -25,5 +26,22 @@ class SpaceSettingsScreenTest {
     fun permissionFailuresAreActionable() {
         assertTrue(settingsErrorMessage("HTTP 403 FORBIDDEN: Role VIEWER is not allowed").contains("tidak memiliki izin"))
         assertTrue(settingsErrorMessage("HTTP 500 INTERNAL_ERROR: database unavailable").contains("Server sedang"))
+    }
+
+    @Test
+    fun deletionProposalUsesSafeUserFacingLanguage() {
+        val proposal = ProposalItem(
+            proposalId = "proposal-1",
+            spaceId = "space-1",
+            personId = "person-1",
+            field = "DELETE_PERSON",
+            proposedValue = "REQUEST_DELETE",
+            status = "PENDING",
+            createdAt = "2026-07-28T00:00:00Z",
+            personName = "Budi Santoso"
+        )
+
+        assertEquals("Permintaan penghapusan person", proposalFieldLabel(proposal.field))
+        assertFalse(proposalValueLabel(proposal).contains("REQUEST_DELETE"))
     }
 }

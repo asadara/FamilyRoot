@@ -15,6 +15,7 @@ import com.example.familytreeplatform.models.RelationshipPathResponse
 import com.example.familytreeplatform.models.RelationsResponse
 import com.example.familytreeplatform.models.SourceItem
 import com.example.familytreeplatform.models.SourceRequest
+import com.example.familytreeplatform.models.PersonDeletionImpact
 import com.example.familytreeplatform.repository.PersonRepository
 import android.net.Uri
 import com.example.familytreeplatform.data.local.OfflineMutationEntity
@@ -39,9 +40,18 @@ data class PersonDetailUiState(
     val updating: Boolean = false,
     val claim: ClaimResponse? = null,
     val offlineMutations: List<OfflineMutationEntity> = emptyList(),
+    val deletionImpact: PersonDeletionImpact? = null,
+    val loadingDeletionImpact: Boolean = false,
+    val deletingPerson: Boolean = false,
+    val deletionOutcome: PersonDeletionOutcome? = null,
     val message: String? = null,
     val error: String? = null
 )
+
+enum class PersonDeletionOutcome {
+    DELETED,
+    REQUESTED
+}
 
 data class PersonProfileEditInput(
     val fullName: String,
@@ -420,6 +430,101 @@ class PersonDetailViewModel(
                 .onFailure { error ->
                     _uiState.update { it.copy(updating = false, error = error.message) }
                 }
+        }
+    }
+
+    fun loadDeletionImpact() {
+        if (_uiState.value.loadingDeletionImpact) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    loadingDeletionImpact = true,
+                    deletionImpact = null,
+                    error = null
+                )
+            }
+            repository.personDeletionImpact(spaceId, personId)
+                .onSuccess { impact ->
+                    _uiState.update {
+                        it.copy(
+                            loadingDeletionImpact = false,
+                            deletionImpact = impact
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(
+                            loadingDeletionImpact = false,
+                            error = error.message
+                        )
+                    }
+                }
+        }
+    }
+
+    fun deletePerson() {
+        val impact = _uiState.value.deletionImpact ?: return
+        if (!impact.canDelete || _uiState.value.deletingPerson) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(deletingPerson = true, error = null, message = null)
+            }
+            repository.deletePerson(spaceId, personId)
+                .onSuccess {
+                    _uiState.update {
+                        it.copy(
+                            deletingPerson = false,
+                            deletionOutcome = PersonDeletionOutcome.DELETED
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(deletingPerson = false, error = error.message)
+                    }
+                    loadDeletionImpact()
+                }
+        }
+    }
+
+    fun requestPersonDeletion(reason: String) {
+        if (_uiState.value.deletingPerson) return
+        if (reason.isBlank()) {
+            _uiState.update {
+                it.copy(error = "Jelaskan alasan penghapusan agar dapat ditinjau pengelola.")
+            }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(deletingPerson = true, error = null, message = null)
+            }
+            repository.requestPersonDeletion(spaceId, personId, reason)
+                .onSuccess {
+                    _uiState.update {
+                        it.copy(
+                            deletingPerson = false,
+                            deletionOutcome = PersonDeletionOutcome.REQUESTED,
+                            message = "Permintaan penghapusan dikirim untuk ditinjau."
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(deletingPerson = false, error = error.message)
+                    }
+                }
+        }
+    }
+
+    fun clearDeletionReview() {
+        _uiState.update {
+            it.copy(
+                deletionImpact = null,
+                loadingDeletionImpact = false,
+                deletionOutcome = null
+            )
         }
     }
 

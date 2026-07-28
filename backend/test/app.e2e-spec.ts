@@ -801,4 +801,138 @@ describe('Phase 1 security contract (e2e)', () => {
         expect(body.expiresIn).toBe(60);
       });
   });
+
+  it('blocks unsafe person deletion and supports reviewed editor requests', async () => {
+    await request(app.getHttpServer())
+      .get(`/persons/${personId}/deletion-impact`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .query({ spaceId })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.canDelete).toBe(false);
+        expect(body.relationshipCount).toBeGreaterThan(0);
+        expect(body.mediaCount).toBeGreaterThan(0);
+        expect(body.blockers).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ code: 'RELATIONSHIPS' }),
+            expect.objectContaining({ code: 'MEDIA' }),
+          ]),
+        );
+      });
+
+    await request(app.getHttpServer())
+      .delete(`/persons/${personId}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ spaceId })
+      .expect(409)
+      .expect(({ body }) => {
+        expect(body.code).toBe('CONFLICT');
+        expect(body.details.impact.canDelete).toBe(false);
+      });
+
+    const directDeletePerson = await request(app.getHttpServer())
+      .post('/persons')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        spaceId,
+        firstName: 'Temporary',
+        nickName: 'Temporary',
+        gender: 'UNKNOWN',
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .get(`/persons/${directDeletePerson.body.personId}/deletion-impact`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .query({ spaceId })
+      .expect(200)
+      .expect(({ body }) => expect(body.canDelete).toBe(true));
+
+    await request(app.getHttpServer())
+      .delete(`/persons/${directDeletePerson.body.personId}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ spaceId })
+      .expect(200)
+      .expect(({ body }) => expect(body.deleted).toBe(true));
+
+    const requestedDeletePerson = await request(app.getHttpServer())
+      .post('/persons')
+      .set('Authorization', `Bearer ${editorToken}`)
+      .send({
+        spaceId,
+        firstName: 'Editor request',
+        nickName: 'Editor request',
+        gender: 'UNKNOWN',
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .delete(`/persons/${requestedDeletePerson.body.personId}`)
+      .set('Authorization', `Bearer ${editorToken}`)
+      .send({ spaceId })
+      .expect(403);
+
+    await request(app.getHttpServer())
+      .post(`/persons/${requestedDeletePerson.body.personId}/deletion-requests`)
+      .set('Authorization', `Bearer ${viewerToken}`)
+      .send({ spaceId, reason: 'Viewer should not be allowed' })
+      .expect(403);
+
+    const proposal = await request(app.getHttpServer())
+      .post(`/persons/${requestedDeletePerson.body.personId}/deletion-requests`)
+      .set('Authorization', `Bearer ${editorToken}`)
+      .send({ spaceId, reason: 'Data ujicoba sudah tidak diperlukan' })
+      .expect(201);
+    expect(proposal.body).toEqual(
+      expect.objectContaining({
+        field: 'DELETE_PERSON',
+        status: 'PENDING',
+      }),
+    );
+
+    await request(app.getHttpServer())
+      .post(`/persons/${requestedDeletePerson.body.personId}/deletion-requests`)
+      .set('Authorization', `Bearer ${editorToken}`)
+      .send({ spaceId, reason: 'Duplicate request' })
+      .expect(409);
+
+    await request(app.getHttpServer())
+      .post('/proposals/approve')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ spaceId, proposalId: proposal.body.proposalId })
+      .expect(201)
+      .expect(({ body }) => expect(body.status).toBe('APPROVED'));
+
+    await request(app.getHttpServer())
+      .get('/persons')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .query({ spaceId })
+      .expect(200)
+      .expect(({ body }) =>
+        expect(body).not.toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              personId: requestedDeletePerson.body.personId,
+            }),
+          ]),
+        ),
+      );
+
+    await request(app.getHttpServer())
+      .get('/changes')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .query({ spaceId })
+      .expect(200)
+      .expect(({ body }) =>
+        expect(body).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              entityType: 'PERSON',
+              operation: 'DELETE',
+              note: 'Soft delete person',
+            }),
+          ]),
+        ),
+      );
+  });
 });

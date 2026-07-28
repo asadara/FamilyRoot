@@ -150,19 +150,21 @@ Konsekuensi penting:
 - jangan pernah memasukkan database development, JWT secret, signing key, password,
   pairing code, token undangan, atau credential akun ke repository.
 
-Backend produksi belum dideploy. Belum tersedia domain/API production permanen,
-managed production database, object storage media, strategi backup server yang sudah
-dioperasikan, atau pipeline migration backend yang siap produksi. Android release
-pipeline sudah dapat menerima URL HTTPS dan signing material melalui CI secrets,
-tetapi kesiapan build Android tidak sama dengan kesiapan infrastruktur backend.
+Backend pilot sudah dideploy di Cloud Run dengan PostgreSQL dan private storage
+Supabase. Ini belum berarti platform production final: domain/SLA, observability,
+backup/PITR, disaster recovery, retention, dan operasi production masih belum
+ditutup. Android release pipeline dapat menerima URL HTTPS dan signing material
+melalui CI secrets, tetapi kesiapan build Android tidak sama dengan kesiapan
+infrastruktur production.
 
 Risiko skema yang perlu dibahas sebelum production:
 
 - entity TypeORM saat ini banyak menyimpan relasi sebagai kolom UUID tanpa deklarasi
   foreign-key relation TypeORM eksplisit;
 - cross-space dan referential integrity ditegakkan oleh service, transaction, dan test;
-- production memakai `synchronize: false`, tetapi repository belum mempunyai rangkaian
-  migration backend yang menjadi mekanisme inisialisasi/evolusi skema;
+- production memakai `synchronize: false` dan repository mempunyai migration
+  PostgreSQL awal serta migration evolusi. Prosedur rollout, rollback, dan bukti
+  migration production tetap harus dipelihara;
 - pemilihan PostgreSQL atau database production lain, migration policy, backup,
   restore drill, retention, encryption, dan monitoring belum diputuskan.
 
@@ -273,7 +275,8 @@ Tabel aktif meliputi:
 - `relationships` — edge parent-child dan spouse;
 - `user_person_claims` — klaim akun ke profil;
 - `fact_sources` — sumber/citation fakta;
-- `media_items` — metadata/URI media, belum binary storage;
+- `media_items` — metadata/URI media; foto profil pilot disimpan sebagai object
+  privat di Supabase Storage dan diakses melalui signed URL;
 - `edit_proposals` — proposal dengan status review;
 - `change_log` — audit perubahan;
 - `refresh_sessions` — digest refresh token, rotation/revocation family;
@@ -316,7 +319,7 @@ activity, dan space settings. Navigation Compose, StateFlow, lifecycle-aware UI,
 Room, WorkManager, dan manual application container/constructor injection dipakai
 sebagai fondasi.
 
-Room database privat bernama `family-tree.db`, schema version 4, dengan tabel:
+Room database privat bernama `family-tree.db`, schema version 5, dengan tabel:
 
 - `persons` — subset person untuk cache daftar/detail;
 - `relationships` — cache edge `PARENT_CHILD` dan `SPOUSE`;
@@ -733,9 +736,9 @@ yang sudah selesai:
 > istilah pengguna `Family Space` diganti menjadi `silsilah` tanpa mengubah tenant/API.
 > Unit test 46/46, lint, assemble debug, install/cold launch, pemeriksaan visual header,
 > dan 20/20 connected instrumentation test lulus pada Samsung SM-T225 Android 14.
-> Koreksi visual berikutnya memberi splash drawable khusus berukuran 96 dp agar logo
-> penuh aman pada mask splash Android/Samsung dan aksara Jawa tidak terpotong; logo
-> launcher/header tetap memakai aset penuh tanpa inset tambahan.
+> Koreksi visual berikutnya memakai kanvas transparan 288 dp dengan tanda utama
+> sekitar 128 dp agar logo penuh aman pada mask splash Android/Samsung dan aksara
+> Jawa tidak terpotong; logo launcher/header tetap memakai aset penuh.
 > Pada 21 Juli 2026 layout graph diperketat: partnership yang terlihat diposisikan
 > sebagai unit atomik untuk cabang saudara, keturunan, dan leluhur; satu person tidak
 > diduplikasi pada multiple partnership. Parentage tetap sepenuhnya eksplisit:
@@ -761,6 +764,18 @@ yang sudah selesai:
 > Quality gate gabungan layout atomik, parity export, date picker, dan menu pendukung
 > lulus: unit test, lintDebug, assembleDebug/androidTest, serta seluruh 31 connected
 > instrumentation test pada Samsung SM-T225 Android 14.
+> Pada 28 Juli 2026 baseline penghapusan person yang aman diimplementasikan.
+> `OWNER/ADMIN` dapat menghapus person bersih setelah impact check;
+> `EDITOR` hanya dapat mengirim permintaan dengan alasan; `VIEWER` tidak memperoleh
+> aksi. Relationship, claim, media, source, proposal tertunda, dan mutation lokal
+> menjadi blocker dan tidak pernah dihapus diam-diam. Persetujuan proposal dan
+> soft-delete berjalan dalam satu transaksi, audit dipertahankan, serta cache Room/foto
+> baru dibersihkan setelah server berhasil. Kontrak berada di
+> `backend/API_CONTRACT.md` dan keputusan rinci di bagian 31.9 risalah frontend.
+> Quality gate lokal lulus untuk lint/build/unit/e2e backend serta unit test,
+> `lintDebug`, dan `assemblePilot` Android. Migration/backend baru belum dideploy dan
+> APK pilot baru belum dipasang ke tablet pada snapshot ini agar build stabil yang
+> sedang dipakai pengguna tidak tergantikan tanpa persetujuan.
 > Daftar di bawah tetap berguna sebagai konteks awal, tetapi keputusan terbaru dalam
 > kedua risalah tersebut mengalahkan item agenda yang sudah diselesaikan.
 

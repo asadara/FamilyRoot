@@ -14,9 +14,11 @@ import { DisabledObjectStorage } from './storage/disabled-object-storage';
 import { OBJECT_STORAGE } from './storage/object-storage';
 import { SupabaseObjectStorage } from './storage/supabase-object-storage';
 import { normalizedSupabaseProjectUrl } from '../config/environment';
+import { PersonsModule } from '../persons/persons.module';
 
 @Module({
   imports: [
+    PersonsModule,
     TypeOrmModule.forFeature([
       FactSourceEntity,
       MediaItemEntity,

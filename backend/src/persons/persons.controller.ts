@@ -19,10 +19,15 @@ import { DeletePersonDto } from './dto/delete-person.dto';
 import { MergePersonsDto } from './dto/merge-persons.dto';
 import { ActorUserId } from '../common/actor-user-id.decorator';
 import { SpaceRoles } from '../common/space-roles.decorator';
+import { PersonDeletionService } from './person-deletion.service';
+import { RequestPersonDeletionDto } from './dto/request-person-deletion.dto';
 
 @Controller('persons')
 export class PersonsController {
-  constructor(private readonly personsService: PersonsService) {}
+  constructor(
+    private readonly personsService: PersonsService,
+    private readonly personDeletionService: PersonDeletionService,
+  ) {}
 
   @Get()
   @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
@@ -126,6 +131,43 @@ export class PersonsController {
     if (!isUUID(personId)) {
       throw new BadRequestException('Invalid personId');
     }
-    return this.personsService.softDelete(dto.spaceId, personId, actorUserId);
+    return this.personDeletionService.softDelete(
+      dto.spaceId,
+      personId,
+      actorUserId,
+    );
+  }
+
+  @Get(':personId/deletion-impact')
+  @SpaceRoles('OWNER', 'ADMIN', 'EDITOR')
+  deletionImpact(
+    @Param('personId') personId: string,
+    @Query('spaceId') spaceId: string,
+  ) {
+    if (!spaceId || !isUUID(spaceId)) {
+      throw new BadRequestException('Invalid spaceId');
+    }
+    if (!isUUID(personId)) {
+      throw new BadRequestException('Invalid personId');
+    }
+    return this.personDeletionService.getImpact(spaceId, personId);
+  }
+
+  @Post(':personId/deletion-requests')
+  @SpaceRoles('EDITOR')
+  requestDeletion(
+    @Param('personId') personId: string,
+    @ActorUserId() actorUserId: string,
+    @Body() dto: RequestPersonDeletionDto,
+  ) {
+    if (!isUUID(personId)) {
+      throw new BadRequestException('Invalid personId');
+    }
+    return this.personDeletionService.requestDeletion(
+      dto.spaceId,
+      personId,
+      dto.reason,
+      actorUserId,
+    );
   }
 }

@@ -58,4 +58,12 @@ class PersonDetailScreenTest {
             profileEditValidationError(valid.copy(deceasedAt = "1800-01-01"))
         )
     }
+
+    @Test
+    fun `person deletion actions follow workspace role`() {
+        assertEquals(PersonDeletionAction.DELETE, personDeletionAction("OWNER"))
+        assertEquals(PersonDeletionAction.DELETE, personDeletionAction("ADMIN"))
+        assertEquals(PersonDeletionAction.REQUEST, personDeletionAction("EDITOR"))
+        assertNull(personDeletionAction("VIEWER"))
+    }
 }

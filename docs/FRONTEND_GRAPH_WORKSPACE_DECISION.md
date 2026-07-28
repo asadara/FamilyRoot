@@ -1387,3 +1387,26 @@ halaman asal tanpa mereset graph. Bottom navigation diringkas menjadi 64 dp dan 
 lagi menambahkan system inset kedua karena inset perangkat sudah ditangani scaffold
 tingkat aktivitas. Tujuannya memaksimalkan tinggi workspace tanpa menutup menu oleh
 navigation bar Android.
+
+### 31.9 Penghapusan person yang aman
+
+Pada 28 Juli 2026 alur penghapusan person ditutup dengan aturan berikut:
+
+- `OWNER` dan `ADMIN` dapat menghapus person, sedangkan `EDITOR` hanya dapat
+  mengajukan permintaan penghapusan dengan alasan; `VIEWER` tidak melihat aksi;
+- tindakan berada pada area berisiko di bagian bawah Profil lengkap, bukan pada card
+  graph, agar tidak mudah terpicu tanpa sengaja;
+- sebelum konfirmasi, aplikasi memeriksa relationship, claim, media, source, proposal
+  tertunda, dan mutation lokal;
+- person hanya dapat di-soft-delete bila seluruh hitungan tersebut nol;
+- relationship dan data bersama tidak pernah ikut dihapus otomatis. Pengguna harus
+  menyelesaikannya satu per satu melalui alur koreksi yang relevan;
+- persetujuan permintaan Kontributor mengulang pemeriksaan dampak dan menghapus dalam
+  satu transaksi, sehingga proposal tidak dapat berstatus disetujui bila penghapusan
+  sebenarnya gagal;
+- card Room dan cache foto dihapus hanya setelah server mengonfirmasi keberhasilan;
+- change log mempertahankan tombstone/audit minimum tanpa hard-delete person.
+
+Aturan ini merupakan baseline awal. Hak person hidup untuk privasi, anonimisasi, atau
+placeholder struktural tetap dibahas pada privacy model terpisah dan tidak boleh
+disamakan dengan penghapusan record administratif oleh pengelola.

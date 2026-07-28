@@ -573,7 +573,10 @@ private fun ProposalCard(
 ) {
     ReviewCard {
         Text(proposalFieldLabel(proposal.field), style = MaterialTheme.typography.titleMedium)
-        Text(proposal.proposedValue, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        proposal.personName?.takeIf { it.isNotBlank() }?.let {
+            Text(it, fontWeight = FontWeight.SemiBold)
+        }
+        Text(proposalValueLabel(proposal), color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("Status: ${reviewStatusLabel(proposal.status)}", style = MaterialTheme.typography.bodySmall)
         proposal.reason?.takeIf { it.isNotBlank() }?.let { Text("Alasan: $it", modifier = Modifier.padding(top = 4.dp)) }
         if (proposal.status == "PENDING") {
@@ -650,7 +653,14 @@ internal fun proposalFieldLabel(field: String): String = when (field) {
     "notes" -> "Catatan person"
     "birthPlace" -> "Tempat lahir"
     "lifeStatus" -> "Status kehidupan"
+    "DELETE_PERSON" -> "Permintaan penghapusan person"
     else -> field.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+}
+
+internal fun proposalValueLabel(proposal: ProposalItem): String = when (proposal.field) {
+    "DELETE_PERSON" ->
+        "Person hanya dapat dihapus setelah hubungan dan data terhubung diselesaikan."
+    else -> proposal.proposedValue
 }
 
 internal fun duplicateReasonLabel(reason: String): String = when {

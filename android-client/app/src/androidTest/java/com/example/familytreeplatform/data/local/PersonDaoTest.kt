@@ -68,4 +68,36 @@ class PersonDaoTest {
         assertEquals(emptyList<PersonEntity>(), dao.observeBySpace("space-a").first())
         assertEquals("Siti Aminah", dao.observeBySpace("space-b").first().single().fullName)
     }
+
+    @Test
+    fun deleteByIdOnlyRemovesConfirmedPerson() = runBlocking {
+        dao.upsertAll(
+            listOf(
+                PersonEntity(
+                    personId = "person-1",
+                    spaceId = "space-a",
+                    fullName = "Budi Santoso",
+                    createdAt = "2026-07-13T01:00:00.000Z",
+                    lifeStatus = "ALIVE",
+                    deceasedAt = null,
+                    birthDate = null,
+                    gender = "MALE"
+                ),
+                PersonEntity(
+                    personId = "person-2",
+                    spaceId = "space-a",
+                    fullName = "Siti Aminah",
+                    createdAt = "2026-07-13T02:00:00.000Z",
+                    lifeStatus = "ALIVE",
+                    deceasedAt = null,
+                    birthDate = null,
+                    gender = "FEMALE"
+                )
+            )
+        )
+
+        dao.deleteById("person-1")
+
+        assertEquals(listOf("person-2"), dao.listBySpace("space-a").map { it.personId })
+    }
 }

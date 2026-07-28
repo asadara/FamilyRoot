@@ -55,6 +55,11 @@ import com.example.familytreeplatform.models.GedcomDocument
 import com.example.familytreeplatform.models.ImportGedcomRequest
 import com.example.familytreeplatform.models.ImportSummary
 import com.example.familytreeplatform.models.RestoreBackupRequest
+import com.example.familytreeplatform.models.DeletePersonRequest
+import com.example.familytreeplatform.models.DeletePersonResponse
+import com.example.familytreeplatform.models.PersonDeletionImpact
+import com.example.familytreeplatform.models.RequestPersonDeletionRequest
+import retrofit2.http.HTTP
 
 interface ApiService {
     @POST("auth/login")
@@ -122,6 +127,24 @@ interface ApiService {
         @Path("personId") personId: String,
         @Body request: MediaRequest
     ): Response<MediaItem>
+
+    @GET("persons/{personId}/deletion-impact")
+    suspend fun personDeletionImpact(
+        @Path("personId") personId: String,
+        @Query("spaceId") spaceId: String
+    ): Response<PersonDeletionImpact>
+
+    @HTTP(method = "DELETE", path = "persons/{personId}", hasBody = true)
+    suspend fun deletePerson(
+        @Path("personId") personId: String,
+        @Body request: DeletePersonRequest
+    ): Response<DeletePersonResponse>
+
+    @POST("persons/{personId}/deletion-requests")
+    suspend fun requestPersonDeletion(
+        @Path("personId") personId: String,
+        @Body request: RequestPersonDeletionRequest
+    ): Response<ProposalItem>
 
     @Multipart
     @POST("persons/{personId}/media/upload")

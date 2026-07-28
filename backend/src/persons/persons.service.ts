@@ -412,37 +412,6 @@ export class PersonsService {
     return saved;
   }
 
-  async softDelete(spaceId: string, personId: string, actorUserId: string) {
-    const person = await this.personsRepo.findOneBy({ personId, spaceId });
-    if (!person) {
-      throw new NotFoundException('Person not found');
-    }
-
-    if (person.isDeleted) {
-      return person;
-    }
-
-    return this.personsRepo.manager.transaction(async (manager) => {
-      const before = { ...person };
-      person.isDeleted = true;
-      person.deletedAt = new Date();
-      const saved = await manager.save(person);
-      await manager.save(
-        manager.create(ChangeLogEntity, {
-          spaceId,
-          actorUserId,
-          entityType: 'PERSON',
-          entityId: saved.personId,
-          operation: 'DELETE',
-          note: 'Soft delete person',
-          beforeJson: JSON.stringify(before),
-          afterJson: JSON.stringify(saved),
-        }),
-      );
-      return saved;
-    });
-  }
-
   async updateLifeStatus(
     spaceId: string,
     personId: string,

@@ -34,6 +34,7 @@
 | Read people, relationships, and activity | Yes | Yes | Yes | Yes |
 | Create/update people and relationships | Yes | Yes | Yes | No |
 | Soft-delete a person | Yes | Yes | No | No |
+| Request person deletion | No | No | Yes | No |
 | Create a claim for own account | Yes | Yes | Yes | Yes |
 | Verify claims | Yes | Yes | No | No |
 | Review proposals and merge duplicates | Yes | Yes | No | No |
@@ -92,6 +93,23 @@ Phase 3 core endpoints:
   of the matching Family Space receives a private read URL valid for 60 seconds.
 - `GET|POST /proposals` — reads or creates edit proposals.
 - `POST /proposals/approve` and `POST /proposals/reject` — OWNER/ADMIN review proposal changes.
+
+Safe person deletion contract:
+
+- `GET /persons/:personId/deletion-impact?spaceId=...` — OWNER/ADMIN/EDITOR receives
+  counts and blockers for relationships, claims, media, sources, and pending proposals.
+- `DELETE /persons/:personId` — OWNER/ADMIN only; body contains `spaceId`. The server
+  performs a soft-delete only when the impact check has no blockers. Linked records
+  are never removed implicitly.
+- `POST /persons/:personId/deletion-requests` — EDITOR only; body contains `spaceId`
+  and a non-empty `reason`. It creates one pending `DELETE_PERSON` proposal.
+- Approving a deletion proposal repeats the impact check and performs the soft-delete
+  in the same transaction. A current deletion proposal does not block its own approval,
+  but any other pending proposal does.
+- A blocked direct deletion or approval returns `409 CONFLICT` with
+  `details.impact`. Successful deletion retains a `PERSON/DELETE` audit record.
+- Android removes the local card and profile-photo cache only after a successful
+  server response. Pending local mutations are an additional client-side blocker.
 
 Phase 4 concurrency contract (initial slice):
 

@@ -27,6 +27,9 @@ interface PersonDao {
     @Query("DELETE FROM persons WHERE spaceId = :spaceId")
     suspend fun deleteBySpace(spaceId: String)
 
+    @Query("DELETE FROM persons WHERE personId = :personId")
+    suspend fun deleteById(personId: String)
+
     @Query("UPDATE persons SET lifeStatus = :lifeStatus, deceasedAt = :deceasedAt WHERE personId = :personId")
     suspend fun updateLifeStatusLocally(personId: String, lifeStatus: String, deceasedAt: String?)
 

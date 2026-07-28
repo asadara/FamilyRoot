@@ -73,6 +73,7 @@ import com.example.familytreeplatform.data.local.OfflineMutationStatus
 import com.example.familytreeplatform.data.local.OfflineMutationType
 import com.example.familytreeplatform.models.MediaItem
 import com.example.familytreeplatform.models.PersonListItem
+import com.example.familytreeplatform.models.PersonDeletionImpact
 import com.example.familytreeplatform.models.RelationsResponse
 import com.example.familytreeplatform.models.RelationItem
 import com.example.familytreeplatform.models.SourceItem
@@ -84,11 +85,30 @@ import java.util.Calendar
 fun PersonDetailScreen(
     viewModel: PersonDetailViewModel,
     onBack: () -> Unit,
+    spaceRole: String? = null,
     canEditProfile: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val person = state.person
+    var showDeletionReview by rememberSaveable { mutableStateOf(false) }
+    var deletionReason by rememberSaveable { mutableStateOf("") }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(state.deletionOutcome) {
+        when (state.deletionOutcome) {
+            PersonDeletionOutcome.DELETED -> {
+                viewModel.clearDeletionReview()
+                onBack()
+            }
+            PersonDeletionOutcome.REQUESTED -> {
+                showDeletionReview = false
+                deletionReason = ""
+                viewModel.clearDeletionReview()
+            }
+            null -> Unit
+        }
+    }
 
     if (person == null) {
         Box(
@@ -138,7 +158,6 @@ fun PersonDetailScreen(
     var proposalReason by rememberSaveable(person.personId) { mutableStateOf("") }
     var relationQuery by rememberSaveable(person.personId) { mutableStateOf("") }
     var pendingRelationshipDelete by rememberSaveable(person.personId) { mutableStateOf<String?>(null) }
-    val snackbarHostState = remember { SnackbarHostState() }
     val profilePhotoPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.GetContent()
     ) { uri ->
@@ -189,6 +208,24 @@ fun PersonDetailScreen(
             dismissButton = {
                 TextButton(onClick = { pendingRelationshipDelete = null }) { Text("Batal") }
             }
+        )
+    }
+
+    if (showDeletionReview) {
+        PersonDeletionDialog(
+            action = personDeletionAction(spaceRole),
+            impact = state.deletionImpact,
+            loading = state.loadingDeletionImpact,
+            submitting = state.deletingPerson,
+            reason = deletionReason,
+            onReasonChange = { deletionReason = it },
+            onDismiss = {
+                showDeletionReview = false
+                deletionReason = ""
+                viewModel.clearDeletionReview()
+            },
+            onDelete = viewModel::deletePerson,
+            onRequest = { viewModel.requestPersonDeletion(deletionReason) }
         )
     }
 
@@ -398,6 +435,17 @@ fun PersonDetailScreen(
                     )
                 }
             }
+            personDeletionAction(spaceRole)?.let { action ->
+                item {
+                    PersonDangerSection(
+                        action = action,
+                        onReview = {
+                            showDeletionReview = true
+                            viewModel.loadDeletionImpact()
+                        }
+                    )
+                }
+            }
             item { Spacer(Modifier.height(16.dp)) }
         }
         PullRefreshIndicator(
@@ -418,6 +466,158 @@ fun PersonDetailScreen(
             modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp)
         )
     }
+}
+
+internal enum class PersonDeletionAction {
+    DELETE,
+    REQUEST
+}
+
+internal fun personDeletionAction(role: String?): PersonDeletionAction? = when (role) {
+    "OWNER", "ADMIN" -> PersonDeletionAction.DELETE
+    "EDITOR" -> PersonDeletionAction.REQUEST
+    else -> null
+}
+
+@Composable
+private fun PersonDangerSection(
+    action: PersonDeletionAction,
+    onReview: () -> Unit
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f),
+        shape = RoundedCornerShape(18.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(Modifier.padding(18.dp)) {
+            Text(
+                "Tindakan berisiko",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onErrorContainer
+            )
+            Text(
+                if (action == PersonDeletionAction.DELETE) {
+                    "Periksa dampak sebelum menghapus person dari silsilah."
+                } else {
+                    "Kirim permintaan kepada pemilik atau pengelola untuk ditinjau."
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp, bottom = 12.dp)
+            )
+            OutlinedButton(onClick = onReview) {
+                Text(
+                    if (action == PersonDeletionAction.DELETE) {
+                        "Tinjau penghapusan"
+                    } else {
+                        "Ajukan penghapusan"
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PersonDeletionDialog(
+    action: PersonDeletionAction?,
+    impact: PersonDeletionImpact?,
+    loading: Boolean,
+    submitting: Boolean,
+    reason: String,
+    onReasonChange: (String) -> Unit,
+    onDismiss: () -> Unit,
+    onDelete: () -> Unit,
+    onRequest: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = { if (!submitting) onDismiss() },
+        title = {
+            Text(
+                if (action == PersonDeletionAction.REQUEST) {
+                    "Ajukan penghapusan person"
+                } else {
+                    "Tinjau dampak penghapusan"
+                }
+            )
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                when {
+                    loading -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            CircularProgressIndicator(Modifier.size(22.dp))
+                            Text("Memeriksa data yang terhubung…")
+                        }
+                    }
+                    impact == null -> {
+                        Text("Dampak penghapusan belum dapat diperiksa.")
+                    }
+                    impact.canDelete -> {
+                        Text(
+                            "${impact.fullName} tidak memiliki data terhubung. " +
+                                "Person akan disembunyikan dari silsilah dan jejak audit tetap tersimpan."
+                        )
+                    }
+                    else -> {
+                        Text(
+                            "${impact.fullName} belum dapat dihapus langsung karena masih memiliki:"
+                        )
+                        impact.blockers.forEach { blocker ->
+                            Text("• ${blocker.message} (${blocker.count})")
+                        }
+                        if (action == PersonDeletionAction.DELETE) {
+                            Text(
+                                "Selesaikan setiap data terhubung secara terpisah, lalu periksa kembali."
+                            )
+                        }
+                    }
+                }
+                if (action == PersonDeletionAction.REQUEST) {
+                    OutlinedTextField(
+                        value = reason,
+                        onValueChange = onReasonChange,
+                        label = { Text("Alasan penghapusan") },
+                        supportingText = {
+                            Text("Jelaskan konteks agar pemilik atau pengelola dapat menilai dengan aman.")
+                        },
+                        minLines = 3,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            when (action) {
+                PersonDeletionAction.DELETE -> {
+                    Button(
+                        enabled = impact?.canDelete == true && !loading && !submitting,
+                        onClick = onDelete
+                    ) {
+                        Text(if (submitting) "Menghapus…" else "Hapus person")
+                    }
+                }
+                PersonDeletionAction.REQUEST -> {
+                    Button(
+                        enabled = reason.isNotBlank() && !loading && !submitting,
+                        onClick = onRequest
+                    ) {
+                        Text(if (submitting) "Mengirim…" else "Kirim permintaan")
+                    }
+                }
+                null -> Unit
+            }
+        },
+        dismissButton = {
+            TextButton(enabled = !submitting, onClick = onDismiss) {
+                Text("Batal")
+            }
+        }
+    )
 }
 
 @Composable

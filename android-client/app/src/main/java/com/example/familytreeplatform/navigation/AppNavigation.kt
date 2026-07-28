@@ -371,6 +371,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 PersonDetailScreen(
                     viewModel = detailViewModel,
                     onBack = { navigateTopLevel(Routes.GRAPH) },
+                    spaceRole = spaceRole,
                     canEditProfile = spaceRole != null && spaceRole != "VIEWER",
                     modifier = shellModifier
                 )

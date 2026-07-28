@@ -55,7 +55,8 @@ data class ProposalItem(
     val status: String,
     val reviewedByUserId: String? = null,
     val reviewedAt: String? = null,
-    val createdAt: String
+    val createdAt: String,
+    val personName: String? = null
 )
 
 data class ProposalRequest(

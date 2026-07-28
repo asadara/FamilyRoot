@@ -17,7 +17,7 @@ export class EditProposalEntity {
   personId!: string;
 
   @Column({ type: 'text' })
-  field!: 'notes' | 'birthPlace' | 'deathPlace';
+  field!: 'notes' | 'birthPlace' | 'deathPlace' | 'DELETE_PERSON';
 
   @Column({ type: 'text' })
   proposedValue!: string;

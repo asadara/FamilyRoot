@@ -40,6 +40,11 @@ import com.example.familytreeplatform.models.RelationshipPathResponse
 import com.example.familytreeplatform.models.ReviewProposalRequest
 import com.example.familytreeplatform.models.SourceItem
 import com.example.familytreeplatform.models.SourceRequest
+import com.example.familytreeplatform.models.DeletePersonRequest
+import com.example.familytreeplatform.models.DeletePersonResponse
+import com.example.familytreeplatform.models.PersonDeletionBlocker
+import com.example.familytreeplatform.models.PersonDeletionImpact
+import com.example.familytreeplatform.models.RequestPersonDeletionRequest
 import com.example.familytreeplatform.network.ApiService
 import com.example.familytreeplatform.network.ApiException
 import com.google.gson.Gson
@@ -650,6 +655,64 @@ class PersonRepository(
     suspend fun createMedia(personId: String, request: MediaRequest): Result<MediaItem> =
         apiResult { apiService.createMedia(personId, request) }
 
+    suspend fun personDeletionImpact(
+        spaceId: String,
+        personId: String
+    ): Result<PersonDeletionImpact> {
+        val result = apiResult { apiService.personDeletionImpact(personId, spaceId) }
+        return result.map { impact ->
+            val localMutationCount = mutationDao?.countForPerson(personId) ?: 0
+            if (localMutationCount == 0) {
+                impact
+            } else {
+                impact.copy(
+                    canDelete = false,
+                    localMutationCount = localMutationCount,
+                    blockers = impact.blockers + PersonDeletionBlocker(
+                        code = "LOCAL_MUTATIONS",
+                        message = "Selesaikan perubahan yang masih menunggu sinkronisasi",
+                        count = localMutationCount
+                    )
+                )
+            }
+        }
+    }
+
+    suspend fun deletePerson(
+        spaceId: String,
+        personId: String
+    ): Result<DeletePersonResponse> {
+        val localMutationCount = mutationDao?.countForPerson(personId) ?: 0
+        if (localMutationCount > 0) {
+            return Result.failure(
+                IllegalStateException(
+                    "Selesaikan perubahan person yang masih menunggu sinkronisasi."
+                )
+            )
+        }
+        val result = apiResult {
+            apiService.deletePerson(personId, DeletePersonRequest(spaceId))
+        }
+        if (result.getOrNull()?.deleted == true) {
+            personDao?.deleteById(personId)
+            profilePhotoUrlsBySpace.update { current ->
+                current + (spaceId to (current[spaceId].orEmpty() - personId))
+            }
+        }
+        return result
+    }
+
+    suspend fun requestPersonDeletion(
+        spaceId: String,
+        personId: String,
+        reason: String
+    ): Result<ProposalItem> = apiResult {
+        apiService.requestPersonDeletion(
+            personId,
+            RequestPersonDeletionRequest(spaceId, reason.trim())
+        )
+    }
+
     fun observeProfilePhotoUrls(spaceId: String): Flow<Map<String, String>> =
         profilePhotoUrlsBySpace
             .map { photosBySpace -> photosBySpace[spaceId].orEmpty() }
@@ -695,8 +758,14 @@ class PersonRepository(
     suspend fun createProposal(request: ProposalRequest): Result<ProposalItem> =
         apiResult { apiService.createProposal(request) }
 
-    suspend fun approveProposal(request: ReviewProposalRequest): Result<ProposalItem> =
-        apiResult { apiService.approveProposal(request) }
+    suspend fun approveProposal(request: ReviewProposalRequest): Result<ProposalItem> {
+        val result = apiResult { apiService.approveProposal(request) }
+        if (result.getOrNull()?.field == "DELETE_PERSON") {
+            listPersons(request.spaceId)
+            listProfilePhotos(request.spaceId)
+        }
+        return result
+    }
 
     suspend fun rejectProposal(request: ReviewProposalRequest): Result<ProposalItem> =
         apiResult { apiService.rejectProposal(request) }
