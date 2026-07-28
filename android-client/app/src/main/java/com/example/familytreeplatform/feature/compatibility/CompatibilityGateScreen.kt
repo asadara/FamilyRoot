@@ -150,7 +150,10 @@ private fun CompatibilityActions(
                 Text("Periksa lagi")
             }
         }
-        if (state.status == CompatibilityGateStatus.UPDATE_AVAILABLE) {
+        if (
+            state.status == CompatibilityGateStatus.UPDATE_AVAILABLE ||
+            state.status == CompatibilityGateStatus.UNAVAILABLE
+        ) {
             OutlinedButton(onClick = onContinue, modifier = Modifier.fillMaxWidth()) {
                 Text("Lanjutkan sementara")
             }
@@ -166,7 +169,12 @@ internal fun compatibilityTitle(state: AppCompatibilityState): String = when (
     state.status
 ) {
     CompatibilityGateStatus.CHECKING -> "Memeriksa kompatibilitas"
-    CompatibilityGateStatus.UPDATE_AVAILABLE -> "Pembaruan tersedia"
+    CompatibilityGateStatus.UPDATE_AVAILABLE -> when (state.response?.status) {
+        "APP_TOO_NEW" -> "Build aplikasi belum terdaftar"
+        "APP_TOO_OLD" -> "Peringatan versi aplikasi"
+        "API_CONTRACT_MISMATCH" -> "Peringatan kompatibilitas layanan"
+        else -> "Pembaruan tersedia"
+    }
     CompatibilityGateStatus.UNAVAILABLE -> "Versi belum dapat diverifikasi"
     CompatibilityGateStatus.BLOCKED -> when (state.response?.status) {
         "APP_TOO_OLD" -> "Aplikasi perlu diperbarui"
@@ -191,5 +199,6 @@ internal fun compatibilityRequiresGate(state: AppCompatibilityState): Boolean = 
 ) {
     CompatibilityGateStatus.COMPATIBLE -> false
     CompatibilityGateStatus.UPDATE_AVAILABLE -> !state.updateWarningAcknowledged
+    CompatibilityGateStatus.UNAVAILABLE -> !state.updateWarningAcknowledged
     else -> true
 }

@@ -38,12 +38,13 @@ class CompatibilityGateScreenTest {
     }
 
     @Test
-    fun `incompatible and unverifiable builds stay blocked`() {
+    fun `only enforced incompatible builds stay blocked`() {
         val blocked = AppCompatibilityState(
             status = CompatibilityGateStatus.BLOCKED,
             response = updateResponse.copy(
                 status = "APP_TOO_OLD",
                 blocking = true,
+                enforcementEnabled = true,
                 message = "Versi aplikasi ini sudah tidak didukung."
             )
         )
@@ -54,7 +55,33 @@ class CompatibilityGateScreenTest {
 
         assertTrue(compatibilityRequiresGate(blocked))
         assertTrue(compatibilityRequiresGate(unavailable))
+        assertFalse(
+            compatibilityRequiresGate(
+                unavailable.copy(updateWarningAcknowledged = true)
+            )
+        )
         assertEquals("Aplikasi perlu diperbarui", compatibilityTitle(blocked))
         assertFalse(compatibilityMessage(unavailable).contains("127.0.0.1"))
+    }
+
+    @Test
+    fun `non enforced mismatch is a warning that can be continued`() {
+        val warning = AppCompatibilityState(
+            status = CompatibilityGateStatus.UPDATE_AVAILABLE,
+            response = updateResponse.copy(
+                status = "APP_TOO_NEW",
+                blocking = false,
+                enforcementEnabled = false,
+                message = "Backend belum mendukung versi aplikasi ini."
+            )
+        )
+
+        assertTrue(compatibilityRequiresGate(warning))
+        assertFalse(
+            compatibilityRequiresGate(
+                warning.copy(updateWarningAcknowledged = true)
+            )
+        )
+        assertEquals("Build aplikasi belum terdaftar", compatibilityTitle(warning))
     }
 }

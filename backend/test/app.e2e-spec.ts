@@ -260,7 +260,8 @@ describe('Phase 1 security contract (e2e)', () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body.status).toBe('APP_TOO_NEW');
-        expect(body.blocking).toBe(true);
+        expect(body.enforcementEnabled).toBe(false);
+        expect(body.blocking).toBe(false);
       });
 
     await request(app.getHttpServer())
@@ -273,7 +274,7 @@ describe('Phase 1 security contract (e2e)', () => {
       .expect(200)
       .expect(({ body }) => {
         expect(body.status).toBe('API_CONTRACT_MISMATCH');
-        expect(body.blocking).toBe(true);
+        expect(body.blocking).toBe(false);
       });
   });
 

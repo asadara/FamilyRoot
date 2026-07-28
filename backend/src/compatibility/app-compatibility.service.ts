@@ -39,9 +39,11 @@ export class AppCompatibilityService {
       status = 'UPDATE_AVAILABLE';
     }
 
+    const incompatible = !['COMPATIBLE', 'UPDATE_AVAILABLE'].includes(status);
+
     return {
       status,
-      blocking: !['COMPATIBLE', 'UPDATE_AVAILABLE'].includes(status),
+      blocking: policy.enforcementEnabled && incompatible,
       message:
         status === 'UPDATE_AVAILABLE' || status === 'APP_TOO_OLD'
           ? (policy.message ?? this.defaultMessage(status))

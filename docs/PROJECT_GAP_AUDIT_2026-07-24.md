@@ -81,10 +81,11 @@ Bukti implementasi:
 Backend menyediakan policy per channel dengan minimum/latest version code, API
 contract version, update URL, allowlist admin sistem, dan audit perubahan. Android
 memeriksa policy sebelum pemulihan sesi dan saat resume, membedakan warning update
-yang masih kompatibel dari hard block, serta memakai cache maksimal 24 jam yang
-terikat pada build/contract/channel yang sama. Request gate-enabled membawa header
-versi; enforcement backend dapat diaktifkan setelah rollout untuk menolak APK legacy
-atau inkompatibel dengan `426 UPGRADE_REQUIRED`.
+yang dapat dilanjutkan selama enforcement nonaktif dari hard block setelah
+enforcement aktif, serta memakai cache maksimal 24 jam yang terikat pada
+build/contract/channel yang sama. Request gate-enabled membawa header versi;
+enforcement backend dapat diaktifkan setelah rollout untuk menolak APK legacy atau
+inkompatibel dengan `426 UPGRADE_REQUIRED`.
 
 Bukti implementasi:
 

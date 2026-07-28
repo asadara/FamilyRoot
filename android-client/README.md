@@ -46,6 +46,8 @@ claim kolektif, undangan tertarget, serta Foster/Guardian sebagai `versionCode 3
 `versionName 0.1.2-beta`; backend, migration, object contract, dan policy PILOT
 harus menerima build 3 sebelum APK tersebut dipasang. Backend model care tidak boleh
 di-rollout terpisah karena build lama dapat salah membaca meta baru sebagai lineage.
+Selama enforcement policy masih `false`, mismatch atau pemeriksaan yang tidak
+tersedia menjadi warning yang dapat dilanjutkan sementara, bukan hard block.
 
 Panduan Google Auth Platform, package/SHA-1 pilot, migration, dan acceptance test
 berada di `../docs/GOOGLE_SIGN_IN_SETUP.md`.

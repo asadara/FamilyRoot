@@ -307,6 +307,7 @@ class PersonRepository(
             } else {
                 AppCompatibilityState(
                     status = CompatibilityGateStatus.UNAVAILABLE,
+                    updateWarningAcknowledged = previous.updateWarningAcknowledged,
                     error = result.exceptionOrNull()?.message
                 )
             }
@@ -324,8 +325,8 @@ class PersonRepository(
         warningAcknowledged: Boolean
     ): AppCompatibilityState {
         val gateStatus = when {
-            blocking -> CompatibilityGateStatus.BLOCKED
-            status == "UPDATE_AVAILABLE" -> CompatibilityGateStatus.UPDATE_AVAILABLE
+            blocking && enforcementEnabled -> CompatibilityGateStatus.BLOCKED
+            status != "COMPATIBLE" -> CompatibilityGateStatus.UPDATE_AVAILABLE
             else -> CompatibilityGateStatus.COMPATIBLE
         }
         return AppCompatibilityState(

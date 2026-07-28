@@ -8,6 +8,7 @@ data class AppCompatibilityResponse(
     val minimumSupportedVersionCode: Int,
     val latestVersionCode: Int,
     val backendApiContractVersion: Int,
+    val enforcementEnabled: Boolean = false,
     val updateUrl: String? = null,
     val policyUpdatedAt: String? = null,
     val checkedAt: String

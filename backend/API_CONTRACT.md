@@ -17,7 +17,8 @@
   `apiContractVersion` are authoritative; display `versionName` is never used for
   ordering.
 - The response status is one of `COMPATIBLE`, `UPDATE_AVAILABLE`, `APP_TOO_OLD`,
-  `APP_TOO_NEW`, or `API_CONTRACT_MISMATCH`. Only the first two are non-blocking.
+  `APP_TOO_NEW`, or `API_CONTRACT_MISMATCH`. `blocking` is true for an incompatible
+  status only when that channel's `enforcementEnabled` policy is active.
 - `PUT /app-compatibility/android/policy` requires a valid access token and a user ID
   listed in server-only `SYSTEM_ADMIN_USER_IDS`. A Family Space OWNER/ADMIN is not a
   system administrator merely because of that workspace role.
@@ -29,9 +30,10 @@
 - Android checks before session restoration and again on activity resume. A compatible
   result may be cached for at most 24 hours and only for the exact combination of
   version code, API contract, and channel.
-- `UPDATE_AVAILABLE` presents a warning that may be acknowledged for the current app
-  process. All other incompatibility statuses, or an unverifiable first launch without
-  a valid cache, prevent access to login and family data.
+- While enforcement is disabled, update/incompatibility results and an unverifiable
+  first launch present a warning that may be acknowledged for the current app
+  process. An incompatible result becomes a hard block only after server enforcement
+  is enabled.
 - New clients attach `X-App-Version-Code`, `X-Api-Contract-Version`, and
   `X-Release-Channel` to every request. Server enforcement remains disabled during
   rollout; after it is enabled, missing or incompatible headers return

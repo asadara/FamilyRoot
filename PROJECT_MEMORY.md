@@ -780,10 +780,11 @@ yang sudah selesai:
 > berikutnya. Backend menyimpan policy per `DEBUG/PILOT/PRODUCTION`, membedakan
 > `versionCode` dari `apiContractVersion`, dan hanya menerima perubahan policy dari
 > user ID pada `SYSTEM_ADMIN_USER_IDS`, dengan audit terpisah. Android memeriksa
-> sebelum restore session dan saat resume; update yang masih didukung memberi warning,
-> sedangkan APK terlalu lama/terlalu baru/beda kontrak atau first-check yang tidak
-> dapat diverifikasi menjadi hard block. Cache maksimum 24 jam hanya berlaku untuk
-> build, contract, dan channel yang sama. Migration/backend telah dideploy dan
+> sebelum restore session dan saat resume. Selama enforcement nonaktif, update,
+> mismatch versi/kontrak, atau first-check yang tidak dapat diverifikasi memberi
+> warning yang dapat dilanjutkan sementara; hanya policy enforcement aktif yang
+> membuat inkompatibilitas menjadi hard block. Cache maksimum 24 jam hanya berlaku
+> untuk build, contract, dan channel yang sama. Migration/backend telah dideploy dan
 > APK hasilnya telah dipasang ke Samsung SM-T225 melalui USB. Gate pertama
 > memakai `versionCode 2`, `versionName 0.1.1-beta`; seluruh request membawa header
 > build/contract/channel. Enforcement backend default `false` agar APK tablet build 1
