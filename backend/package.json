@@ -46,7 +46,7 @@
     "rxjs": "^7.8.1",
     "sharp": "^0.35.3",
     "swagger-ui-express": "^5.0.1",
-    "typeorm": "^0.3.28"
+    "typeorm": "^0.3.31"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.2.0",
@@ -75,6 +75,11 @@
     "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0"
+  },
+  "overrides": {
+    "typeorm": {
+      "glob": "11.1.0"
+    }
   },
   "jest": {
     "moduleFileExtensions": [
