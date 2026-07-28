@@ -136,6 +136,17 @@ object SessionStore {
             .apply()
     }
 
+    fun clearActiveSpace() {
+        _activeSpaceId.value = null
+        _activeSpaceName.value = null
+        _activeSpaceRole.value = null
+        preferences.edit()
+            .remove("active_space_id")
+            .remove("active_space_name")
+            .remove("active_space_role")
+            .apply()
+    }
+
     @Synchronized
     fun clear() {
         _accessToken.value = null

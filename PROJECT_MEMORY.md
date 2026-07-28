@@ -1,7 +1,7 @@
 # FamilyRoot — Project Memory dan Session Handoff
 
 > **Status:** Memori operasional aktif untuk melanjutkan pekerjaan lintas sesi chat
-> **Snapshot diperbarui:** 24 Juli 2026, Asia/Jakarta
+> **Snapshot diperbarui:** 28 Juli 2026, Asia/Jakarta
 > **Repository:** `asadara/FamilyRoot`
 > **Branch:** `main`
 > **Baseline sebelum implementasi frontend v2:** `b8679d3ca772cf3786a381e0716fedc4906f24da` (`feat: complete phase 4 data sustainability`)
@@ -319,7 +319,7 @@ activity, dan space settings. Navigation Compose, StateFlow, lifecycle-aware UI,
 Room, WorkManager, dan manual application container/constructor injection dipakai
 sebagai fondasi.
 
-Room database privat bernama `family-tree.db`, schema version 5, dengan tabel:
+Room database privat bernama `family-tree.db`, schema version 6, dengan tabel:
 
 - `persons` — subset person untuk cache daftar/detail;
 - `relationships` — cache edge `PARENT_CHILD` dan `SPOUSE`;
@@ -783,14 +783,55 @@ yang sudah selesai:
 > sebelum restore session dan saat resume; update yang masih didukung memberi warning,
 > sedangkan APK terlalu lama/terlalu baru/beda kontrak atau first-check yang tidak
 > dapat diverifikasi menjadi hard block. Cache maksimum 24 jam hanya berlaku untuk
-> build, contract, dan channel yang sama. Migration/backend ini belum dideploy dan
-> APK hasilnya belum dipasang ke tablet pada snapshot dokumentasi ini. Gate pertama
+> build, contract, dan channel yang sama. Migration/backend telah dideploy dan
+> APK hasilnya telah dipasang ke Samsung SM-T225 melalui USB. Gate pertama
 > memakai `versionCode 2`, `versionName 0.1.1-beta`; seluruh request membawa header
 > build/contract/channel. Enforcement backend default `false` agar APK tablet build 1
 > tidak terkunci sebelum rollout, lalu dapat diaktifkan untuk menghasilkan
 > `426 UPGRADE_REQUIRED` pada client legacy atau inkompatibel. Quality gate lokal
 > lulus: backend lint/build, 18 unit test, 14 e2e test; Android unit test,
-> `lintDebug`, dan `assemblePilot`.
+> `lintDebug`, dan `assemblePilot`. Policy PILOT saat rollout menerima build 1–2
+> dengan contract 1 dan enforcement tetap `false`; enforcement hanya boleh menjadi
+> gerbang penutup setelah fase pengembangan dinyatakan selesai.
+> P2 lifecycle kini mencakup membership, transfer ownership, leave, revoke invitation,
+> hapus akun tanpa menghapus Person/riwayat keluarga, serta arsip read-only dan
+> soft-delete Family Space dengan ringkasan dampak dan konfirmasi aman. Unique index
+> menjaga satu pemilik per silsilah; mutation lokal menghalangi tindakan berisiko;
+> Android membersihkan cache saat akses hilang dan memeriksa revocation saat resume
+> serta setiap 60 detik. P2 ditutup `DONE` pada source lokal.
+> P3 tetap `PARTIAL`, tetapi pilot privacy per person sudah end-to-end:
+> `FAMILY`/`LIMITED`/`PRIVATE`, default protektif untuk person hidup, role-aware
+> access, verified claimant sebagai pengelola final, server-side redaction pada
+> seluruh jalur baca/export/media/proposal, UI visibility, dan cache purge. Claim
+> baru memerlukan dua OWNER/ADMIN berbeda, pembuat tidak dapat mengonfirmasi sendiri,
+> dan claim legacy tidak diturunkan diam-diam. Scope cabang/field kustom, access
+> request, privacy manager delegatif, versi alternatif, serta dispute masih aktif.
+> P4 Foster/Guardian ditutup pada backend, Android, Room schema 6, renderer,
+> inspector, export/cadangan, dan test sebagai care overlay non-lineage.
+> P6 kini mempunyai revoke serta undangan tertarget email dengan masking; scope
+> cabang/detail/durasi akses pasca-accept tetap backlog.
+> P7 source hardening Supabase dan pemeriksaan drift CI sudah siap serta diuji pada
+> PostgreSQL sementara, tetapi migration cloud dan bukti console/perangkat masih
+> memerlukan tindakan pemilik sesuai checklist P7.
+> P5 bertambah dengan offline `CREATE_PERSON` dan `DELETE_RELATIONSHIP`: optimistic
+> Room state, idempotency server, rollback, retry, serta remap ID lokal atomik.
+> Acceptance Room instrumentation dan continuity selection saat remap tetap perlu
+> diuji pada perangkat final.
+> P8 Graph besar ditutup dengan viewport culling, tiga tingkat detail berdasarkan
+> zoom, fallback daftar tekstual di atas 800 card, dan minimap privacy-safe tanpa
+> identitas/metadata yang hanya memproyeksikan geometri aktif serta viewport.
+> P10 menjadi `PARTIAL`: review proposal telah memiliki perbandingan nilai saat
+> dibuat/terkini/usulan, reviewer, waktu, alasan penolakan, audit, privacy gate, dan
+> thread komentar immutable yang tidak mengekspos identitas akun. Receipt tindakan
+> pribadi juga tersedia sebagai banner global Android dan riwayat akun privacy-safe
+> untuk sukses/peringatan/error/menunggu sync. Undo audit dan dispute tetap backlog.
+> Audit aktif kini memberi nomor eksplisit sampai P14: P8 graph, P9 profil/provenance,
+> P10 kolaborasi, P11 accessibility/visual regression, P12 observability aman,
+> P13 resilience/operasi, dan P14 signing/rollout/enforcement final. P14 tetap
+> ditahan sampai gap pengembangan sebelumnya dinyatakan selesai.
+> Perubahan lifecycle membership disiapkan sebagai calon APK `versionCode 3`,
+> `versionName 0.1.2-beta`. Build 2 pada tablet tidak boleh diganti sebelum backend,
+> migration, dan policy PILOT build 3 selesai di-rollout serta diverifikasi.
 > Daftar di bawah tetap berguna sebagai konteks awal, tetapi keputusan terbaru dalam
 > kedua risalah tersebut mengalahkan item agenda yang sudah diselesaikan.
 

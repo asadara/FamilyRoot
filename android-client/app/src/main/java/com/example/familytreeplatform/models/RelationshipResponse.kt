@@ -6,5 +6,8 @@ data class RelationshipResponse(
     val fromPersonId: String,
     val toPersonId: String,
     val meta: String,
-    val createdAt: String? = null
+    val createdAt: String? = null,
+    val startDate: String? = null,
+    val endDate: String? = null,
+    val careContext: String? = null
 )

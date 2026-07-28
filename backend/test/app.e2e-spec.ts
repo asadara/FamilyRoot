@@ -26,6 +26,7 @@ describe('Phase 1 security contract (e2e)', () => {
   let adminToken: string;
   let adminId: string;
   let inviteeToken: string;
+  let inviteeRefreshToken: string;
   let spaceId: string;
   let personId: string;
   const storedObjects = new Map<string, Buffer>();
@@ -189,6 +190,7 @@ describe('Phase 1 security contract (e2e)', () => {
       })
       .expect(201);
     inviteeToken = invitee.body.accessToken;
+    inviteeRefreshToken = invitee.body.refreshToken;
     expect(owner.body.user).not.toHaveProperty('passwordHash');
 
     await request(app.getHttpServer())
@@ -514,13 +516,177 @@ describe('Phase 1 security contract (e2e)', () => {
       .expect(409);
   });
 
+  it('manages membership lifecycle without leaving a Family Space ownerless', async () => {
+    const created = await request(app.getHttpServer())
+      .post('/spaces')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: 'Lifecycle Family' })
+      .expect(201);
+    const lifecycleSpaceId = created.body.spaceId as string;
+
+    const adminMembership = await request(app.getHttpServer())
+      .post('/spaces/members')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        spaceId: lifecycleSpaceId,
+        userId: adminId,
+        role: 'ADMIN',
+      })
+      .expect(201);
+    const editorMembership = await request(app.getHttpServer())
+      .post('/spaces/members')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        spaceId: lifecycleSpaceId,
+        userId: editorId,
+        role: 'EDITOR',
+      })
+      .expect(201);
+    const viewerMembership = await request(app.getHttpServer())
+      .post('/spaces/members')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        spaceId: lifecycleSpaceId,
+        userId: viewerId,
+        role: 'VIEWER',
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .get(`/spaces/${lifecycleSpaceId}/members`)
+      .set('Authorization', `Bearer ${viewerToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toHaveLength(4);
+        expect(body).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              memberId: viewerMembership.body.memberId,
+              displayName: 'Viewer',
+              role: 'VIEWER',
+              isCurrentUser: true,
+            }),
+          ]),
+        );
+        expect(body[0]).not.toHaveProperty('email');
+      });
+
+    await request(app.getHttpServer())
+      .patch(
+        `/spaces/${lifecycleSpaceId}/members/${viewerMembership.body.memberId}`,
+      )
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ role: 'ADMIN' })
+      .expect(403);
+
+    await request(app.getHttpServer())
+      .patch(
+        `/spaces/${lifecycleSpaceId}/members/${viewerMembership.body.memberId}`,
+      )
+      .set('Authorization', `Bearer ${adminToken}`)
+      .send({ role: 'EDITOR' })
+      .expect(200)
+      .expect(({ body }) => expect(body.role).toBe('EDITOR'));
+
+    await request(app.getHttpServer())
+      .post(`/spaces/${lifecycleSpaceId}/leave`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(409);
+
+    await request(app.getHttpServer())
+      .post(`/spaces/${lifecycleSpaceId}/ownership-transfer`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ targetMemberId: editorMembership.body.memberId })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body.previousOwner.role).toBe('ADMIN');
+        expect(body.owner).toEqual(
+          expect.objectContaining({
+            memberId: editorMembership.body.memberId,
+            role: 'OWNER',
+          }),
+        );
+      });
+
+    await request(app.getHttpServer())
+      .delete(
+        `/spaces/${lifecycleSpaceId}/members/${adminMembership.body.memberId}`,
+      )
+      .set('Authorization', `Bearer ${editorToken}`)
+      .expect(200)
+      .expect(({ body }) => expect(body.removed).toBe(true));
+
+    await request(app.getHttpServer())
+      .post(`/spaces/${lifecycleSpaceId}/leave`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(201)
+      .expect(({ body }) => expect(body.left).toBe(true));
+
+    await request(app.getHttpServer())
+      .get(`/spaces/${lifecycleSpaceId}/members`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(403);
+
+    await request(app.getHttpServer())
+      .post(`/spaces/${lifecycleSpaceId}/leave`)
+      .set('Authorization', `Bearer ${editorToken}`)
+      .expect(409);
+
+    await request(app.getHttpServer())
+      .get('/changes')
+      .set('Authorization', `Bearer ${editorToken}`)
+      .query({ spaceId: lifecycleSpaceId, limit: 50 })
+      .expect(200)
+      .expect(({ body }) => {
+        const membershipLogs = (
+          body as Array<{
+            entityType: string;
+            operation: string;
+            note: string;
+          }>
+        ).filter(
+          (item: { entityType: string }) => item.entityType === 'MEMBERSHIP',
+        );
+        expect(
+          membershipLogs.some(
+            (item: { operation: string; note: string }) =>
+              item.operation === 'UPDATE' &&
+              item.note.includes('Transfer ownership'),
+          ),
+        ).toBe(true);
+        expect(
+          membershipLogs.some(
+            (item: { operation: string; note: string }) =>
+              item.operation === 'DELETE' &&
+              item.note.includes('left Family Space'),
+          ),
+        ).toBe(true);
+      });
+  });
+
   it('audits an authorized person mutation and restricts export', async () => {
+    const createPersonMutationId = randomUUID();
+    const createPersonPayload = {
+      spaceId,
+      firstName: 'Budi',
+      nickName: 'Budi',
+      gender: 'MALE',
+      clientMutationId: createPersonMutationId,
+    };
     const firstPerson = await request(app.getHttpServer())
       .post('/persons')
       .set('Authorization', `Bearer ${ownerToken}`)
-      .send({ spaceId, firstName: 'Budi', nickName: 'Budi', gender: 'MALE' })
+      .send(createPersonPayload)
       .expect(201);
     personId = firstPerson.body.personId as string;
+    await request(app.getHttpServer())
+      .post('/persons')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(createPersonPayload)
+      .expect(201)
+      .expect(({ body }) =>
+        expect(body.personId).toBe(firstPerson.body.personId),
+      );
 
     const mutationId = randomUUID();
     const lifeMutation = {
@@ -789,10 +955,17 @@ describe('Phase 1 security contract (e2e)', () => {
       .set('Authorization', `Bearer ${viewerToken}`)
       .query({ spaceId })
       .expect(403);
+    const deleteRelationshipMutationId = randomUUID();
     await request(app.getHttpServer())
       .delete(`/relationships/${spouseRelation.body.relationshipId}`)
       .set('Authorization', `Bearer ${ownerToken}`)
-      .query({ spaceId })
+      .query({ spaceId, clientMutationId: deleteRelationshipMutationId })
+      .expect(200)
+      .expect(({ body }) => expect(body.deleted).toBe(true));
+    await request(app.getHttpServer())
+      .delete(`/relationships/${spouseRelation.body.relationshipId}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .query({ spaceId, clientMutationId: deleteRelationshipMutationId })
       .expect(200)
       .expect(({ body }) => expect(body.deleted).toBe(true));
     await request(app.getHttpServer())
@@ -897,6 +1070,12 @@ describe('Phase 1 security contract (e2e)', () => {
     await request(app.getHttpServer())
       .get(`/persons/${personId}/media/${uploaded.body.mediaId}/access`)
       .set('Authorization', `Bearer ${viewerToken}`)
+      .query({ spaceId })
+      .expect(404);
+
+    await request(app.getHttpServer())
+      .get(`/persons/${personId}/media/${uploaded.body.mediaId}/access`)
+      .set('Authorization', `Bearer ${ownerToken}`)
       .query({ spaceId })
       .expect(200)
       .expect(({ body }) => {
@@ -1034,6 +1213,214 @@ describe('Phase 1 security contract (e2e)', () => {
               operation: 'DELETE',
               note: 'Soft delete person',
             }),
+          ]),
+        ),
+      );
+  });
+
+  it('deletes an account without deleting its Person or family history', async () => {
+    await request(app.getHttpServer())
+      .get('/users/me/deletion-impact')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.canDeleteAccount).toBe(false);
+        expect(body.blockers).toContain('TRANSFER_OWNERSHIP');
+        expect(body.ownedSpaces.length).toBeGreaterThan(0);
+      });
+
+    await request(app.getHttpServer())
+      .delete('/users/me')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ confirmation: 'HAPUS AKUN' })
+      .expect(409);
+
+    const retainedPerson = await request(app.getHttpServer())
+      .post('/persons')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        spaceId,
+        firstName: 'Profil',
+        nickName: 'Tetap Ada',
+        gender: 'UNKNOWN',
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .post('/claims')
+      .set('Authorization', `Bearer ${inviteeToken}`)
+      .send({ spaceId, personId: retainedPerson.body.personId })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .get('/users/me/deletion-impact')
+      .set('Authorization', `Bearer ${inviteeToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.canDeleteAccount).toBe(true);
+        expect(body.membershipCount).toBe(1);
+        expect(body.claimCount).toBe(1);
+        expect(body.activeSessionCount).toBeGreaterThan(0);
+      });
+
+    await request(app.getHttpServer())
+      .delete('/users/me')
+      .set('Authorization', `Bearer ${inviteeToken}`)
+      .send({ confirmation: 'delete' })
+      .expect(400);
+
+    await request(app.getHttpServer())
+      .delete('/users/me')
+      .set('Authorization', `Bearer ${inviteeToken}`)
+      .send({ confirmation: 'HAPUS AKUN' })
+      .expect(200)
+      .expect(({ body }) => expect(body.deleted).toBe(true));
+
+    await request(app.getHttpServer())
+      .get('/spaces')
+      .set('Authorization', `Bearer ${inviteeToken}`)
+      .expect(401);
+
+    await request(app.getHttpServer())
+      .post('/auth/refresh')
+      .send({ refreshToken: inviteeRefreshToken })
+      .expect(401);
+
+    await request(app.getHttpServer())
+      .get('/persons')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .query({ spaceId })
+      .expect(200)
+      .expect(({ body }) =>
+        expect(body).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              personId: retainedPerson.body.personId,
+              fullName: 'Profil',
+            }),
+          ]),
+        ),
+      );
+
+    await request(app.getHttpServer())
+      .get('/changes')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .query({ spaceId })
+      .expect(200)
+      .expect(({ body }) =>
+        expect(body).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              entityType: 'MEMBERSHIP',
+              operation: 'DELETE',
+              note: expect.stringContaining('Account deletion'),
+            }),
+          ]),
+        ),
+      );
+  });
+
+  it('archives, restores, and safely soft-deletes a Family Space', async () => {
+    const disposableSpace = await request(app.getHttpServer())
+      .post('/spaces')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name: 'Silsilah sementara' })
+      .expect(201);
+    const disposableSpaceId = disposableSpace.body.spaceId as string;
+
+    await request(app.getHttpServer())
+      .post('/persons')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        spaceId: disposableSpaceId,
+        firstName: 'Data',
+        nickName: 'Arsip',
+        gender: 'UNKNOWN',
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .get(`/spaces/${disposableSpaceId}/lifecycle-impact`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.status).toBe('ACTIVE');
+        expect(body.personCount).toBe(1);
+        expect(body.canArchive).toBe(true);
+        expect(body.canDelete).toBe(false);
+      });
+
+    await request(app.getHttpServer())
+      .delete(`/spaces/${disposableSpaceId}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        confirmation: 'Silsilah sementara',
+        acknowledgeExport: true,
+      })
+      .expect(409);
+
+    await request(app.getHttpServer())
+      .post(`/spaces/${disposableSpaceId}/archive`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(201)
+      .expect(({ body }) => expect(body.status).toBe('ARCHIVED'));
+
+    await request(app.getHttpServer())
+      .post('/persons')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        spaceId: disposableSpaceId,
+        firstName: 'Ditolak',
+        nickName: 'Read only',
+        gender: 'UNKNOWN',
+      })
+      .expect(409);
+
+    await request(app.getHttpServer())
+      .get('/persons')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .query({ spaceId: disposableSpaceId })
+      .expect(200)
+      .expect(({ body }) => expect(body).toHaveLength(1));
+
+    await request(app.getHttpServer())
+      .post(`/spaces/${disposableSpaceId}/restore`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(201)
+      .expect(({ body }) => expect(body.status).toBe('ACTIVE'));
+
+    await request(app.getHttpServer())
+      .post(`/spaces/${disposableSpaceId}/archive`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .delete(`/spaces/${disposableSpaceId}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        confirmation: 'nama yang salah',
+        acknowledgeExport: true,
+      })
+      .expect(400);
+
+    await request(app.getHttpServer())
+      .delete(`/spaces/${disposableSpaceId}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        confirmation: 'Silsilah sementara',
+        acknowledgeExport: true,
+      })
+      .expect(200)
+      .expect(({ body }) => expect(body.deleted).toBe(true));
+
+    await request(app.getHttpServer())
+      .get('/spaces')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200)
+      .expect(({ body }) =>
+        expect(body).not.toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ spaceId: disposableSpaceId }),
           ]),
         ),
       );

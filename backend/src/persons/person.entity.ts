@@ -57,6 +57,9 @@ export class PersonEntity {
   @Column({ type: 'text', default: 'ALIVE' })
   lifeStatus!: 'ALIVE' | 'DECEASED' | 'UNKNOWN';
 
+  @Column({ type: 'text', default: 'FAMILY' })
+  visibility!: 'FAMILY' | 'LIMITED' | 'PRIVATE';
+
   @Column({ type: 'date', nullable: true })
   deceasedAt!: string | null;
 

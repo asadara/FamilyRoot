@@ -10,6 +10,8 @@ import android.graphics.pdf.PdfDocument
 import com.example.familytreeplatform.GraphExportLine
 import com.example.familytreeplatform.GraphExportPlaceholder
 import com.example.familytreeplatform.GraphExportSnapshot
+import com.example.familytreeplatform.isCareRelationship
+import com.example.familytreeplatform.isLineageParentChild
 import com.example.familytreeplatform.GraphExportTile
 import com.example.familytreeplatform.models.ExportRelationship
 import com.example.familytreeplatform.models.PersonListItem
@@ -128,6 +130,27 @@ object FamilyGraphExporter {
             canvas.drawCircle(centerX + separation, centerY, 7f, markerPaint)
         }
         snapshot.lineageLines.filterNot { it.type == "SPOUSE" }.forEach { line ->
+            if (line.type == "CARE") {
+                val carePaint = Paint(connectorPaint).apply {
+                    color = Color.rgb(126, 88, 48)
+                    strokeWidth = 2f / scale
+                    pathEffect = if (line.meta == "FOSTER") {
+                        DashPathEffect(floatArrayOf(10f, 4f, 2f, 4f), 0f)
+                    } else {
+                        DashPathEffect(floatArrayOf(4f, 3f), 0f)
+                    }
+                }
+                canvas.drawLine(line.fromX, line.fromY, line.toX, line.toY, carePaint)
+                if (line.meta == "GUARDIAN") {
+                    canvas.drawCircle(
+                        (line.fromX + line.toX) / 2f,
+                        (line.fromY + line.toY) / 2f,
+                        4f,
+                        carePaint
+                    )
+                }
+                return@forEach
+            }
             val hubY = line.fromY + (line.toY - line.fromY) / 2f
             canvas.drawLine(line.fromX, line.fromY, line.fromX, hubY, connectorPaint)
             canvas.drawLine(line.fromX, hubY, line.toX, hubY, connectorPaint)
@@ -287,7 +310,9 @@ object FamilyGraphExporter {
     ): Map<String, Int> {
         val ids = people.mapTo(linkedSetOf()) { it.personId }
         val lineage = relationships.filter {
-            it.type == "PARENT_CHILD" && it.fromPersonId in ids && it.toPersonId in ids
+            it.isLineageParentChild() &&
+                it.fromPersonId in ids &&
+                it.toPersonId in ids
         }
         val lineageIds = lineage.flatMapTo(mutableSetOf()) { listOf(it.fromPersonId, it.toPersonId) }
         val depth = ids.associateWith { 0 }.toMutableMap()
@@ -389,14 +414,22 @@ object FamilyGraphExporter {
                 canvas.drawCircle(centerX + 7f, centerY, 13f, spousePaint)
             }
 
-        relationships.filter { it.type == "PARENT_CHILD" && it.fromPersonId in positions && it.toPersonId in positions }
+        relationships.filter {
+            it.isLineageParentChild() &&
+                it.fromPersonId in positions &&
+                it.toPersonId in positions
+        }
             .groupBy { child ->
-                relationships.filter { it.type == "PARENT_CHILD" && it.toPersonId == child.toPersonId }
+                relationships.filter {
+                    it.isLineageParentChild() && it.toPersonId == child.toPersonId
+                }
                     .map { it.fromPersonId }.filter { it in positions }.distinct().sorted().joinToString("|")
             }
             .values.forEach { groupedRelations ->
                 val parentIds = groupedRelations.flatMap { child ->
-                    relationships.filter { it.type == "PARENT_CHILD" && it.toPersonId == child.toPersonId }
+                    relationships.filter {
+                        it.isLineageParentChild() && it.toPersonId == child.toPersonId
+                    }
                         .map { it.fromPersonId }
                 }.filter { it in positions }.distinct()
                 val parents = parentIds.mapNotNull { positions[it] }
@@ -412,6 +445,32 @@ object FamilyGraphExporter {
                 if (childXs.size > 1) canvas.drawLine(childXs.first(), childJoinY, childXs.last(), childJoinY, lineagePaint)
                 children.forEach { child -> canvas.drawLine(child.centerX(), childJoinY, child.centerX(), child.top, lineagePaint) }
             }
+
+        relationships.filter {
+            it.isCareRelationship() &&
+                it.fromPersonId in positions &&
+                it.toPersonId in positions
+        }.forEach { relationship ->
+            val from = positions.getValue(relationship.fromPersonId)
+            val to = positions.getValue(relationship.toPersonId)
+            val carePaint = Paint(lineagePaint).apply {
+                color = Color.rgb(126, 88, 48)
+                pathEffect = if (relationship.meta == "FOSTER") {
+                    DashPathEffect(floatArrayOf(18f, 8f, 4f, 8f), 0f)
+                } else {
+                    DashPathEffect(floatArrayOf(8f, 6f), 0f)
+                }
+            }
+            canvas.drawLine(from.centerX(), from.centerY(), to.centerX(), to.centerY(), carePaint)
+            if (relationship.meta == "GUARDIAN") {
+                canvas.drawCircle(
+                    (from.centerX() + to.centerX()) / 2f,
+                    (from.centerY() + to.centerY()) / 2f,
+                    7f,
+                    carePaint
+                )
+            }
+        }
 
         val cardPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(250, 248, 243) }
         val borderPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {

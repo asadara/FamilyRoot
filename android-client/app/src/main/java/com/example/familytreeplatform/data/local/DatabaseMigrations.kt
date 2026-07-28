@@ -65,3 +65,17 @@ val MIGRATION_4_5 = object : Migration(4, 5) {
         db.execSQL("ALTER TABLE persons ADD COLUMN deathPlace TEXT")
     }
 }
+
+val MIGRATION_5_6 = object : Migration(5, 6) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE relationships ADD COLUMN careContext TEXT")
+    }
+}
+
+val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL("ALTER TABLE persons ADD COLUMN visibility TEXT NOT NULL DEFAULT 'FAMILY'")
+        db.execSQL("ALTER TABLE persons ADD COLUMN privacyAccess TEXT NOT NULL DEFAULT 'FULL'")
+        db.execSQL("ALTER TABLE persons ADD COLUMN canManageVisibility INTEGER NOT NULL DEFAULT 0")
+    }
+}

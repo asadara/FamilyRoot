@@ -7,7 +7,19 @@ import {
 } from 'typeorm';
 
 @Entity('relationships')
-@Index(['spaceId', 'type', 'fromPersonId', 'toPersonId'], { unique: true })
+@Index(
+  'UQ_relationships_spouse_identity',
+  ['spaceId', 'fromPersonId', 'toPersonId'],
+  {
+    unique: true,
+    where: `"type" = 'SPOUSE'`,
+  },
+)
+@Index(
+  'UQ_relationships_parentage_identity',
+  ['spaceId', 'fromPersonId', 'toPersonId', 'meta'],
+  { unique: true, where: `"type" = 'PARENT_CHILD'` },
+)
 export class RelationshipEntity {
   @PrimaryGeneratedColumn('uuid')
   relationshipId!: string;
@@ -29,6 +41,8 @@ export class RelationshipEntity {
     | 'BIOLOGICAL'
     | 'ADOPTIVE'
     | 'STEP'
+    | 'FOSTER'
+    | 'GUARDIAN'
     | 'MARRIED'
     | 'DIVORCED'
     | 'WIDOWED'
@@ -40,6 +54,28 @@ export class RelationshipEntity {
   @Column({ type: 'text', nullable: true })
   endDate!: string | null;
 
+  @Column({ type: 'text', nullable: true })
+  careContext!: string | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 }
+
+export type ParentChildMeta =
+  | 'BIOLOGICAL'
+  | 'ADOPTIVE'
+  | 'STEP'
+  | 'FOSTER'
+  | 'GUARDIAN';
+
+export const isCareRelationshipMeta = (
+  meta: RelationshipEntity['meta'],
+): meta is 'FOSTER' | 'GUARDIAN' => meta === 'FOSTER' || meta === 'GUARDIAN';
+
+export const isLineageParentChildMeta = (
+  meta: RelationshipEntity['meta'],
+): boolean =>
+  meta == null ||
+  meta === 'BIOLOGICAL' ||
+  meta === 'ADOPTIVE' ||
+  meta === 'STEP';

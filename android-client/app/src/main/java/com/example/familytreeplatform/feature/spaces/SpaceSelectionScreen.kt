@@ -181,7 +181,17 @@ private fun FamilySpaceCard(space: FamilySpace, onClick: () -> Unit, modifier: M
             }
             Column(Modifier.weight(1f).padding(horizontal = 14.dp)) {
                 Text(space.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(familySpaceRoleLabel(space.role), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(
+                    listOfNotNull(
+                        familySpaceStatusLabel(space.status),
+                        familySpaceRoleLabel(space.role)
+                    ).joinToString(" · "),
+                    color = if (space.status == "ARCHIVED") {
+                        MaterialTheme.colorScheme.tertiary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
             }
             Text("›", style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.primary)
         }
@@ -246,6 +256,12 @@ private fun JoinFamilyCard(
                 Column(Modifier.padding(14.dp)) {
                     Text(preview.spaceName, style = MaterialTheme.typography.titleMedium)
                     Text("Akses sebagai ${familySpaceRoleLabel(preview.role)}")
+                    preview.maskedTargetEmail?.let { target ->
+                        Text(
+                            "Undangan khusus akun $target",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                     Text("Berlaku hingga ${preview.expiresAt}", style = MaterialTheme.typography.bodySmall)
                     OutlinedButton(
                         enabled = !state.processing,
@@ -359,6 +375,11 @@ internal fun familySpaceRoleLabel(role: String?): String = when (role) {
     else -> "Anggota keluarga"
 }
 
+internal fun familySpaceStatusLabel(status: String): String? = when (status) {
+    "ARCHIVED" -> "Diarsipkan · hanya baca"
+    else -> null
+}
+
 internal fun familySpaceInitials(name: String): String = name
     .trim()
     .split(Regex("\\s+"))
@@ -380,6 +401,8 @@ internal fun spaceSelectionErrorMessage(message: String?): String {
             "Kode undangan sudah pernah digunakan. Minta kode baru."
         value.contains("already a member", ignoreCase = true) ->
             "Anda sudah menjadi anggota silsilah ini."
+        value.contains("not available for this account", ignoreCase = true) ->
+            "Undangan ini ditujukan ke akun lain. Masuklah dengan email penerima yang benar."
         value.contains("invite", ignoreCase = true) || value.contains("token", ignoreCase = true) ->
             "Kode undangan tidak valid atau sudah tidak berlaku."
         value.contains("401") || value.contains("UNAUTHENTICATED", ignoreCase = true) ->

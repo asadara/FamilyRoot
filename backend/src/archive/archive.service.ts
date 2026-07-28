@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Inject,
   Injectable,
   NotFoundException,
@@ -16,6 +17,9 @@ import { OBJECT_STORAGE } from './storage/object-storage';
 import type { ObjectStorage } from './storage/object-storage';
 import { randomUUID } from 'node:crypto';
 import { PersonDeletionService } from '../persons/person-deletion.service';
+import { PersonPrivacyService } from '../persons/person-privacy.service';
+import { ProposalCommentEntity } from './proposal-comment.entity';
+import { UserEntity } from '../users/user.entity';
 
 @Injectable()
 export class ArchiveService {
@@ -28,11 +32,14 @@ export class ArchiveService {
     private readonly proposalsRepo: Repository<EditProposalEntity>,
     @InjectRepository(PersonEntity)
     private readonly personsRepo: Repository<PersonEntity>,
-    @InjectRepository(ChangeLogEntity)
-    private readonly changeRepo: Repository<ChangeLogEntity>,
+    @InjectRepository(ProposalCommentEntity)
+    private readonly proposalCommentsRepo: Repository<ProposalCommentEntity>,
+    @InjectRepository(UserEntity)
+    private readonly usersRepo: Repository<UserEntity>,
     @Inject(OBJECT_STORAGE)
     private readonly objectStorage: ObjectStorage,
     private readonly personDeletionService: PersonDeletionService,
+    private readonly personPrivacyService: PersonPrivacyService,
   ) {}
 
   private async assertPerson(spaceId: string, personId: string) {
@@ -45,7 +52,13 @@ export class ArchiveService {
     return person;
   }
 
-  listSources(spaceId: string, personId: string) {
+  async listSources(spaceId: string, personId: string, actorUserId: string) {
+    const { decision } = await this.personPrivacyService.findPersonWithDecision(
+      spaceId,
+      personId,
+      actorUserId,
+    );
+    if (decision.access !== 'FULL') return [];
     return this.sourcesRepo.find({
       where: { spaceId, personId },
       order: { createdAt: 'DESC' },
@@ -63,7 +76,7 @@ export class ArchiveService {
     },
     actorUserId: string,
   ) {
-    await this.assertPerson(spaceId, personId);
+    await this.assertFullPrivacyAccess(spaceId, personId, actorUserId);
     return this.sourcesRepo.manager.transaction(async (manager) => {
       const saved = await manager.save(
         manager.create(FactSourceEntity, {
@@ -90,14 +103,20 @@ export class ArchiveService {
     });
   }
 
-  listMedia(spaceId: string, personId: string) {
+  async listMedia(spaceId: string, personId: string, actorUserId: string) {
+    const { decision } = await this.personPrivacyService.findPersonWithDecision(
+      spaceId,
+      personId,
+      actorUserId,
+    );
+    if (decision.access !== 'FULL') return [];
     return this.mediaRepo.find({
       where: { spaceId, personId },
       order: { createdAt: 'DESC' },
     });
   }
 
-  async listProfilePhotos(spaceId: string) {
+  async listProfilePhotos(spaceId: string, actorUserId: string) {
     const media = await this.mediaRepo.find({
       where: { spaceId, kind: 'PHOTO' },
       order: { createdAt: 'DESC' },
@@ -112,17 +131,37 @@ export class ArchiveService {
       }
     }
 
+    const people = latestManagedPhotoByPerson.size
+      ? await this.personsRepo.findBy({
+          spaceId,
+          personId: In([...latestManagedPhotoByPerson.keys()]),
+          isDeleted: false,
+        })
+      : [];
+    const decisions = await this.personPrivacyService.decisionsForPeople(
+      spaceId,
+      people,
+      actorUserId,
+    );
+    const visiblePersonIds = new Set(
+      people
+        .filter((person) => decisions.get(person.personId)?.access === 'FULL')
+        .map((person) => person.personId),
+    );
+
     const expiresIn = 15 * 60;
     return Promise.all(
-      [...latestManagedPhotoByPerson.values()].map(async (item) => ({
-        personId: item.personId,
-        mediaId: item.mediaId,
-        url: await this.objectStorage.createSignedReadUrl(
-          item.uri.slice('object://'.length),
+      [...latestManagedPhotoByPerson.values()]
+        .filter((item) => visiblePersonIds.has(item.personId))
+        .map(async (item) => ({
+          personId: item.personId,
+          mediaId: item.mediaId,
+          url: await this.objectStorage.createSignedReadUrl(
+            item.uri.slice('object://'.length),
+            expiresIn,
+          ),
           expiresIn,
-        ),
-        expiresIn,
-      })),
+        })),
     );
   }
 
@@ -137,7 +176,7 @@ export class ArchiveService {
     },
     actorUserId: string,
   ) {
-    await this.assertPerson(spaceId, personId);
+    await this.assertFullPrivacyAccess(spaceId, personId, actorUserId);
     if (input.sourceId) {
       const source = await this.sourcesRepo.findOneBy({
         spaceId,
@@ -180,7 +219,7 @@ export class ArchiveService {
     file: Buffer,
     actorUserId: string,
   ) {
-    await this.assertPerson(spaceId, personId);
+    await this.assertFullPrivacyAccess(spaceId, personId, actorUserId);
     const image = await processUploadedImage(file);
     const objectPath = `${spaceId}/${personId}/${randomUUID()}.${image.extension}`;
 
@@ -208,8 +247,20 @@ export class ArchiveService {
     }
   }
 
-  async getMediaAccess(spaceId: string, personId: string, mediaId: string) {
-    await this.assertPerson(spaceId, personId);
+  async getMediaAccess(
+    spaceId: string,
+    personId: string,
+    mediaId: string,
+    actorUserId: string,
+  ) {
+    const { decision } = await this.personPrivacyService.findPersonWithDecision(
+      spaceId,
+      personId,
+      actorUserId,
+    );
+    if (decision.access !== 'FULL') {
+      throw new NotFoundException('Media not found');
+    }
     const media = await this.mediaRepo.findOneBy({
       spaceId,
       personId,
@@ -230,7 +281,26 @@ export class ArchiveService {
     };
   }
 
-  async listProposals(spaceId: string) {
+  private async assertFullPrivacyAccess(
+    spaceId: string,
+    personId: string,
+    actorUserId: string,
+  ) {
+    const { person, decision } =
+      await this.personPrivacyService.findPersonWithDecision(
+        spaceId,
+        personId,
+        actorUserId,
+      );
+    if (decision.access !== 'FULL') {
+      throw new ForbiddenException(
+        'Full person access is required for this action',
+      );
+    }
+    return person;
+  }
+
+  async listProposals(spaceId: string, actorUserId: string) {
     const proposals = await this.proposalsRepo.find({
       where: { spaceId },
       order: { createdAt: 'DESC' },
@@ -239,16 +309,36 @@ export class ArchiveService {
     const people = personIds.length
       ? await this.personsRepo.find({
           where: { spaceId, personId: In(personIds) },
-          select: ['personId', 'fullName'],
+          select: [
+            'personId',
+            'fullName',
+            'notes',
+            'birthPlace',
+            'deathPlace',
+            'visibility',
+          ],
         })
       : [];
-    const names = new Map(
-      people.map((person) => [person.personId, person.fullName]),
+    const decisions = await this.personPrivacyService.decisionsForPeople(
+      spaceId,
+      people,
+      actorUserId,
     );
-    return proposals.map((proposal) => ({
-      ...proposal,
-      personName: names.get(proposal.personId) ?? 'Person tidak ditemukan',
-    }));
+    const peopleById = new Map(
+      people
+        .filter((person) => decisions.get(person.personId)?.access === 'FULL')
+        .map((person) => [person.personId, person]),
+    );
+    return proposals
+      .filter((proposal) => peopleById.has(proposal.personId))
+      .map((proposal) => ({
+        ...proposal,
+        personName: peopleById.get(proposal.personId)?.fullName,
+        currentValue: this.proposalFieldValue(
+          peopleById.get(proposal.personId),
+          proposal.field,
+        ),
+      }));
   }
 
   async createProposal(
@@ -261,7 +351,11 @@ export class ArchiveService {
     },
     actorUserId: string,
   ) {
-    await this.assertPerson(input.spaceId, input.personId);
+    const person = await this.assertFullPrivacyAccess(
+      input.spaceId,
+      input.personId,
+      actorUserId,
+    );
     return this.proposalsRepo.manager.transaction(async (manager) => {
       const saved = await manager.save(
         manager.create(EditProposalEntity, {
@@ -269,6 +363,7 @@ export class ArchiveService {
           personId: input.personId,
           field: input.field,
           proposedValue: input.proposedValue.trim(),
+          beforeValue: this.proposalFieldValue(person, input.field),
           reason: input.reason?.trim() || null,
         }),
       );
@@ -287,7 +382,82 @@ export class ArchiveService {
     });
   }
 
-  async approveProposal(
+  async listProposalComments(
+    spaceId: string,
+    proposalId: string,
+    actorUserId: string,
+  ) {
+    await this.assertProposalPrivacyAccess(spaceId, proposalId, actorUserId);
+    const comments = await this.proposalCommentsRepo.find({
+      where: { spaceId, proposalId },
+      order: { createdAt: 'ASC' },
+    });
+    const authorIds = [...new Set(comments.map((item) => item.authorUserId))];
+    const authors = authorIds.length
+      ? await this.usersRepo.find({
+          where: { userId: In(authorIds) },
+          select: ['userId', 'displayName'],
+        })
+      : [];
+    const authorNames = new Map(
+      authors.map((author) => [author.userId, author.displayName]),
+    );
+    return comments.map((comment) =>
+      this.proposalCommentResult(
+        comment,
+        authorNames.get(comment.authorUserId) ?? 'Anggota keluarga',
+        actorUserId,
+      ),
+    );
+  }
+
+  async createProposalComment(
+    spaceId: string,
+    proposalId: string,
+    body: string,
+    actorUserId: string,
+  ) {
+    await this.assertProposalPrivacyAccess(spaceId, proposalId, actorUserId);
+    const normalizedBody = body.trim();
+    if (!normalizedBody) {
+      throw new BadRequestException('Comment body is required');
+    }
+    const author = await this.usersRepo.findOne({
+      where: { userId: actorUserId },
+      select: ['userId', 'displayName'],
+    });
+    if (!author) throw new NotFoundException('Comment author not found');
+
+    return this.proposalCommentsRepo.manager.transaction(async (manager) => {
+      const saved = await manager.save(
+        manager.create(ProposalCommentEntity, {
+          spaceId,
+          proposalId,
+          authorUserId: actorUserId,
+          body: normalizedBody,
+        }),
+      );
+      await manager.save(
+        manager.create(ChangeLogEntity, {
+          spaceId,
+          actorUserId,
+          entityType: 'PROPOSAL',
+          entityId: saved.commentId,
+          operation: 'CREATE',
+          note: `Add comment to proposal ${proposalId}`,
+          afterJson: JSON.stringify({
+            commentId: saved.commentId,
+            proposalId,
+            authorUserId: actorUserId,
+            createdAt: saved.createdAt,
+          }),
+        }),
+      );
+      return this.proposalCommentResult(saved, author.displayName, actorUserId);
+    });
+  }
+
+  private async assertProposalPrivacyAccess(
     spaceId: string,
     proposalId: string,
     actorUserId: string,
@@ -297,6 +467,37 @@ export class ArchiveService {
       proposalId,
     });
     if (!proposal) throw new NotFoundException('Proposal not found');
+    await this.assertFullPrivacyAccess(spaceId, proposal.personId, actorUserId);
+    return proposal;
+  }
+
+  private proposalCommentResult(
+    comment: ProposalCommentEntity,
+    authorDisplayName: string,
+    actorUserId: string,
+  ) {
+    return {
+      commentId: comment.commentId,
+      proposalId: comment.proposalId,
+      body: comment.body,
+      authorDisplayName,
+      isMine: comment.authorUserId === actorUserId,
+      createdAt: comment.createdAt,
+    };
+  }
+
+  async approveProposal(
+    spaceId: string,
+    proposalId: string,
+    actorUserId: string,
+    reviewReason?: string,
+  ) {
+    const proposal = await this.proposalsRepo.findOneBy({
+      spaceId,
+      proposalId,
+    });
+    if (!proposal) throw new NotFoundException('Proposal not found');
+    await this.assertFullPrivacyAccess(spaceId, proposal.personId, actorUserId);
     if (proposal.status !== 'PENDING') return proposal;
 
     return this.proposalsRepo.manager.transaction(async (manager) => {
@@ -331,6 +532,7 @@ export class ArchiveService {
       proposal.status = 'APPROVED';
       proposal.reviewedByUserId = actorUserId;
       proposal.reviewedAt = new Date();
+      proposal.reviewReason = this.normalizedReviewReason(reviewReason);
       const savedProposal = await manager.save(proposal);
 
       await manager.save(
@@ -356,29 +558,64 @@ export class ArchiveService {
     spaceId: string,
     proposalId: string,
     actorUserId: string,
+    reviewReason?: string,
+    requireReviewReason = false,
   ) {
-    const proposal = await this.proposalsRepo.findOneBy({
+    const normalizedReason = this.normalizedReviewReason(reviewReason);
+    if (requireReviewReason && !normalizedReason) {
+      throw new BadRequestException(
+        'reviewReason is required when rejecting a proposal',
+      );
+    }
+    const proposalForAccess = await this.proposalsRepo.findOneBy({
       spaceId,
       proposalId,
     });
-    if (!proposal) throw new NotFoundException('Proposal not found');
-    if (proposal.status !== 'PENDING') return proposal;
-
-    const beforeProposal = JSON.stringify(proposal);
-    proposal.status = 'REJECTED';
-    proposal.reviewedByUserId = actorUserId;
-    proposal.reviewedAt = new Date();
-    const saved = await this.proposalsRepo.save(proposal);
-    await this.changeRepo.save({
+    if (!proposalForAccess) throw new NotFoundException('Proposal not found');
+    await this.assertFullPrivacyAccess(
       spaceId,
+      proposalForAccess.personId,
       actorUserId,
-      entityType: 'PROPOSAL',
-      entityId: saved.proposalId,
-      operation: 'VERIFY',
-      note: 'Reject edit proposal',
-      beforeJson: beforeProposal,
-      afterJson: JSON.stringify(saved),
+    );
+    return this.proposalsRepo.manager.transaction(async (manager) => {
+      const proposal = await manager.findOneBy(EditProposalEntity, {
+        spaceId,
+        proposalId,
+      });
+      if (!proposal) throw new NotFoundException('Proposal not found');
+      if (proposal.status !== 'PENDING') return proposal;
+
+      const beforeProposal = JSON.stringify(proposal);
+      proposal.status = 'REJECTED';
+      proposal.reviewedByUserId = actorUserId;
+      proposal.reviewedAt = new Date();
+      proposal.reviewReason = normalizedReason;
+      const saved = await manager.save(proposal);
+      await manager.save(
+        manager.create(ChangeLogEntity, {
+          spaceId,
+          actorUserId,
+          entityType: 'PROPOSAL',
+          entityId: saved.proposalId,
+          operation: 'VERIFY',
+          note: 'Reject edit proposal',
+          beforeJson: beforeProposal,
+          afterJson: JSON.stringify(saved),
+        }),
+      );
+      return saved;
     });
-    return saved;
+  }
+
+  private normalizedReviewReason(reviewReason?: string) {
+    return reviewReason?.trim() || null;
+  }
+
+  private proposalFieldValue(
+    person: PersonEntity | undefined,
+    field: EditProposalEntity['field'],
+  ) {
+    if (!person || field === 'DELETE_PERSON') return null;
+    return person[field] ?? null;
   }
 }

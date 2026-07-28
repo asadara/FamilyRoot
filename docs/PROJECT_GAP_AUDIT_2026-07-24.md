@@ -95,18 +95,37 @@ Bukti implementasi:
 - kontrak status/admin diuji lewat backend e2e dan keputusan gate diuji lewat unit
   test Android.
 
-### P2 — Lifecycle akun, anggota, undangan, dan silsilah (`ACTIVE`)
+### P2 — Lifecycle akun, anggota, undangan, dan silsilah (`DONE`, 28 Juli 2026)
 
-Belum tersedia endpoint dan UX lengkap untuk:
+Vertical slice lifecycle membership sudah tersedia:
 
-- meninggalkan silsilah;
-- transfer ownership;
-- mengubah atau mencabut role/membership;
-- mencabut undangan yang belum dipakai;
-- menghapus akun dan memutus seluruh session;
-- menghapus atau mengarsipkan silsilah secara aman;
-- export/ringkasan dampak sebelum tindakan;
-- purge cache perangkat setelah akses dicabut.
+- seluruh anggota dapat melihat daftar anggota tanpa membuka email akun;
+- `OWNER` dapat mengubah role anggota non-owner, mengeluarkan anggota, dan
+  mentransfer kepemilikan secara atomik;
+- `ADMIN` hanya dapat mengubah atau mengeluarkan `EDITOR` dan `VIEWER`;
+- database mencegah lebih dari satu `OWNER` aktif pada satu silsilah;
+- `OWNER` tidak dapat meninggalkan silsilah sebelum transfer ownership;
+- anggota non-owner dapat keluar setelah mutation lokal selesai tersinkron;
+- perubahan role, transfer, pengeluaran anggota, dan leave diaudit;
+- Android membersihkan cache/queue space setelah leave atau setelah mendeteksi akses
+  telah dicabut pada pemeriksaan resume berikutnya.
+
+Vertical slice lifecycle lanjutan juga sudah tersedia:
+
+- undangan aktif dapat dilihat menurut status dan dicabut tanpa menampilkan ulang
+  token rahasia;
+- penghapusan akun menampilkan dampak, memblokir OWNER yang belum transfer,
+  memutus session/membership/claim/identity, menganonimkan akun, dan tidak menghapus
+  record Person atau riwayat keluarga;
+- Family Space harus melalui status `ARCHIVED` read-only sebelum dapat dihapus
+  secara lunak dengan konfirmasi nama persis serta keputusan ekspor;
+- undangan aktif dicabut ketika silsilah diarsipkan;
+- Android menampilkan ringkasan dampak dan jalur ekspor, memblokir tindakan bila
+  mutation lokal belum selesai, dan membersihkan cache setelah akses dihapus;
+- akses aktif diperiksa saat resume dan setiap 60 detik selama aplikasi aktif.
+
+Server menegakkan revocation pada setiap request. Pemeriksaan periodik Android
+membatasi jendela UI lokal yang stale tanpa mengklaim push real-time.
 
 Penghapusan data dummy langsung melalui database bukan fitur produk dan tidak boleh
 dianggap sebagai penyelesaian lifecycle.
@@ -114,31 +133,39 @@ dianggap sebagai penyelesaian lifecycle.
 Acuan produk: bagian **Siklus Keluar, Penghapusan Akun, dan Data Person** pada
 `docs/FRONTEND_GRAPH_WORKSPACE_DECISION.md`.
 
-### P3 — Privacy granular dan claim kolektif (`ACTIVE`)
+### P3 — Privacy granular dan claim kolektif (`PARTIAL`, pilot selesai)
 
-Authorization saat ini masih terutama berbasis membership role untuk seluruh
-silsilah. Belum tersedia:
+Pilot privacy per person kini tersedia end-to-end:
 
 - visibility `Keluarga`, `Terbatas`, dan `Privat`;
-- field-level visibility untuk person hidup;
-- perlindungan default untuk anak;
-- role × scope untuk diri sendiri, person tertentu, atau cabang;
-- privacy manager dan request akses detail;
-- cache purge setelah scope/revocation berubah;
-- dua konfirmasi anggota berbeda untuk claim/informasi tertentu;
-- status `Belum diperiksa`, `Dikonfirmasi keluarga`, dan `Diperdebatkan`;
-- versi alternatif dan dispute tanpa menimpa data.
+- person hidup/tidak diketahui baru default `Terbatas`, sedangkan person meninggal
+  default `Keluarga`;
+- keputusan akses mempertimbangkan role, verified claimant, dan temporary privacy
+  manager;
+- Kontributor tetap dapat mengedit person `Terbatas`, Pembaca hanya memperoleh
+  struktur, dan person `Privat` hanya terbuka penuh bagi verified claimant atau
+  temporary manager sebelum ada claim;
+- redaksi diterapkan pada person, hubungan, path, claim, proposal, foto/media,
+  sumber, duplicate review, export JSON/GEDCOM/backup, dan respons mutasi;
+- pengaturan visibility tersedia pada profil lengkap dengan optimistic version;
+- cache foto dibersihkan ketika akses menyempit, dan mutation offline sensitif tidak
+  diterapkan ulang di atas data lokal yang telah teredaksi.
 
-Claim saat ini dapat diverifikasi satu `OWNER` atau `ADMIN`. Model ini cukup untuk
-pilot teknis, tetapi belum memenuhi keputusan tata kelola yang lebih lengkap.
+Claim baru sekarang memerlukan dua konfirmasi dari OWNER/ADMIN berbeda; pemilik
+claim tidak dapat mengonfirmasi sendiri, retry konfirmator yang sama idempoten, dan
+setiap konfirmasi diaudit. Claim lama yang telah terverifikasi dipertahankan sebagai
+hasil legacy agar migration tidak menurunkan keputusan keluarga secara diam-diam.
 
-### P4 — Relasi Foster dan Guardian (`ACTIVE`)
+P3 tetap `PARTIAL` karena scope per cabang/field kustom, privacy manager yang dapat
+didelegasikan, request akses detail, status `Diperdebatkan`, versi alternatif, dan
+dispute tanpa overwrite belum menjadi bagian pilot. Signed URL yang sudah terbit
+berakhir menurut TTL; perangkat lain memperoleh redaksi pada refresh berikutnya.
 
-Pilihan hubungan `BIOLOGICAL`, `ADOPTIVE`, dan `STEP` sudah ada. `FOSTER` serta
-`GUARDIAN` belum ada pada entity, DTO, migration constraint, Android model, pilihan
-UI, integrity rule, renderer, legend, export, atau test.
+### P4 — Relasi Foster dan Guardian (`DONE`, 28 Juli 2026)
 
-Implementasi harus menjaga bahwa:
+Pilihan `FOSTER` dan `GUARDIAN` kini tersedia pada backend, Android, Room,
+inspector, renderer, legend, export/cadangan, dan test. Periode serta konteks
+perawatan dapat dicatat. Implementasi menjaga bahwa:
 
 - foster/guardian tidak otomatis mengubah generation level;
 - tidak ada inferensi partnership, parentage biologis, ACL, atau legalitas;
@@ -146,19 +173,24 @@ Implementasi harus menjaga bahwa:
 - graph memakai care-relationship overlay/pola tersendiri;
 - pola dapat dibedakan tanpa hanya mengandalkan warna.
 
+Foster memakai pola dash-dot; Guardian memakai pola dashed dengan marker. Keduanya
+ditampilkan sebagai overlay care ketika person terkait difokuskan dan sengaja
+dikecualikan dari GEDCOM karena format tersebut tidak mempunyai pemetaan yang aman.
+
 ### P5 — Perluasan offline write (`PARTIAL`)
 
 Room mutation queue saat ini hanya memuat:
 
+- `CREATE_PERSON`;
 - `UPDATE_LIFE_STATUS`;
 - `UPDATE_PROFILE`;
 - `ADD_PARENT_CHILD`;
-- `ADD_SPOUSE`.
+- `ADD_SPOUSE`;
+- `DELETE_RELATIONSHIP`.
 
 Belum masuk queue:
 
-- create/delete person;
-- delete relationship;
+- delete person;
 - foto dan media;
 - source;
 - proposal/review;
@@ -168,6 +200,13 @@ Setiap perluasan harus mempunyai idempotency, optimistic state atau fallback yan
 jelas, retry, conflict handling, rollback, dan indikator sync. Label status header
 saat ini benar untuk mutation yang sudah terdaftar, tetapi belum mewakili tindakan
 yang masih online-only.
+
+Create person kini memakai card lokal optimistis dan remap ID atomik setelah server
+menjawab; relationship serta payload mutation yang bergantung ikut diremap. Delete
+relationship menyimpan snapshot untuk rollback, menganggap `404` sebagai konvergen,
+dan membatalkan relasi lokal yang belum sync secara atomik. Keduanya memakai
+`clientMutationId` idempoten dan audit server. Room instrumentation pada perangkat
+serta continuity selection selama remap tetap menjadi acceptance final.
 
 ### P6 — Undangan tertarget dan dapat dicabut (`PARTIAL`)
 
@@ -181,13 +220,16 @@ Yang sudah ada:
 
 Yang belum ada:
 
-- target akun/email tertentu;
 - anchor person dan scope cabang;
 - batas tingkat detail;
 - akses sementara setelah undangan diterima;
-- revoke invitation;
 - QR invitation;
 - usulan undangan oleh role yang tidak boleh mengundang langsung.
+
+Revoke dan undangan tertarget email kini tersedia. Email dinormalisasi; hanya akun
+yang cocok dapat preview/accept; mismatch tidak mengonsumsi token; UI dan riwayat
+hanya menampilkan alamat yang dimasking. Undangan legacy tanpa target tetap
+kompatibel selama masa transisi.
 
 ### P7 — Penutupan cloud pilot (`EXTERNAL VERIFY`)
 
@@ -202,26 +244,33 @@ seluruh bukti penutupan yang tercatat:
 - konfirmasi visual pull-to-refresh terbaru;
 - status Security Advisor terkini.
 
-Fungsi Supabase `public.rls_auto_enable()` yang pernah menghasilkan warning
-`SECURITY DEFINER` tidak dikelola oleh migration repository. Bila sudah diperbaiki
-manual, hasilnya tetap perlu dicatat atau diwujudkan sebagai migration administratif
-yang aman dan idempoten. Saran `RLS Enabled No Policy` harus didokumentasikan sebagai
-default-deny yang disengaja bila client memang tidak mengakses tabel langsung.
+Repository kini mempunyai migration backend-only yang mengaktifkan RLS, mencabut
+hak `PUBLIC`/`anon`/`authenticated`, dan mencabut eksekusi
+`public.rls_auto_enable()` dari API roles. CI memeriksa drift tabel baru dan
+migration PostgreSQL telah diuji pada cluster sementara. Saran `RLS Enabled No
+Policy` tetap dipertahankan sebagai default-deny yang disengaja. P7 tetap
+`EXTERNAL VERIFY` sampai pemilik menjalankan migration setelah backup dan menutup
+bukti console/perangkat pada `docs/P7_CLOUD_SECURITY_CLOSURE_CHECKLIST.md`.
 
 ## 4. Backlog lanjutan
 
-### Graph besar (`DEFERRED`)
+### P8 — Graph besar (`DONE`, 28 Juli 2026)
 
 Progressive expansion, filter generasi, deterministic placement, dan collision
-avoidance sudah ada. Rencana yang belum tersedia:
+avoidance telah dilengkapi viewport culling dengan overscan. Detail card memakai
+tiga tingkat zoom; foto tidak dimuat pada mode compact/minimal. Lebih dari 800 card
+aktif beralih ke daftar tekstual virtualized dengan urutan fokus lalu alfabetis.
+Tidak ada animasi baru, sehingga preferensi reduced-motion tidak diabaikan. Layout
+dan semantik care/lineage tidak diubah oleh optimasi render.
 
-- viewport culling;
-- minimap yang tidak membocorkan data privat;
-- detail card berdasarkan tingkat zoom;
-- reduced-motion handling;
-- fallback tekstual ketika renderer mencapai batas perangkat.
+Minimap privacy-safe kini hanya memproyeksikan geometri netral dari node dan lineage
+yang memang aktif/terlihat. Ia tidak membawa ID, nama, foto, umur, status, metadata,
+tipe relasi, placeholder, atau jumlah; semantics aksesibilitasnya generik. Indikator
+viewport dan navigasi ketuk-ke-tengah tersedia, sedangkan mode fallback lebih dari
+800 card sengaja tidak menampilkan minimap. Projection, batas koordinat, pemusatan
+viewport, kondisi tampil, dan larangan field identitas diuji melalui pure unit test.
 
-### Model data profil yang lebih kaya (`DEFERRED`)
+### P9 — Model data profil yang lebih kaya (`DEFERRED`)
 
 Belum tersedia penuh:
 
@@ -231,26 +280,64 @@ Belum tersedia penuh:
 - timeline event bersama;
 - provenance per field dan confidence/status verification.
 
-### Kolaborasi dan notifikasi (`DEFERRED`)
+### P10 — Kolaborasi dan notifikasi (`PARTIAL`)
 
-Proposal approve/reject dan activity log sudah ada. Yang belum tersedia:
+Proposal approve/reject kini menyimpan reviewer, waktu review, dan alasan review.
+Daftar Android menampilkan nilai ketika usulan dibuat, nilai terkini, nilai usulan,
+serta catatan kontributor/reviewer. Penolakan dari client kontrak baru wajib memiliki
+alasan; client lama tanpa header versi tetap kompatibel selama rollout. Daftar dan
+aksi review mengikuti keputusan privacy person: konteks sensitif hanya tersedia bagi
+actor dengan akses `FULL`.
 
-- komentar dan alasan penolakan terstruktur;
-- perbandingan before/after yang lengkap di UI;
+Thread diskusi immutable kini tersedia pada setiap usulan. Semua role dapat membaca
+atau menambah komentar hanya ketika mempunyai akses privacy `FULL` ke person target.
+UI memuat thread saat pengguna membukanya, menjaga draft ketika gagal, dan tidak
+mengekspos email/user ID. Audit komentar menyimpan ID proposal/komentar/actor/waktu
+tanpa menyalin isi komentar sensitif ke activity log.
+
+Notifikasi tindakan terkontrol kini tersedia sebagai dua lapis. Android menampilkan
+banner singkat di lapisan teratas untuk sukses, konflik/peringatan, gagal, dan
+`menunggu sinkronisasi`. Backend menyimpan receipt pribadi untuk mutation yang
+berhasil atau mencapai handler tetapi gagal; preview memakai copy generik tanpa nama
+Person, nilai keluarga, email, token, body request, atau error mentah. Riwayat dapat
+dibaca dan ditandai pada Profil akun, hanya oleh pemiliknya, serta dihapus bersama
+akun. Penolakan pada guard tetap tampil langsung di perangkat tetapi tidak dipaksa
+masuk database karena controller tidak pernah dijalankan.
+
+Yang belum tersedia:
+
 - undo/restore berbasis audit;
-- notifikasi terkontrol;
 - versi alternatif dan dispute kolaboratif.
 
-### Quality dan production operations (`DEFERRED`)
+### P11 — Visual regression dan accessibility acceptance (`PARTIAL`)
 
-Masih perlu direncanakan atau dibuktikan sebelum production:
+Masih perlu screenshot regression lintas ukuran/tema serta acceptance TalkBack, font
+besar, contrast, keyboard, reduced motion, dan touch target pada perangkat nyata.
+Matrix/alur/kriteria evidence sudah dibakukan pada
+`docs/ACCESSIBILITY_ACCEPTANCE_CHECKLIST.md`.
 
-- screenshot regression test lintas ukuran/tema;
-- accessibility acceptance yang lebih lengkap untuk TalkBack, font besar, contrast,
-  keyboard, dan touch target;
-- privacy-safe production monitoring;
-- SLA, retention, backup/PITR, restore drill, disaster recovery, dan incident runbook;
-- production signing, store publication, domain final, serta budget operasional.
+### P12 — Observability yang aman untuk privasi (`PARTIAL`)
+
+Request correlation sudah tidak mencatat body/query/user/family values. Production
+tetap memerlukan error/crash monitoring, redaction test, alerting, dashboard kesehatan,
+dan aturan retensi log yang tidak mengubah aktivitas membaca menjadi telemetry.
+Baseline data yang boleh dan dilarang dicatat berada pada runbook operasi P13.
+Logging HTTP Android dimatikan juga pada debug karena level BASIC tetap membuka URL
+yang dapat memuat token undangan dan identifier keluarga.
+
+### P13 — Resilience dan operasi production (`PARTIAL`)
+
+Baseline gate rollout, backup/restore drill, monitoring privat, klasifikasi insiden,
+dan evidence penutupan tersedia di `docs/PRODUCTION_OPERATIONS_RUNBOOK.md`. SLA,
+retention, backup/PITR, restore drill, disaster recovery, domain final, budget alert,
+dan ownership operasional masih harus ditutup dengan bukti aktual milik pemilik.
+
+### P14 — Release, signing, dan enforcement final (`DEFERRED`)
+
+Production signing, store publication, reproducible artifact/provenance, rollout
+bertahap backend → APK → minimum version, rollback, serta aktivasi enforcement
+kompatibilitas adalah gerbang terakhir. Sesuai keputusan pengguna, P14 tidak
+diaktifkan selama gap pengembangan sebelumnya belum dinyatakan selesai.
 
 ## 5. Rencana lama yang tidak lagi menjadi gap aktif
 
@@ -307,7 +394,13 @@ Urutan default bila pengguna tidak menetapkan prioritas lain:
 5. undangan tertarget/revoke;
 6. penutupan cloud pilot dan Security Advisor evidence;
 7. optimasi graph besar;
-8. pembaruan model profil/provenance dan fitur kolaborasi lanjutan.
+8. minimap privacy-safe;
+9. pembaruan model profil/provenance;
+10. kolaborasi, dispute, dan notifikasi;
+11. visual regression dan accessibility acceptance;
+12. observability production yang aman untuk privasi;
+13. resilience, backup/restore, dan operasi production;
+14. signing, rollout artifact, dan enforcement kompatibilitas final.
 
 Setiap item tetap memerlukan persetujuan pengguna sebelum perubahan kode. Audit ini
 menjaga arah, bukan memberi izin otomatis untuk implementasi atau tindakan destruktif.

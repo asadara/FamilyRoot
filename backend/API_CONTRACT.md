@@ -59,6 +59,32 @@
   flow when a matching password account already exists.
 - The legacy `x-user-id` header is not accepted as authentication.
 
+Account lifecycle:
+
+- `GET /users/me/deletion-impact` returns ownership blockers, membership/claim/
+  active-session/invitation counts, and spaces the account may export.
+- `DELETE /users/me` requires the exact confirmation `HAPUS AKUN`. An OWNER receives
+  `409 CONFLICT` until every active/archived space has transferred ownership.
+- Successful deletion revokes all refresh sessions and outstanding invitations,
+  removes memberships, claims, and Google identity, then anonymizes the retained user
+  tombstone. Existing Person records and family audit history are not deleted.
+- The JWT guard checks active account state on every authenticated request, so a
+  previously issued access token stops working immediately after account deletion.
+
+Personal action notifications:
+
+- Successful `POST`/`PATCH`/`DELETE` family mutations produce a privacy-safe personal
+  receipt. Validation failures, conflicts, and handler errors also produce generic
+  status receipts when the request has passed authentication/authorization guards.
+- Receipt copy never includes Person names, relationship values, invitation tokens,
+  emails, request bodies, or raw error text.
+- `GET /notifications?limit=...` returns only the authenticated account's latest
+  receipts plus `unreadCount`.
+- `PATCH /notifications/:notificationId/read` can mark only the authenticated
+  account's own receipt. `POST /notifications/read-all` marks all its unread receipts.
+- Notification-maintenance endpoints and read-only requests never create another
+  receipt. Personal notification history is deleted during account deletion.
+
 ## Space roles
 
 | Capability | OWNER | ADMIN | EDITOR | VIEWER |
@@ -73,6 +99,13 @@
 | Create sources, media metadata, and proposals | Yes | Yes | Yes | Proposal only |
 | Add VIEWER/EDITOR | Yes | Yes | No | No |
 | Add ADMIN | Yes | No | No | No |
+| List memberships | Yes | Yes | Yes | Yes |
+| Change VIEWER/EDITOR role | Yes | Yes | No | No |
+| Change ADMIN role | Yes | No | No | No |
+| Remove VIEWER/EDITOR | Yes | Yes | No | No |
+| Remove ADMIN | Yes | No | No | No |
+| Transfer ownership | Yes | No | No | No |
+| Leave the Family Space | After transfer | Yes | Yes | Yes |
 | Create invitations for VIEWER/EDITOR | Yes | Yes | No | No |
 | Create invitations for ADMIN | Yes | No | No | No |
 | Export a Family Space | Yes | Yes | No | No |
@@ -80,19 +113,76 @@
 
 `POST /spaces` creates the authenticated creator's OWNER membership in the same transaction. `GET /spaces` lists only spaces belonging to the authenticated user.
 
+Membership lifecycle endpoints:
+
+- `GET /spaces/:spaceId/members` — all members can read display name, role, join
+  time, and current-user marker. Login email is deliberately excluded.
+- `PATCH /spaces/:spaceId/members/:memberId` — OWNER may assign
+  `ADMIN`/`EDITOR`/`VIEWER`; ADMIN may only switch EDITOR and VIEWER. OWNER role is
+  never assigned through this endpoint.
+- `DELETE /spaces/:spaceId/members/:memberId` — OWNER may remove any non-owner;
+  ADMIN may only remove EDITOR/VIEWER. Self-removal uses the leave endpoint.
+- `POST /spaces/:spaceId/ownership-transfer` — current OWNER supplies
+  `targetMemberId`. In one transaction the previous OWNER becomes ADMIN and the
+  target becomes OWNER.
+- `POST /spaces/:spaceId/leave` — a non-owner removes their own membership. OWNER
+  receives `409 CONFLICT` until ownership is transferred.
+- A partial unique database index permits only one OWNER per Family Space. Role
+  changes, ownership transfer, removal, and leave all write `MEMBERSHIP` audit logs.
+- Android blocks voluntary leave while offline mutations remain. After confirmed
+  leave or detected revocation, it purges that space's Room graph, mutation queue,
+  and profile-photo URL cache before returning to space selection.
+
+Family Space lifecycle:
+
+- `GET /spaces/:spaceId/lifecycle-impact` is OWNER-only and returns status plus counts
+  for people, relationships, members, claims, media, sources, pending proposals, and
+  active invitations.
+- `POST /spaces/:spaceId/archive` changes an active space to read-only and revokes
+  every outstanding invitation. All mutation endpoints reject archived spaces.
+- `POST /spaces/:spaceId/restore` reactivates an archived space.
+- `DELETE /spaces/:spaceId` is OWNER-only, requires the archived state, the exact
+  space name, and `acknowledgeExport: true`. It is a soft-delete retaining audit and
+  family records; deleted spaces disappear from membership lists and API access.
+
 ## Family Space invitations
 
 Invitation endpoints require authentication. Creating an invitation also requires membership and role authorization on the target `spaceId`; previewing and accepting an invitation only require a valid logged-in account.
 
-- `POST /spaces/invitations` — OWNER or ADMIN creates an invitation. Body: `spaceId`, `role`, optional `expiresInDays` from 1 to 30. ADMIN cannot invite another ADMIN.
-- `GET /spaces/invitations/:token` — preview a usable invitation before accepting. Returns `spaceId`, `spaceName`, `role`, and `expiresAt`.
+- `POST /spaces/invitations` — OWNER or ADMIN creates an invitation. Body: `spaceId`,
+  `role`, optional `expiresInDays` from 1 to 30, and optional normalized
+  `targetEmail`. ADMIN cannot invite another ADMIN.
+- `GET /spaces/invitations/:token` — preview a usable invitation before accepting.
+  A targeted invitation returns `403` to a different account without consuming the
+  token. Responses expose only `maskedTargetEmail`.
 - `POST /spaces/invitations/accept` — accepts a token and creates membership for the authenticated user.
+- `GET /spaces/:spaceId/invitations?status=...` — OWNER/ADMIN lists safe invitation
+  history without tokens. ADMIN cannot inspect ADMIN invitations.
+- `DELETE /spaces/:spaceId/invitations/:inviteId` — revokes an active invitation
+  idempotently. ADMIN cannot revoke an ADMIN invitation.
 
 Invitation tokens are single-use, expire, and are audited. Accepting an invitation creates a `MEMBERSHIP` audit log entry.
 
 ## Family data
 
 Every family-data request requires a Bearer token and a valid `spaceId` in the query or body. The authenticated account must hold one of the permitted roles for that operation. Person IDs used by a relationship or claim must refer to active persons in the same Family Space.
+
+Person privacy pilot:
+
+- Every active Person has `visibility`: `FAMILY`, `LIMITED`, or `PRIVATE`.
+  Newly created living/unknown people default to `LIMITED`; deceased people default
+  to `FAMILY`.
+- Responses include `privacyAccess` (`FULL`, `STRUCTURE`, or `MINIMUM`) and
+  `canManageVisibility`. `LIMITED` remains editable by OWNER/ADMIN/EDITOR but is
+  structurally redacted for VIEWER. `PRIVATE` is fully available only to the
+  verified claimant, or temporarily to OWNER/ADMIN while no verified claim exists.
+- `PATCH /persons/:personId/visibility` requires `spaceId`, `visibility`, and
+  `expectedVersion`. Once a verified claim exists, only that claimant manages the
+  Person visibility.
+- Redaction is server-side and also applies to relationship detail, path names,
+  claim/proposal context, duplicate candidates, media/source access, and
+  JSON/GEDCOM/backup exports. Relationship structure remains visible, but dates and
+  care context are removed unless both endpoints are `FULL`.
 
 Primary endpoint groups:
 
@@ -112,6 +202,11 @@ UUID response fields are explicit: `userId`, `spaceId`, `memberId`, `personId`, 
 
 Phase 3 core endpoints:
 
+- `POST /claims/verify` records one collective confirmation. A claim owner cannot
+  confirm their own claim, the same OWNER/ADMIN cannot be counted twice, and status
+  becomes `VERIFIED` only after two different confirmations. Responses expose
+  `confirmationCount` and `required`; legacy verified claims remain valid.
+
 - `GET /persons/duplicates?spaceId=...` — lists duplicate candidates.
 - `POST /persons/merge` — OWNER/ADMIN merges `sourcePersonId` into `targetPersonId` and audits the merge.
 - `GET /relationships/path?spaceId=...&fromPersonId=...&toPersonId=...` — returns the shortest relationship path.
@@ -121,10 +216,22 @@ Phase 3 core endpoints:
   JPEG, PNG, or WebP image. The backend enforces a 2 MB limit, validates magic bytes,
   re-encodes the image without EXIF metadata, and stores only an object reference in
   `media_items`.
-- `GET /persons/:personId/media/:mediaId/access?spaceId=...` — any authorized member
-  of the matching Family Space receives a private read URL valid for 60 seconds.
-- `GET|POST /proposals` — reads or creates edit proposals.
-- `POST /proposals/approve` and `POST /proposals/reject` — OWNER/ADMIN review proposal changes.
+- `GET /persons/:personId/media/:mediaId/access?spaceId=...` — a member with `FULL`
+  privacy access to the matching Person receives a private read URL valid for 60
+  seconds; restricted access is answered as not found.
+- `GET|POST /proposals` — reads or creates edit proposals. A review item carries the
+  value captured when the proposal was created (`beforeValue`), the current value,
+  proposed value, contributor reason, reviewer, review time, and review reason.
+- `POST /proposals/approve` and `POST /proposals/reject` — OWNER/ADMIN review proposal
+  changes. Rejection from app version 3 or newer requires a trimmed
+  `reviewReason`; requests without a version header retain the legacy optional
+  contract during rollout. Proposal details and review actions require `FULL`
+  privacy access to the target Person.
+- `GET|POST /proposals/:proposalId/comments` — reads or appends an immutable
+  discussion entry. Comment bodies are trimmed and limited to 1–1000 characters.
+  The thread follows the target Person's `FULL` privacy access; responses expose a
+  display name and `isMine`, never account email or author user ID. Comment creation
+  is audited without copying the sensitive comment body into the activity record.
 
 Safe person deletion contract:
 
@@ -151,7 +258,23 @@ Phase 4 concurrency contract (initial slice):
 - Reusing a mutation ID for different input, or sending a stale `expectedVersion`, returns `409 CONFLICT`.
 - A stale-version response includes `details` with the current version and relevant server fields so clients can present an explicit resolution choice.
 - `POST /persons/parent-child` and `POST /relationships/spouse` require UUID `clientMutationId`; replaying an identical relationship creation returns the originally stored relationship without duplicating graph edges or audit entries.
+- `POST /persons` accepts optional UUID `clientMutationId`. New Android clients
+  always send it so replay returns the same Person without a second audit entry;
+  omission remains supported for legacy clients.
+- `DELETE /relationships/:relationshipId?spaceId=...&clientMutationId=...` is
+  idempotent when the mutation ID is supplied and returns the recorded deletion
+  result on replay.
 - `GET /relationships?spaceId=...` returns both `PARENT_CHILD` and `SPOUSE` edges, including `type`, dates, and metadata, so clients can maintain one offline graph cache.
+- `FOSTER` and `GUARDIAN` are care-relationship metadata, not lineage. They may carry
+  optional start/end dates and `careContext`, never affect generation/cycle/parent
+  inference, and are returned separately as caregiver/care-recipient relations.
+- Backup JSON retains care relationships. GEDCOM intentionally excludes them because
+  there is no safe supported mapping in the current GEDCOM subset.
+- Android queues create-person and relationship deletion with optimistic Room state.
+  Create-person atomically remaps its local ID through cached edges and dependent
+  mutation payloads after server success. Permanent errors roll back optimistic
+  state; retry explicitly reapplies it. Relationship deletion retains a rollback
+  snapshot and treats a server `404` as already converged.
 
 Phase 4 data portability contract:
 

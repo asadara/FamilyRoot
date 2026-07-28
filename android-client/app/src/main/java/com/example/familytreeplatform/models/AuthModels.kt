@@ -17,20 +17,25 @@ data class FamilySpace(
     val spaceId: String,
     val name: String,
     val createdBy: String,
-    val role: String? = null
+    val role: String? = null,
+    val status: String = "ACTIVE",
+    val archivedAt: String? = null,
+    val deletedAt: String? = null
 )
 data class CreateSpaceRequest(val name: String)
 data class CreateInvitationRequest(
     val spaceId: String,
     val role: String,
-    val expiresInDays: Int
+    val expiresInDays: Int,
+    val targetEmail: String? = null
 )
 data class AcceptInvitationRequest(val token: String)
 data class InvitationPreview(
     val spaceId: String,
     val spaceName: String,
     val role: String,
-    val expiresAt: String
+    val expiresAt: String,
+    val maskedTargetEmail: String? = null
 )
 data class CreatedInvitation(
     val inviteId: String,
@@ -38,5 +43,6 @@ data class CreatedInvitation(
     val role: String,
     val spaceId: String,
     val spaceName: String,
-    val expiresAt: String
+    val expiresAt: String,
+    val maskedTargetEmail: String? = null
 )

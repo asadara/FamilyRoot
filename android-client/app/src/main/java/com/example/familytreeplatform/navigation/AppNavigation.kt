@@ -45,12 +45,14 @@ import com.example.familytreeplatform.feature.home.HomeViewModel
 import com.example.familytreeplatform.feature.persondetail.PersonDetailScreen
 import com.example.familytreeplatform.feature.persondetail.PersonDetailViewModel
 import com.example.familytreeplatform.feature.profile.ProfileScreen
+import com.example.familytreeplatform.feature.profile.ProfileViewModel
 import com.example.familytreeplatform.feature.spacesettings.SpaceSettingsScreen
 import com.example.familytreeplatform.feature.spacesettings.SpaceSettingsViewModel
 import com.example.familytreeplatform.feature.support.AboutScreen
 import com.example.familytreeplatform.feature.support.HelpScreen
 import com.example.familytreeplatform.data.local.OfflineMutationStatus
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOf
 import com.example.familytreeplatform.feature.compatibility.CompatibilityGateScreen
 import com.example.familytreeplatform.feature.compatibility.compatibilityRequiresGate
@@ -87,7 +89,10 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
     DisposableEffect(lifecycleOwner, repository) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                scope.launch { repository.checkAppCompatibility() }
+                scope.launch {
+                    repository.checkAppCompatibility()
+                    repository.reconcileActiveSpaceAccess()
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -119,6 +124,15 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
     val token by SessionStore.accessToken.collectAsState()
     val spaceId by SessionStore.activeSpaceId.collectAsState()
     val spaceName by SessionStore.activeSpaceName.collectAsState()
+    LaunchedEffect(token, spaceId, lifecycleOwner, repository) {
+        if (token.isNullOrBlank() || spaceId.isNullOrBlank()) return@LaunchedEffect
+        while (true) {
+            delay(60_000L)
+            if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+                repository.reconcileActiveSpaceAccess()
+            }
+        }
+    }
     val spaceRole by SessionStore.activeSpaceRole.collectAsState()
     val userDisplayName by SessionStore.userDisplayName.collectAsState()
     val userEmail by SessionStore.userEmail.collectAsState()
@@ -189,11 +203,18 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
     LaunchedEffect(spaceId) {
         val selectedSpaceId = spaceId ?: return@LaunchedEffect
         repository.listSpaces().onSuccess { spaces ->
-            spaces.firstOrNull { it.spaceId == selectedSpaceId }?.let { space ->
+            val selectedSpace = spaces.firstOrNull { it.spaceId == selectedSpaceId }
+            if (selectedSpace == null) {
+                repository.reconcileActiveSpaceAccess()
+            } else {
+                selectedSpace.let { space ->
                 SessionStore.updateActiveSpace(space.name, space.role)
+                }
             }
         }
-        repository.listPersons(selectedSpaceId)
+        if (SessionStore.activeSpaceId.value == selectedSpaceId) {
+            repository.listPersons(selectedSpaceId)
+        }
     }
 
     val openSearchResult: (String) -> Unit = { personId ->
@@ -336,6 +357,9 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
             }
         }
         composable(Routes.PROFILE) {
+            val profileViewModel: ProfileViewModel = viewModel(
+                factory = ProfileViewModel.Factory(repository)
+            )
             FamilyRootNavigationShell(
                 currentRoute = Routes.PROFILE,
                 onNavigate = navigateTopLevel,
@@ -352,6 +376,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 onSignOut = { scope.launch { repository.logout() } }
             ) { shellModifier ->
                 ProfileScreen(
+                    viewModel = profileViewModel,
                     displayName = userDisplayName ?: "Akun TRêdhAH",
                     email = userEmail,
                     userId = userId,

@@ -12,5 +12,8 @@ data class PersonListItem(
     val notes: String? = null,
     val version: Int = 1,
     val nickName: String? = null,
-    val deathPlace: String? = null
+    val deathPlace: String? = null,
+    val visibility: String = "FAMILY",
+    val privacyAccess: String = "FULL",
+    val canManageVisibility: Boolean = false
 )

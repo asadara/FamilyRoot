@@ -45,7 +45,9 @@ internal class LineageRelationshipIndex private constructor(
 
     companion object {
         fun from(relationships: List<ExportRelationship>): LineageRelationshipIndex {
-            val parentRelationships = relationships.filter { it.type == "PARENT_CHILD" }
+            val parentRelationships = relationships.filter {
+                it.isLineageParentChild()
+            }
             val partnerships = relationships.filter { it.type == "SPOUSE" }
             val partnershipsByPerson = buildMap<String, MutableList<ExportRelationship>> {
                 partnerships.forEach { relationship ->
@@ -243,7 +245,7 @@ internal fun planProgressivePlacements(
         }
 
     val componentRelationships = visibleRelationships
-        .filter { it.type == "PARENT_CHILD" }
+        .filter { it.isLineageParentChild() }
         .mapNotNull { relationship ->
             val fromComponent = components.componentByPersonId[relationship.fromPersonId]
                 ?: return@mapNotNull null
@@ -719,7 +721,7 @@ internal fun recordedChildrenForParentGroup(
     if (parentPersonIds.isEmpty()) return emptyList()
     return index.relationships
         .asSequence()
-        .filter { it.type == "PARENT_CHILD" }
+        .filter { it.isLineageParentChild() }
         .map { it.toPersonId }
         .distinct()
         .filter { childId -> parentPersonIds in recordedParentGroups(childId, index) }

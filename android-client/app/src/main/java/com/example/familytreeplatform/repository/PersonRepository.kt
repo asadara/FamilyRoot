@@ -9,9 +9,14 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.RectF
 import android.net.Uri
+import coil.annotation.ExperimentalCoilApi
 import com.example.familytreeplatform.Config
 import com.example.familytreeplatform.BuildConfig
 import com.example.familytreeplatform.SessionStore
+import com.example.familytreeplatform.ActionFeedback
+import com.example.familytreeplatform.ActionFeedbackKind
+import com.example.familytreeplatform.ActionFeedbackStore
+import com.example.familytreeplatform.actionFeedbackForHttp
 import com.example.familytreeplatform.models.ClaimRequest
 import com.example.familytreeplatform.models.ClaimResponse
 import com.example.familytreeplatform.models.ClaimReviewItem
@@ -19,6 +24,8 @@ import com.example.familytreeplatform.models.ChangeLog
 import com.example.familytreeplatform.models.VerifyClaimRequest
 import com.example.familytreeplatform.models.ParentChildRequest
 import com.example.familytreeplatform.models.RelationshipResponse
+import com.example.familytreeplatform.isCareRelationshipMeta
+import com.example.familytreeplatform.isLineageParentChild
 import com.example.familytreeplatform.models.RelationsResponse
 import com.example.familytreeplatform.models.RelationItem
 import com.example.familytreeplatform.models.CreateSpouseRequest
@@ -38,6 +45,11 @@ import com.example.familytreeplatform.models.ProposalItem
 import com.example.familytreeplatform.models.ProposalRequest
 import com.example.familytreeplatform.models.RelationshipPathResponse
 import com.example.familytreeplatform.models.ReviewProposalRequest
+import com.example.familytreeplatform.models.ProposalCommentItem
+import com.example.familytreeplatform.models.CreateProposalCommentRequest
+import com.example.familytreeplatform.models.UserNotificationItem
+import com.example.familytreeplatform.models.NotificationHistoryResponse
+import com.example.familytreeplatform.models.MarkAllNotificationsReadResponse
 import com.example.familytreeplatform.models.SourceItem
 import com.example.familytreeplatform.models.SourceRequest
 import com.example.familytreeplatform.models.DeletePersonRequest
@@ -75,6 +87,22 @@ import com.example.familytreeplatform.models.CreatedInvitation
 import com.example.familytreeplatform.models.AcceptInvitationRequest
 import com.example.familytreeplatform.models.InvitationPreview
 import com.example.familytreeplatform.models.RefreshTokenRequest
+import com.example.familytreeplatform.models.LeaveSpaceResponse
+import com.example.familytreeplatform.models.OwnershipTransferResponse
+import com.example.familytreeplatform.models.RemoveMemberResponse
+import com.example.familytreeplatform.models.SpaceMember
+import com.example.familytreeplatform.models.TransferOwnershipRequest
+import com.example.familytreeplatform.models.UpdateMemberRoleRequest
+import com.example.familytreeplatform.models.UpdatePersonVisibilityRequest
+import com.example.familytreeplatform.models.MembershipResult
+import com.example.familytreeplatform.models.RevokeInvitationResponse
+import com.example.familytreeplatform.models.SpaceInvitation
+import com.example.familytreeplatform.models.AccountDeletionImpact
+import com.example.familytreeplatform.models.DeleteAccountRequest
+import com.example.familytreeplatform.models.DeleteAccountResponse
+import com.example.familytreeplatform.models.DeleteSpaceRequest
+import com.example.familytreeplatform.models.DeleteSpaceResponse
+import com.example.familytreeplatform.models.SpaceLifecycleImpact
 import com.example.familytreeplatform.data.local.PersonDao
 import com.example.familytreeplatform.data.local.OfflineMutationDao
 import com.example.familytreeplatform.data.local.OfflineMutationEntity
@@ -82,6 +110,7 @@ import com.example.familytreeplatform.data.local.OfflineMutationStatus
 import com.example.familytreeplatform.data.local.OfflineMutationType
 import com.example.familytreeplatform.data.local.RelationshipDao
 import com.example.familytreeplatform.data.local.CachedRelationshipEntity
+import com.example.familytreeplatform.data.local.FamilyTreeDatabase
 import com.example.familytreeplatform.data.local.toEntity
 import com.example.familytreeplatform.data.local.toModel
 import com.example.familytreeplatform.models.ApiConflictEnvelope
@@ -90,7 +119,10 @@ import com.example.familytreeplatform.models.PersonConflictSnapshot
 import com.example.familytreeplatform.models.ProfileMutationPayload
 import com.example.familytreeplatform.models.ParentChildMutationPayload
 import com.example.familytreeplatform.models.SpouseMutationPayload
+import com.example.familytreeplatform.models.CreatePersonMutationPayload
+import com.example.familytreeplatform.models.DeleteRelationshipMutationPayload
 import com.example.familytreeplatform.sync.OfflineSyncScheduler
+import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -111,6 +143,7 @@ import java.util.TimeZone
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import androidx.exifinterface.media.ExifInterface
+import coil.Coil
 import com.example.familytreeplatform.feature.auth.GoogleCredentialClient
 
 enum class SyncBatchResult { COMPLETE, RETRY }
@@ -119,7 +152,8 @@ class PersonRepository(
     private val personDao: PersonDao? = null,
     private val mutationDao: OfflineMutationDao? = null,
     private val relationshipDao: RelationshipDao? = null,
-    private val appContext: Context? = null
+    private val appContext: Context? = null,
+    private val database: FamilyTreeDatabase? = null
 ) {
     private val apiService: ApiService
     private val sessionApiService: ApiService
@@ -144,7 +178,9 @@ class PersonRepository(
 
     init {
         val logging = HttpLoggingInterceptor().apply {
-            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BASIC else HttpLoggingInterceptor.Level.NONE
+            // BASIC still prints full URLs, including invitation tokens and family
+            // identifiers. Request correlation is handled by the backend instead.
+            level = HttpLoggingInterceptor.Level.NONE
             redactHeader("Authorization")
             redactHeader("Cookie")
         }
@@ -168,6 +204,28 @@ class PersonRepository(
                 .build()
             chain.proceed(request)
         }
+        val actionFeedback = Interceptor { chain ->
+            val request = chain.request()
+            try {
+                val response = chain.proceed(request)
+                actionFeedbackForHttp(
+                    request.method,
+                    request.url.encodedPath,
+                    response.code
+                )?.let(ActionFeedbackStore::publish)
+                response
+            } catch (error: Exception) {
+                if (request.method in setOf("POST", "PATCH", "DELETE")) {
+                    ActionFeedbackStore.publish(
+                        ActionFeedback(
+                            ActionFeedbackKind.ERROR,
+                            "Belum tersimpan — perangkat tidak terhubung ke server."
+                        )
+                    )
+                }
+                throw error
+            }
+        }
         val sessionClient = OkHttpClient.Builder()
             .addInterceptor(logging)
             .addInterceptor(compatibilityHeaders)
@@ -182,6 +240,7 @@ class PersonRepository(
             .addInterceptor(logging)
             .addInterceptor(compatibilityHeaders)
             .addInterceptor(actorHeader)
+            .addInterceptor(actionFeedback)
             .authenticator(Authenticator { _, response -> refreshRequest(response) })
             .build()
 
@@ -317,6 +376,30 @@ class PersonRepository(
         apiService.googleLogin(GoogleLoginRequest(idToken))
     }
 
+    suspend fun accountDeletionImpact(): Result<AccountDeletionImpact> = apiResult {
+        apiService.accountDeletionImpact()
+    }
+
+    suspend fun pendingMutationCountAcrossSpaces(): Int = mutationDao?.countAll() ?: 0
+
+    suspend fun deleteAccount(): Result<DeleteAccountResponse> {
+        val result = apiResult {
+            apiService.deleteAccount(DeleteAccountRequest("HAPUS AKUN"))
+        }
+        if (result.isSuccess) {
+            runCatching { personDao?.deleteAll() }
+            runCatching { relationshipDao?.deleteAll() }
+            runCatching { mutationDao?.deleteAll() }
+            profilePhotoUrlsBySpace.value = emptyMap()
+            clearPrivateImageCaches()
+            runCatching {
+                appContext?.let { GoogleCredentialClient(it).clearCredentialState() }
+            }
+            SessionStore.clear()
+        }
+        return result
+    }
+
     fun acceptSession(auth: AuthResponse) {
         SessionStore.saveSession(
             auth.accessToken,
@@ -349,6 +432,7 @@ class PersonRepository(
             runCatching {
                 appContext?.let { GoogleCredentialClient(it).clearCredentialState() }
             }
+            clearPrivateImageCaches()
             SessionStore.clear()
         }
     }
@@ -365,6 +449,8 @@ class PersonRepository(
         }
         relationshipDao?.deleteBySpace(spaceId)
         personDao?.deleteBySpace(spaceId)
+        profilePhotoUrlsBySpace.update { current -> current - spaceId }
+        clearPrivateImageCaches()
     }
 
     suspend fun listSpaces(): Result<List<FamilySpace>> = apiResult { apiService.listSpaces() }
@@ -373,8 +459,60 @@ class PersonRepository(
         apiService.createSpace(CreateSpaceRequest(name))
     }
 
-    suspend fun createInvitation(spaceId: String, role: String, expiresInDays: Int): Result<CreatedInvitation> = apiResult {
-        apiService.createInvitation(CreateInvitationRequest(spaceId, role, expiresInDays))
+    suspend fun spaceLifecycleImpact(spaceId: String): Result<SpaceLifecycleImpact> = apiResult {
+        apiService.spaceLifecycleImpact(spaceId)
+    }
+
+    suspend fun archiveSpace(spaceId: String): Result<FamilySpace> {
+        val queue = mutationDao
+            ?: return Result.failure(IllegalStateException("Offline mutation queue is unavailable"))
+        if (queue.countForSpace(spaceId) > 0) {
+            return Result.failure(
+                IllegalStateException(
+                    "Resolve or sync pending offline changes before archiving this Family Space"
+                )
+            )
+        }
+        return apiResult { apiService.archiveSpace(spaceId) }
+    }
+
+    suspend fun restoreSpace(spaceId: String): Result<FamilySpace> = apiResult {
+        apiService.restoreSpace(spaceId)
+    }
+
+    suspend fun deleteSpace(
+        spaceId: String,
+        confirmation: String,
+        acknowledgeExport: Boolean
+    ): Result<DeleteSpaceResponse> {
+        val queue = mutationDao
+            ?: return Result.failure(IllegalStateException("Offline mutation queue is unavailable"))
+        if (queue.countForSpace(spaceId) > 0) {
+            return Result.failure(
+                IllegalStateException(
+                    "Resolve or sync pending offline changes before deleting this Family Space"
+                )
+            )
+        }
+        val result = apiResult {
+            apiService.deleteSpace(
+                spaceId,
+                DeleteSpaceRequest(confirmation, acknowledgeExport)
+            )
+        }
+        if (result.isSuccess) purgeRevokedSpaceAccess(spaceId)
+        return result
+    }
+
+    suspend fun createInvitation(
+        spaceId: String,
+        role: String,
+        expiresInDays: Int,
+        targetEmail: String? = null
+    ): Result<CreatedInvitation> = apiResult {
+        apiService.createInvitation(
+            CreateInvitationRequest(spaceId, role, expiresInDays, targetEmail)
+        )
     }
 
     suspend fun previewInvitation(token: String): Result<InvitationPreview> = apiResult {
@@ -383,6 +521,120 @@ class PersonRepository(
 
     suspend fun acceptInvitation(token: String): Result<FamilySpace> = apiResult {
         apiService.acceptInvitation(AcceptInvitationRequest(token))
+    }
+
+    suspend fun listSpaceInvitations(
+        spaceId: String,
+        status: String? = null
+    ): Result<List<SpaceInvitation>> = apiResult {
+        apiService.listSpaceInvitations(spaceId, status)
+    }
+
+    suspend fun revokeSpaceInvitation(
+        spaceId: String,
+        inviteId: String
+    ): Result<RevokeInvitationResponse> = apiResult {
+        apiService.revokeSpaceInvitation(spaceId, inviteId)
+    }
+
+    suspend fun listSpaceMembers(spaceId: String): Result<List<SpaceMember>> = apiResult {
+        apiService.listSpaceMembers(spaceId)
+    }
+
+    suspend fun updateSpaceMemberRole(
+        spaceId: String,
+        memberId: String,
+        role: String
+    ): Result<MembershipResult> = apiResult {
+        apiService.updateSpaceMemberRole(
+            spaceId,
+            memberId,
+            UpdateMemberRoleRequest(role)
+        )
+    }
+
+    suspend fun removeSpaceMember(
+        spaceId: String,
+        memberId: String
+    ): Result<RemoveMemberResponse> = apiResult {
+        apiService.removeSpaceMember(spaceId, memberId)
+    }
+
+    suspend fun transferSpaceOwnership(
+        spaceId: String,
+        targetMemberId: String
+    ): Result<OwnershipTransferResponse> {
+        val result = apiResult {
+            apiService.transferSpaceOwnership(
+                spaceId,
+                TransferOwnershipRequest(targetMemberId)
+            )
+        }
+        result.onSuccess {
+            val spaceName = SessionStore.activeSpaceName.value ?: "Silsilah"
+            SessionStore.updateActiveSpace(spaceName, it.previousOwner.role)
+        }
+        return result
+    }
+
+    suspend fun leaveSpace(spaceId: String): Result<LeaveSpaceResponse> {
+        val queue = mutationDao
+            ?: return Result.failure(IllegalStateException("Offline mutation queue is unavailable"))
+        if (queue.countForSpace(spaceId) > 0) {
+            return Result.failure(
+                IllegalStateException(
+                    "Resolve or sync pending offline changes before leaving this Family Space"
+                )
+            )
+        }
+        val result = apiResult { apiService.leaveSpace(spaceId) }
+        if (result.isSuccess) purgeRevokedSpaceAccess(spaceId)
+        return result
+    }
+
+    suspend fun reconcileActiveSpaceAccess() {
+        val spaceId = SessionStore.activeSpaceId.value ?: return
+        if (SessionStore.accessToken.value.isNullOrBlank()) return
+        listSpaces().onSuccess { spaces ->
+            if (spaces.none { it.spaceId == spaceId }) {
+                purgeRevokedSpaceAccess(spaceId)
+            }
+        }
+    }
+
+    private suspend fun purgeRevokedSpaceAccess(spaceId: String) {
+        runCatching { relationshipDao?.deleteBySpace(spaceId) }
+        runCatching { personDao?.deleteBySpace(spaceId) }
+        runCatching { mutationDao?.deleteBySpace(spaceId) }
+        profilePhotoUrlsBySpace.update { current -> current - spaceId }
+        clearPrivateImageCaches()
+        if (SessionStore.activeSpaceId.value == spaceId) {
+            SessionStore.clearActiveSpace()
+        }
+    }
+
+    @OptIn(ExperimentalCoilApi::class)
+    private fun clearPrivateImageCaches() {
+        val context = appContext ?: return
+        runCatching {
+            val imageLoader = Coil.imageLoader(context)
+            imageLoader.memoryCache?.clear()
+            imageLoader.diskCache?.clear()
+        }
+    }
+
+    private fun purgeRestrictedPhotoCache(
+        spaceId: String,
+        personIds: Set<String>
+    ) {
+        profilePhotoUrlsBySpace.update { current ->
+            current + (
+                spaceId to current[spaceId]
+                    .orEmpty()
+                    .filterKeys { personId -> personId !in personIds }
+                )
+        }
+        clearPrivateImageCaches()
     }
 
     private suspend fun <T> apiResult(call: suspend () -> Response<T>): Result<T> {
@@ -423,18 +675,95 @@ class PersonRepository(
     }
 
     suspend fun createPerson(request: PersonRequest): Result<PersonResponse> {
-        return try {
-            val response = apiService.createPerson(request)
-            if (response.isSuccessful) {
-                response.body()?.let { person ->
-                    personDao?.upsertAll(listOf(person.toEntity()))
-                    Result.success(person)
-                } ?: Result.failure(Exception("Empty response"))
-            } else {
-                Result.failure(Exception(parseError(response)))
+        val peopleDao = personDao
+        val queueDao = mutationDao
+        val room = database
+        if (peopleDao == null || queueDao == null || room == null) {
+            return apiResult { apiService.createPerson(request) }
+        }
+        return runCatching {
+            require(request.firstName.isNotBlank()) { "Full name is required" }
+            require(request.nickName.isNotBlank()) { "Display name is required" }
+            require(
+                request.birthDate == null ||
+                    request.deathDate == null ||
+                    request.deathDate >= request.birthDate
+            ) { "deathDate must be on or after birthDate" }
+            require(request.lifeStatus != "ALIVE" || request.deathDate == null) {
+                "An ALIVE person cannot have a deathDate"
             }
-        } catch (e: Exception) {
-            Result.failure(e)
+            val now = System.currentTimeMillis()
+            val localPersonId = "local-person-${request.clientMutationId}"
+            val fullName = listOfNotNull(
+                request.title,
+                request.firstName,
+                request.lastName,
+                request.suffix
+            ).filter(String::isNotBlank).joinToString(" ")
+            val lifeStatus = request.lifeStatus ?: "ALIVE"
+            val local = com.example.familytreeplatform.data.local.PersonEntity(
+                personId = localPersonId,
+                spaceId = request.spaceId,
+                fullName = fullName,
+                createdAt = isoTime(now),
+                lifeStatus = lifeStatus,
+                deceasedAt = request.deathDate.takeIf { lifeStatus == "DECEASED" },
+                birthDate = request.birthDate,
+                birthPlace = request.birthPlace,
+                gender = request.gender,
+                nickName = request.nickName,
+                deathPlace = request.deathPlace,
+                version = 1,
+                visibility = if (lifeStatus == "DECEASED") "FAMILY" else "LIMITED",
+                privacyAccess = "FULL",
+                canManageVisibility = false
+            )
+            val mutation = OfflineMutationEntity(
+                mutationId = request.clientMutationId,
+                spaceId = request.spaceId,
+                personId = localPersonId,
+                mutationType = OfflineMutationType.CREATE_PERSON,
+                payloadJson = Gson().toJson(CreatePersonMutationPayload(request)),
+                baseVersion = 0,
+                status = OfflineMutationStatus.PENDING,
+                attemptCount = 0,
+                lastError = null,
+                conflictVersion = null,
+                conflictPayloadJson = null,
+                createdAt = now,
+                updatedAt = now
+            )
+            room.withTransaction {
+                peopleDao.upsert(local)
+                queueDao.upsert(mutation)
+            }
+            appContext?.let(OfflineSyncScheduler::enqueue)
+            ActionFeedbackStore.waitingForSync()
+            PersonResponse(
+                personId = localPersonId,
+                spaceId = request.spaceId,
+                fullName = fullName,
+                title = request.title,
+                firstName = request.firstName,
+                lastName = request.lastName,
+                suffix = request.suffix,
+                nickName = request.nickName,
+                gender = request.gender,
+                birthDate = request.birthDate,
+                birthPlace = request.birthPlace,
+                deathDate = request.deathDate,
+                deathPlace = request.deathPlace,
+                idNumber = request.idNumber,
+                lifeStatus = lifeStatus,
+                deceasedAt = request.deathDate.takeIf { lifeStatus == "DECEASED" },
+                notes = null,
+                version = 1,
+                createdAt = isoTime(now),
+                updatedAt = isoTime(now),
+                visibility = if (lifeStatus == "DECEASED") "FAMILY" else "LIMITED",
+                privacyAccess = "FULL",
+                canManageVisibility = false
+            )
         }
     }
 
@@ -443,6 +772,12 @@ class PersonRepository(
             val response = apiService.listPersons(spaceId)
             if (response.isSuccessful) {
                 response.body()?.let { list ->
+                    val restrictedPersonIds = list
+                        .filter { it.privacyAccess != "FULL" }
+                        .mapTo(mutableSetOf()) { it.personId }
+                    if (restrictedPersonIds.isNotEmpty()) {
+                        purgeRestrictedPhotoCache(spaceId, restrictedPersonIds)
+                    }
                     personDao?.replaceSpace(spaceId, list.map { it.toEntity(spaceId) })
                     reapplyQueuedMutations(spaceId)
                     val mergedLocal = personDao
@@ -482,6 +817,28 @@ class PersonRepository(
     fun observeOfflineMutationsForSpace(spaceId: String): Flow<List<OfflineMutationEntity>> =
         mutationDao?.observeForSpace(spaceId) ?: flowOf(emptyList())
 
+    suspend fun updatePersonVisibility(
+        spaceId: String,
+        personId: String,
+        visibility: String,
+        expectedVersion: Int
+    ): Result<PersonListItem> {
+        val previousVisibility = personDao?.getById(personId)?.visibility ?: "FAMILY"
+        val result = apiResult {
+            apiService.updatePersonVisibility(
+                personId,
+                UpdatePersonVisibilityRequest(spaceId, visibility, expectedVersion)
+            )
+        }
+        result.onSuccess { person ->
+            personDao?.upsert(person.toEntity(spaceId))
+            if (privacyRank(visibility) > privacyRank(previousVisibility)) {
+                purgeRestrictedPhotoCache(spaceId, setOf(personId))
+            }
+        }
+        return result
+    }
+
     suspend fun queueLifeStatusUpdate(
         spaceId: String,
         personId: String,
@@ -514,6 +871,7 @@ class PersonRepository(
         dao.upsert(mutation)
         localPersonDao.updateLifeStatusLocally(personId, lifeStatus, deceasedAt)
         appContext?.let(OfflineSyncScheduler::enqueue)
+        ActionFeedbackStore.waitingForSync()
         mutation
     }
 
@@ -571,6 +929,7 @@ class PersonRepository(
             payload.notes.ifBlank { null }
         )
         appContext?.let(OfflineSyncScheduler::enqueue)
+        ActionFeedbackStore.waitingForSync()
         mutation
     }
 
@@ -579,21 +938,35 @@ class PersonRepository(
         focusPersonId: String
     ): Result<OfflineMutationEntity> = runCatching {
         require(request.parentId != request.childId) { "Parent and child cannot be the same person" }
+        require(
+            request.startDate == null ||
+                request.endDate == null ||
+                request.endDate >= request.startDate
+        ) { "endDate must be >= startDate" }
+        require(isCareRelationshipMeta(request.meta) || request.careContext.isNullOrBlank()) {
+            "careContext is only available for foster or guardian relationships"
+        }
         val peopleDao = requireNotNull(personDao) { "Offline person cache is unavailable" }
         requireNotNull(peopleDao.getById(request.parentId)) { "Parent is not available offline" }
         requireNotNull(peopleDao.getById(request.childId)) { "Child is not available offline" }
         val relationsDao = requireNotNull(relationshipDao) { "Offline relationship cache is unavailable" }
         val relationships = relationsDao.listBySpace(request.spaceId)
-        require(relationships.none {
-            it.type == "SPOUSE" &&
-                setOf(it.fromPersonId, it.toPersonId) == setOf(request.parentId, request.childId)
-        }) { "Parent-child relationship cannot be created between spouses" }
+        if (!isCareRelationshipMeta(request.meta)) {
+            require(relationships.none {
+                it.type == "SPOUSE" &&
+                    setOf(it.fromPersonId, it.toPersonId) == setOf(request.parentId, request.childId)
+            }) { "Parent-child relationship cannot be created between spouses" }
+        }
         require(relationships.none {
             it.type == "PARENT_CHILD" &&
-                it.fromPersonId == request.parentId && it.toPersonId == request.childId
+                it.fromPersonId == request.parentId &&
+                it.toPersonId == request.childId &&
+                it.meta == request.meta
         }) { "Relationship already exists" }
-        require(!hasParentChildPath(relationships, request.childId, request.parentId)) {
-            "Cycle detected in family tree"
+        if (!isCareRelationshipMeta(request.meta)) {
+            require(!hasParentChildPath(relationships, request.childId, request.parentId)) {
+                "Cycle detected in family tree"
+            }
         }
         if (request.meta == "BIOLOGICAL") {
             require(relationships.count {
@@ -609,7 +982,14 @@ class PersonRepository(
             personId = focusPersonId,
             mutationType = OfflineMutationType.ADD_PARENT_CHILD,
             payloadJson = Gson().toJson(
-                ParentChildMutationPayload(request.parentId, request.childId, request.meta)
+                ParentChildMutationPayload(
+                    request.parentId,
+                    request.childId,
+                    request.meta,
+                    request.startDate,
+                    request.endDate,
+                    request.careContext
+                )
             ),
             baseVersion = 0,
             status = OfflineMutationStatus.PENDING,
@@ -629,13 +1009,15 @@ class PersonRepository(
                 fromPersonId = request.parentId,
                 toPersonId = request.childId,
                 meta = request.meta,
-                startDate = null,
-                endDate = null,
+                startDate = request.startDate,
+                endDate = request.endDate,
                 createdAt = isoTime(now),
-                pendingMutationId = mutation.mutationId
+                pendingMutationId = mutation.mutationId,
+                careContext = request.careContext
             )
         )
         appContext?.let(OfflineSyncScheduler::enqueue)
+        ActionFeedbackStore.waitingForSync()
         mutation
     }
 
@@ -707,6 +1089,7 @@ class PersonRepository(
             )
         )
         appContext?.let(OfflineSyncScheduler::enqueue)
+        ActionFeedbackStore.waitingForSync()
         mutation
     }
 
@@ -716,7 +1099,9 @@ class PersonRepository(
             return SyncBatchResult.RETRY
         }
         dao.resetInterrupted(System.currentTimeMillis())
-        for (mutation in dao.listReady()) {
+        for (queuedMutation in dao.listReady()) {
+            val mutation = dao.getById(queuedMutation.mutationId) ?: continue
+            if (mutation.status != OfflineMutationStatus.PENDING) continue
             val result = syncMutation(mutation)
             if (result == SyncBatchResult.RETRY) return result
         }
@@ -726,6 +1111,7 @@ class PersonRepository(
     suspend fun keepLocalConflict(mutationId: String, serverVersion: Int) {
         mutationDao?.retryWithVersion(mutationId, serverVersion, System.currentTimeMillis())
         appContext?.let(OfflineSyncScheduler::enqueue)
+        ActionFeedbackStore.waitingForSync()
     }
 
     suspend fun useServerConflict(mutation: OfflineMutationEntity) {
@@ -772,6 +1158,7 @@ class PersonRepository(
         mutationDao?.retryWithVersion(mutationId, baseVersion, System.currentTimeMillis())
         mutationDao?.getById(mutationId)?.let { reapplyMutation(it) }
         appContext?.let(OfflineSyncScheduler::enqueue)
+        ActionFeedbackStore.waitingForSync()
     }
 
     suspend fun resumeOfflineSync() {
@@ -911,6 +1298,35 @@ class PersonRepository(
     suspend fun rejectProposal(request: ReviewProposalRequest): Result<ProposalItem> =
         apiResult { apiService.rejectProposal(request) }
 
+    suspend fun listProposalComments(
+        spaceId: String,
+        proposalId: String
+    ): Result<List<ProposalCommentItem>> =
+        apiResult { apiService.listProposalComments(proposalId, spaceId) }
+
+    suspend fun createProposalComment(
+        spaceId: String,
+        proposalId: String,
+        body: String
+    ): Result<ProposalCommentItem> =
+        apiResult {
+            apiService.createProposalComment(
+                proposalId,
+                CreateProposalCommentRequest(spaceId, body.trim())
+            )
+        }
+
+    suspend fun listNotifications(limit: Int = 50): Result<NotificationHistoryResponse> =
+        apiResult { apiService.listNotifications(limit) }
+
+    suspend fun markNotificationRead(
+        notificationId: String
+    ): Result<UserNotificationItem> =
+        apiResult { apiService.markNotificationRead(notificationId) }
+
+    suspend fun markAllNotificationsRead(): Result<MarkAllNotificationsReadResponse> =
+        apiResult { apiService.markAllNotificationsRead() }
+
     suspend fun relationshipPath(
         spaceId: String,
         fromPersonId: String,
@@ -989,7 +1405,13 @@ class PersonRepository(
             if (response.isSuccessful) {
                 response.body()?.let { relations ->
                     relationshipDao?.upsertAll(
-                        (relations.parents + relations.children + relations.spouses)
+                        (
+                            relations.parents +
+                                relations.children +
+                                relations.spouses +
+                                relations.caregivers +
+                                relations.careRecipients
+                            )
                             .distinctBy { it.relationshipId }
                             .map { it.toEntity(spaceId) }
                     )
@@ -1039,15 +1461,57 @@ class PersonRepository(
     suspend fun deleteRelationship(spaceId: String, relationshipId: String): Result<Unit> {
         if (relationshipId.startsWith("local-")) {
             return runCatching {
-                relationshipDao?.delete(relationshipId)
-                mutationDao?.delete(relationshipId.removePrefix("local-"))
+                if (database != null) {
+                    database.withTransaction {
+                        relationshipDao?.delete(relationshipId)
+                        mutationDao?.delete(relationshipId.removePrefix("local-"))
+                    }
+                } else {
+                    relationshipDao?.delete(relationshipId)
+                    mutationDao?.delete(relationshipId.removePrefix("local-"))
+                }
             }
         }
-        return apiResult {
-            apiService.deleteRelationship(relationshipId, spaceId)
-        }.map {
-            relationshipDao?.delete(relationshipId)
-            Unit
+        val relationsDao = relationshipDao
+        val queueDao = mutationDao
+        val room = database
+        if (relationsDao == null || queueDao == null || room == null) {
+            return apiResult {
+                apiService.deleteRelationship(relationshipId, spaceId, UUID.randomUUID().toString())
+            }.map { Unit }
+        }
+        return runCatching {
+            val relationship = requireNotNull(relationsDao.getById(relationshipId)) {
+                "Relationship is not available offline"
+            }
+            require(relationship.spaceId == spaceId) {
+                "Relationship belongs to another Family Space"
+            }
+            val now = System.currentTimeMillis()
+            val mutationId = UUID.randomUUID().toString()
+            val mutation = OfflineMutationEntity(
+                mutationId = mutationId,
+                spaceId = spaceId,
+                personId = relationship.fromPersonId,
+                mutationType = OfflineMutationType.DELETE_RELATIONSHIP,
+                payloadJson = Gson().toJson(
+                    DeleteRelationshipMutationPayload(relationship.toModel())
+                ),
+                baseVersion = 0,
+                status = OfflineMutationStatus.PENDING,
+                attemptCount = 0,
+                lastError = null,
+                conflictVersion = null,
+                conflictPayloadJson = null,
+                createdAt = now,
+                updatedAt = now
+            )
+            room.withTransaction {
+                queueDao.upsert(mutation)
+                relationsDao.delete(relationshipId)
+            }
+            appContext?.let(OfflineSyncScheduler::enqueue)
+            ActionFeedbackStore.waitingForSync()
         }
     }
 
@@ -1107,9 +1571,13 @@ class PersonRepository(
         dao.markAttempt(mutation.mutationId, OfflineMutationStatus.SYNCING, null, now)
         if (
             mutation.mutationType == OfflineMutationType.ADD_PARENT_CHILD ||
-            mutation.mutationType == OfflineMutationType.ADD_SPOUSE
+            mutation.mutationType == OfflineMutationType.ADD_SPOUSE ||
+            mutation.mutationType == OfflineMutationType.DELETE_RELATIONSHIP
         ) {
             return syncRelationshipMutation(mutation)
+        }
+        if (mutation.mutationType == OfflineMutationType.CREATE_PERSON) {
+            return syncCreatePersonMutation(mutation)
         }
         return try {
             val response: Response<PersonResponse> = when (mutation.mutationType) {
@@ -1240,9 +1708,109 @@ class PersonRepository(
         }
     }
 
+    private suspend fun syncCreatePersonMutation(
+        mutation: OfflineMutationEntity
+    ): SyncBatchResult {
+        val queueDao = mutationDao ?: return SyncBatchResult.COMPLETE
+        val peopleDao = personDao ?: return SyncBatchResult.COMPLETE
+        val relationsDao = relationshipDao ?: return SyncBatchResult.COMPLETE
+        val room = database ?: return invalidMutationPayload(queueDao, mutation)
+        val payload = runCatching {
+            Gson().fromJson(mutation.payloadJson, CreatePersonMutationPayload::class.java)
+        }.getOrNull() ?: return invalidMutationPayload(queueDao, mutation)
+        return try {
+            val response = apiService.createPerson(
+                payload.request.copy(clientMutationId = mutation.mutationId)
+            )
+            if (response.isSuccessful) {
+                val serverPerson = response.body()
+                    ?: return markMutationForRetry(queueDao, mutation, "Empty sync response")
+                room.withTransaction {
+                    val relationships = relationsDao.listBySpace(mutation.spaceId)
+                    relationships
+                        .filter {
+                            it.fromPersonId == mutation.personId ||
+                                it.toPersonId == mutation.personId
+                        }
+                        .forEach { relationship ->
+                            relationsDao.upsert(
+                                relationship.copy(
+                                    fromPersonId = relationship.fromPersonId
+                                        .replacePersonId(mutation.personId, serverPerson.personId),
+                                    toPersonId = relationship.toPersonId
+                                        .replacePersonId(mutation.personId, serverPerson.personId)
+                                )
+                            )
+                        }
+                    queueDao.listForSpace(mutation.spaceId)
+                        .filterNot { it.mutationId == mutation.mutationId }
+                        .forEach { pending ->
+                            queueDao.upsert(
+                                pending.remapPersonReference(
+                                    mutation.personId,
+                                    serverPerson.personId
+                                )
+                            )
+                        }
+                    peopleDao.deleteById(mutation.personId)
+                    peopleDao.upsert(serverPerson.toEntity())
+                    queueDao.delete(mutation.mutationId)
+                }
+                SyncBatchResult.COMPLETE
+            } else if (response.code() >= 500 || response.code() == 401) {
+                markMutationForRetry(
+                    queueDao,
+                    mutation,
+                    response.errorBody()?.string() ?: "Server unavailable"
+                )
+            } else {
+                room.withTransaction {
+                    peopleDao.deleteById(mutation.personId)
+                    relationsDao.listBySpace(mutation.spaceId)
+                        .filter {
+                            it.fromPersonId == mutation.personId ||
+                                it.toPersonId == mutation.personId
+                        }
+                        .forEach { relationsDao.delete(it.relationshipId) }
+                    queueDao.listForSpace(mutation.spaceId)
+                        .filter {
+                            it.mutationId != mutation.mutationId &&
+                                it.referencesPerson(mutation.personId)
+                        }
+                        .forEach { dependent ->
+                            relationsDao.deleteByMutation(dependent.mutationId)
+                            queueDao.markStatus(
+                                dependent.mutationId,
+                                OfflineMutationStatus.FAILED,
+                                "Person creation was rejected; retry the person first",
+                                System.currentTimeMillis()
+                            )
+                        }
+                    queueDao.markStatus(
+                        mutation.mutationId,
+                        OfflineMutationStatus.FAILED,
+                        response.errorBody()?.string()
+                            ?: "Person creation rejected (${response.code()})",
+                        System.currentTimeMillis()
+                    )
+                }
+                SyncBatchResult.COMPLETE
+            }
+        } catch (error: Exception) {
+            markMutationForRetry(
+                queueDao,
+                mutation,
+                error.message ?: "Network unavailable"
+            )
+        }
+    }
+
     private suspend fun syncRelationshipMutation(mutation: OfflineMutationEntity): SyncBatchResult {
         val queueDao = mutationDao ?: return SyncBatchResult.COMPLETE
         val relationsDao = relationshipDao ?: return SyncBatchResult.COMPLETE
+        if (mutation.mutationType == OfflineMutationType.DELETE_RELATIONSHIP) {
+            return syncDeleteRelationshipMutation(mutation)
+        }
         return try {
             val synced: CachedRelationshipEntity? = when (mutation.mutationType) {
                 OfflineMutationType.ADD_PARENT_CHILD -> {
@@ -1255,7 +1823,10 @@ class PersonRepository(
                             parentId = payload.parentId,
                             childId = payload.childId,
                             meta = payload.meta,
-                            clientMutationId = mutation.mutationId
+                            clientMutationId = mutation.mutationId,
+                            startDate = payload.startDate,
+                            endDate = payload.endDate,
+                            careContext = payload.careContext
                         )
                     )
                     if (!response.isSuccessful) return handleRelationshipSyncError(mutation, response)
@@ -1267,10 +1838,11 @@ class PersonRepository(
                             fromPersonId = it.fromPersonId,
                             toPersonId = it.toPersonId,
                             meta = it.meta,
-                            startDate = null,
-                            endDate = null,
+                            startDate = it.startDate,
+                            endDate = it.endDate,
                             createdAt = it.createdAt ?: isoTime(System.currentTimeMillis()),
-                            pendingMutationId = null
+                            pendingMutationId = null,
+                            careContext = it.careContext
                         )
                     }
                 }
@@ -1373,11 +1945,20 @@ class PersonRepository(
 
     private suspend fun reapplyQueuedMutations(spaceId: String) {
         val queueDao = mutationDao ?: return
-        queueDao.listForSpace(spaceId).forEach { mutation -> reapplyMutation(mutation) }
+        queueDao.listForSpace(spaceId)
+            .filter { it.status != OfflineMutationStatus.FAILED }
+            .forEach { mutation -> reapplyMutation(mutation) }
     }
 
     private suspend fun reapplyMutation(mutation: OfflineMutationEntity) {
         val localDao = personDao
+        if (
+            mutation.mutationType == OfflineMutationType.UPDATE_LIFE_STATUS ||
+            mutation.mutationType == OfflineMutationType.UPDATE_PROFILE
+        ) {
+            val privacyAccess = localDao?.getById(mutation.personId)?.privacyAccess
+            if (!canReapplySensitiveMutation(privacyAccess)) return
+        }
         when (mutation.mutationType) {
                 OfflineMutationType.UPDATE_LIFE_STATUS -> runCatching {
                     Gson().fromJson(mutation.payloadJson, LifeStatusMutationPayload::class.java)
@@ -1414,8 +1995,10 @@ class PersonRepository(
                     relationshipDao?.upsert(
                         CachedRelationshipEntity(
                             "local-${mutation.mutationId}", mutation.spaceId, "PARENT_CHILD",
-                            payload.parentId, payload.childId, payload.meta, null, null,
-                            isoTime(mutation.createdAt), mutation.mutationId
+                            payload.parentId, payload.childId, payload.meta,
+                            payload.startDate, payload.endDate,
+                            isoTime(mutation.createdAt), mutation.mutationId,
+                            payload.careContext
                         )
                     )
                 }
@@ -1431,6 +2014,46 @@ class PersonRepository(
                         )
                     )
                 }
+                OfflineMutationType.CREATE_PERSON -> runCatching {
+                    Gson().fromJson(
+                        mutation.payloadJson,
+                        CreatePersonMutationPayload::class.java
+                    )
+                }.getOrNull()?.let { payload ->
+                    val request = payload.request
+                    val fullName = listOfNotNull(
+                        request.title,
+                        request.firstName,
+                        request.lastName,
+                        request.suffix
+                    ).filter(String::isNotBlank).joinToString(" ")
+                    val lifeStatus = request.lifeStatus ?: "ALIVE"
+                    localDao?.upsert(
+                        com.example.familytreeplatform.data.local.PersonEntity(
+                            personId = mutation.personId,
+                            spaceId = mutation.spaceId,
+                            fullName = fullName,
+                            createdAt = isoTime(mutation.createdAt),
+                            lifeStatus = lifeStatus,
+                            deceasedAt = request.deathDate
+                                .takeIf { lifeStatus == "DECEASED" },
+                            birthDate = request.birthDate,
+                            birthPlace = request.birthPlace,
+                            gender = request.gender,
+                            nickName = request.nickName,
+                            deathPlace = request.deathPlace,
+                            version = 1
+                        )
+                    )
+                }
+                OfflineMutationType.DELETE_RELATIONSHIP -> runCatching {
+                    Gson().fromJson(
+                        mutation.payloadJson,
+                        DeleteRelationshipMutationPayload::class.java
+                    )
+                }.getOrNull()?.let { payload ->
+                    relationshipDao?.delete(payload.relationship.relationshipId)
+                }
         }
     }
 
@@ -1439,10 +2062,20 @@ class PersonRepository(
         relationships: List<CachedRelationshipEntity>
     ) = RelationsResponse(
         personId = personId,
-        parents = relationships.filter { it.type == "PARENT_CHILD" && it.toPersonId == personId }.map { it.toModel() },
-        children = relationships.filter { it.type == "PARENT_CHILD" && it.fromPersonId == personId }.map { it.toModel() },
+        parents = relationships.filter { it.toModel().isLineageParentChild() && it.toPersonId == personId }.map { it.toModel() },
+        children = relationships.filter { it.toModel().isLineageParentChild() && it.fromPersonId == personId }.map { it.toModel() },
         spouses = relationships.filter {
             it.type == "SPOUSE" && (it.fromPersonId == personId || it.toPersonId == personId)
+        }.map { it.toModel() },
+        caregivers = relationships.filter {
+            it.type == "PARENT_CHILD" &&
+                isCareRelationshipMeta(it.meta) &&
+                it.toPersonId == personId
+        }.map { it.toModel() },
+        careRecipients = relationships.filter {
+            it.type == "PARENT_CHILD" &&
+                isCareRelationshipMeta(it.meta) &&
+                it.fromPersonId == personId
         }.map { it.toModel() }
     )
 
@@ -1451,7 +2084,7 @@ class PersonRepository(
         startId: String,
         targetId: String
     ): Boolean {
-        val childrenByParent = relationships.filter { it.type == "PARENT_CHILD" }
+        val childrenByParent = relationships.filter { it.toModel().isLineageParentChild() }
             .groupBy { it.fromPersonId }
         val pending = ArrayDeque<String>().apply { add(startId) }
         val visited = mutableSetOf<String>()
@@ -1528,6 +2161,70 @@ class PersonRepository(
         }
         return count
     }
+
+    private suspend fun syncDeleteRelationshipMutation(
+        mutation: OfflineMutationEntity
+    ): SyncBatchResult {
+        val queueDao = mutationDao ?: return SyncBatchResult.COMPLETE
+        val relationsDao = relationshipDao ?: return SyncBatchResult.COMPLETE
+        val payload = runCatching {
+            Gson().fromJson(
+                mutation.payloadJson,
+                DeleteRelationshipMutationPayload::class.java
+            )
+        }.getOrNull() ?: return invalidMutationPayload(queueDao, mutation)
+        return try {
+            val response = apiService.deleteRelationship(
+                payload.relationship.relationshipId,
+                mutation.spaceId,
+                mutation.mutationId
+            )
+            when {
+                response.isSuccessful || response.code() == 404 -> {
+                    relationsDao.delete(payload.relationship.relationshipId)
+                    queueDao.delete(mutation.mutationId)
+                    SyncBatchResult.COMPLETE
+                }
+                response.code() >= 500 || response.code() == 401 ->
+                    markMutationForRetry(
+                        queueDao,
+                        mutation,
+                        response.errorBody()?.string() ?: "Server unavailable"
+                    )
+                else -> {
+                    relationsDao.upsert(payload.relationship.toEntity(mutation.spaceId))
+                    queueDao.markStatus(
+                        mutation.mutationId,
+                        OfflineMutationStatus.FAILED,
+                        response.errorBody()?.string()
+                            ?: "Relationship deletion rejected (${response.code()})",
+                        System.currentTimeMillis()
+                    )
+                    SyncBatchResult.COMPLETE
+                }
+            }
+        } catch (error: Exception) {
+            markMutationForRetry(
+                queueDao,
+                mutation,
+                error.message ?: "Network unavailable"
+            )
+        }
+    }
+
+    private suspend fun markMutationForRetry(
+        dao: OfflineMutationDao,
+        mutation: OfflineMutationEntity,
+        error: String
+    ): SyncBatchResult {
+        dao.markStatus(
+            mutation.mutationId,
+            OfflineMutationStatus.PENDING,
+            error,
+            System.currentTimeMillis()
+        )
+        return SyncBatchResult.RETRY
+    }
 }
 
 private fun prepareProfilePhoto(context: Context, imageUri: Uri): ByteArray {
@@ -1537,6 +2234,7 @@ private fun prepareProfilePhoto(context: Context, imageUri: Uri): ByteArray {
     require(declaredSize <= 20L * 1024L * 1024L || declaredSize < 0L) {
         "Foto terlalu besar. Pilih gambar di bawah 20 MB."
     }
+
     val source = context.contentResolver.openInputStream(imageUri)?.use { it.readBytes() }
         ?: error("Foto tidak dapat dibaca")
     require(source.isNotEmpty()) { "Foto kosong" }
@@ -1619,3 +2317,12 @@ private fun prepareProfilePhoto(context: Context, imageUri: Uri): ByteArray {
         stream.toByteArray()
     }
 }
+
+private fun privacyRank(visibility: String): Int = when (visibility) {
+    "PRIVATE" -> 2
+    "LIMITED" -> 1
+    else -> 0
+}
+
+internal fun canReapplySensitiveMutation(privacyAccess: String?): Boolean =
+    privacyAccess == "FULL"

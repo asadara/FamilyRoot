@@ -19,18 +19,24 @@ export class ExportController {
 
   @Get('space')
   @SpaceRoles('OWNER', 'ADMIN')
-  exportSpace(@Query('spaceId') spaceId: string) {
+  exportSpace(
+    @ActorUserId() actorUserId: string,
+    @Query('spaceId') spaceId: string,
+  ) {
     if (!spaceId || !isUUID(spaceId)) {
       throw new BadRequestException('Invalid spaceId');
     }
-    return this.exportService.exportSpace(spaceId);
+    return this.exportService.exportSpace(spaceId, actorUserId);
   }
 
   @Get('space/gedcom')
   @SpaceRoles('OWNER', 'ADMIN')
-  exportGedcom(@Query('spaceId') spaceId: string) {
+  exportGedcom(
+    @ActorUserId() actorUserId: string,
+    @Query('spaceId') spaceId: string,
+  ) {
     this.validateSpaceId(spaceId);
-    return this.exportService.exportGedcom(spaceId);
+    return this.exportService.exportGedcom(spaceId, actorUserId);
   }
 
   @Post('space/gedcom/import')
@@ -48,9 +54,12 @@ export class ExportController {
 
   @Get('space/backup')
   @SpaceRoles('OWNER', 'ADMIN')
-  createBackup(@Query('spaceId') spaceId: string) {
+  createBackup(
+    @ActorUserId() actorUserId: string,
+    @Query('spaceId') spaceId: string,
+  ) {
     this.validateSpaceId(spaceId);
-    return this.exportService.createBackup(spaceId);
+    return this.exportService.createBackup(spaceId, actorUserId);
   }
 
   @Post('space/backup/restore')

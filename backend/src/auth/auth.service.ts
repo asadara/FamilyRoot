@@ -231,7 +231,9 @@ export class AuthService {
         const user = await manager.findOneBy(UserEntity, {
           userId: session.userId,
         });
-        if (!user) return { error: 'Refresh token user no longer exists' };
+        if (!user || user.accountStatus !== 'ACTIVE') {
+          return { error: 'Refresh token user is no longer active' };
+        }
 
         const response = await this.createSessionResponse(
           manager,

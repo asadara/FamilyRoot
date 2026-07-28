@@ -319,6 +319,29 @@ class PersonDetailViewModel(
         }
     }
 
+    fun updateVisibility(visibility: String) {
+        val person = _uiState.value.person ?: return
+        if (!person.canManageVisibility || _uiState.value.updating) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(updating = true, error = null, message = null) }
+            repository.updatePersonVisibility(
+                spaceId = spaceId,
+                personId = personId,
+                visibility = visibility,
+                expectedVersion = person.version
+            ).onSuccess {
+                _uiState.update {
+                    it.copy(
+                        updating = false,
+                        message = "Privasi profil berhasil diperbarui."
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update { it.copy(updating = false, error = error.message) }
+            }
+        }
+    }
+
     fun keepLocalConflict(mutationId: String) {
         val mutation = _uiState.value.offlineMutations.firstOrNull { it.mutationId == mutationId } ?: return
         val serverVersion = mutation.conflictVersion ?: return
@@ -341,11 +364,20 @@ class PersonDetailViewModel(
         }
     }
 
-    fun addParent(parentId: String, meta: String = "BIOLOGICAL") {
+    fun addParent(
+        parentId: String,
+        meta: String = "BIOLOGICAL",
+        startDate: String? = null,
+        endDate: String? = null,
+        careContext: String? = null
+    ) {
         addParentChild(
             parentId = parentId,
             childId = personId,
             meta = meta,
+            startDate = startDate,
+            endDate = endDate,
+            careContext = careContext,
             success = "Parent relationship saved (${relationshipMetaMessage(meta)})"
         )
     }
@@ -367,16 +399,33 @@ class PersonDetailViewModel(
         }
     }
 
-    fun addChild(childId: String, meta: String = "BIOLOGICAL") {
+    fun addChild(
+        childId: String,
+        meta: String = "BIOLOGICAL",
+        startDate: String? = null,
+        endDate: String? = null,
+        careContext: String? = null
+    ) {
         addParentChild(
             parentId = personId,
             childId = childId,
             meta = meta,
+            startDate = startDate,
+            endDate = endDate,
+            careContext = careContext,
             success = "Child relationship saved (${relationshipMetaMessage(meta)})"
         )
     }
 
-    private fun addParentChild(parentId: String, childId: String, meta: String, success: String) {
+    private fun addParentChild(
+        parentId: String,
+        childId: String,
+        meta: String,
+        startDate: String?,
+        endDate: String?,
+        careContext: String?,
+        success: String
+    ) {
         viewModelScope.launch {
             _uiState.update { it.copy(updating = true, error = null, message = null) }
             repository.queueParentChild(
@@ -384,7 +433,10 @@ class PersonDetailViewModel(
                     spaceId = spaceId,
                     parentId = parentId,
                     childId = childId,
-                    meta = meta
+                    meta = meta,
+                    startDate = startDate,
+                    endDate = endDate,
+                    careContext = careContext
                 ),
                 focusPersonId = personId
             ).onSuccess {
@@ -553,5 +605,7 @@ internal fun profileEditValidationError(input: PersonProfileEditInput): String? 
 private fun relationshipMetaMessage(meta: String): String = when (meta) {
     "ADOPTIVE" -> "adoptive"
     "STEP" -> "step"
+    "FOSTER" -> "foster care"
+    "GUARDIAN" -> "family guardian"
     else -> "biological"
 }

@@ -5,6 +5,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  ConflictException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -13,6 +14,8 @@ import { Repository } from 'typeorm';
 import { AuthUser } from '../auth/auth-user.interface';
 import { UserPersonClaimEntity } from '../claims/user-person-claim.entity';
 import { SpaceMemberEntity } from '../spaces/space-member.entity';
+import { FamilySpaceEntity } from '../spaces/family-space.entity';
+import { ALLOW_ARCHIVED_SPACE_MUTATION_KEY } from './allow-archived-space-mutation.decorator';
 import { SPACE_ROLES_KEY, SpaceRole } from './space-roles.decorator';
 
 @Injectable()
@@ -23,6 +26,8 @@ export class SpaceMemberGuard implements CanActivate {
     private readonly membersRepo: Repository<SpaceMemberEntity>,
     @InjectRepository(UserPersonClaimEntity)
     private readonly claimsRepo: Repository<UserPersonClaimEntity>,
+    @InjectRepository(FamilySpaceEntity)
+    private readonly spacesRepo: Repository<FamilySpaceEntity>,
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -37,6 +42,7 @@ export class SpaceMemberGuard implements CanActivate {
       body?: Record<string, unknown>;
       query?: Record<string, unknown>;
       params?: Record<string, unknown>;
+      method: string;
       spaceMembership?: SpaceMemberEntity;
     }>();
     let spaceId =
@@ -66,6 +72,20 @@ export class SpaceMemberGuard implements CanActivate {
       throw new ForbiddenException(
         `Role ${member.role} is not allowed for this operation`,
       );
+    }
+    const space = await this.spacesRepo.findOneBy({ spaceId });
+    if (!space || space.status === 'DELETED') {
+      throw new NotFoundException('Family Space not found');
+    }
+    const isMutation = ['POST', 'PATCH', 'PUT', 'DELETE'].includes(
+      request.method.toUpperCase(),
+    );
+    const allowArchivedMutation = this.reflector.getAllAndOverride<boolean>(
+      ALLOW_ARCHIVED_SPACE_MUTATION_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+    if (isMutation && space.status === 'ARCHIVED' && !allowArchivedMutation) {
+      throw new ConflictException('Archived Family Space is read-only');
     }
     request.spaceMembership = member;
     return true;

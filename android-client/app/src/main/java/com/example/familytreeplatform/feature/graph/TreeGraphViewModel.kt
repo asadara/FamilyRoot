@@ -13,6 +13,8 @@ import com.example.familytreeplatform.models.RelationsResponse
 import com.example.familytreeplatform.models.RelationshipPathEdge
 import com.example.familytreeplatform.models.RelationshipPathPerson
 import com.example.familytreeplatform.models.RelationshipPathResponse
+import com.example.familytreeplatform.isCareRelationship
+import com.example.familytreeplatform.isLineageParentChild
 import com.example.familytreeplatform.repository.PersonRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -107,18 +109,24 @@ class TreeGraphViewModel(
             val centerRelations = center?.let { centerId ->
                 RelationsResponse(
                     personId = centerId,
-                    parents = relationships
-                        .filter { it.type == "PARENT_CHILD" && it.toPersonId == centerId }
+                      parents = relationships
+                          .filter { it.isLineageParentChild() && it.toPersonId == centerId }
                         .map(ExportRelationship::toRelationItem),
-                    children = relationships
-                        .filter { it.type == "PARENT_CHILD" && it.fromPersonId == centerId }
+                      children = relationships
+                          .filter { it.isLineageParentChild() && it.fromPersonId == centerId }
                         .map(ExportRelationship::toRelationItem),
                     spouses = relationships
                         .filter {
                             it.type == "SPOUSE" &&
                                 (it.fromPersonId == centerId || it.toPersonId == centerId)
-                        }
-                        .map(ExportRelationship::toRelationItem)
+                          }
+                          .map(ExportRelationship::toRelationItem),
+                      caregivers = relationships
+                          .filter { it.isCareRelationship() && it.toPersonId == centerId }
+                          .map(ExportRelationship::toRelationItem),
+                      careRecipients = relationships
+                          .filter { it.isCareRelationship() && it.fromPersonId == centerId }
+                          .map(ExportRelationship::toRelationItem)
                 )
             }
 
@@ -458,11 +466,13 @@ internal fun updateGraphPersons(
     val center = state.centerPersonId
         ?.takeIf { it in availableIds }
         ?: chooseInitialCenterPersonId(people, state.relationships)
+    val history = state.explorationHistory.filter { it in availableIds }
     return state.copy(
         persons = people,
         centerPersonId = center,
+        selectedPersonId = state.selectedPersonId?.takeIf { it in availableIds },
         relations = center?.let { state.relationships.toRelationsResponse(it) },
-        explorationHistory = state.explorationHistory.ifEmpty {
+        explorationHistory = history.ifEmpty {
             center?.let(::listOf).orEmpty()
         }
     )
@@ -630,8 +640,9 @@ private fun ExportRelationship.toRelationItem() = RelationItem(
     toPersonId = toPersonId,
     meta = meta,
     createdAt = createdAt,
-    startDate = startDate,
-    endDate = endDate
+      startDate = startDate,
+      endDate = endDate,
+      careContext = careContext
 )
 
 private fun RelationItem.toExportRelationship() = ExportRelationship(
@@ -641,20 +652,25 @@ private fun RelationItem.toExportRelationship() = ExportRelationship(
     toPersonId = toPersonId,
     meta = meta,
     createdAt = createdAt,
-    startDate = startDate,
-    endDate = endDate
+      startDate = startDate,
+      endDate = endDate,
+      careContext = careContext
 )
 
 private fun List<ExportRelationship>.toRelationsResponse(personId: String) = RelationsResponse(
     personId = personId,
-    parents = filter { it.type == "PARENT_CHILD" && it.toPersonId == personId }
+      parents = filter { it.isLineageParentChild() && it.toPersonId == personId }
         .map(ExportRelationship::toRelationItem),
-    children = filter { it.type == "PARENT_CHILD" && it.fromPersonId == personId }
+      children = filter { it.isLineageParentChild() && it.fromPersonId == personId }
         .map(ExportRelationship::toRelationItem),
     spouses = filter {
         it.type == "SPOUSE" && (it.fromPersonId == personId || it.toPersonId == personId)
-    }.map(ExportRelationship::toRelationItem)
-)
+      }.map(ExportRelationship::toRelationItem),
+      caregivers = filter { it.isCareRelationship() && it.toPersonId == personId }
+          .map(ExportRelationship::toRelationItem),
+      careRecipients = filter { it.isCareRelationship() && it.fromPersonId == personId }
+          .map(ExportRelationship::toRelationItem)
+  )
 
 /**
  * Opens the graph on the most connected family member so disconnected records
@@ -676,7 +692,7 @@ internal fun chooseInitialCenterPersonId(
                 connectionCount.getOrDefault(relationship.fromPersonId, 0) + 1
             connectionCount[relationship.toPersonId] =
                 connectionCount.getOrDefault(relationship.toPersonId, 0) + 1
-            if (relationship.type == "PARENT_CHILD") {
+            if (relationship.isLineageParentChild()) {
                 hasChild += relationship.fromPersonId
                 hasParent += relationship.toPersonId
             }

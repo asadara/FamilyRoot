@@ -8,5 +8,8 @@ data class ClaimReviewItem(
     val status: String,
     val requestedAt: String,
     val personName: String? = null,
-    val memberRole: String? = null
+    val memberRole: String? = null,
+    val confirmationCount: Int = 0,
+    val required: Int = 2,
+    val verificationBasis: String = "COLLECTIVE"
 )

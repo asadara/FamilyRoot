@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [PersonEntity::class, OfflineMutationEntity::class, CachedRelationshipEntity::class],
-    version = 5,
+    version = 7,
     exportSchema = true
 )
 abstract class FamilyTreeDatabase : RoomDatabase() {

@@ -26,6 +26,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -50,6 +52,7 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
@@ -67,6 +70,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.layout.ContentScale
@@ -76,7 +80,22 @@ import com.example.familytreeplatform.models.PersonListItem
 import com.example.familytreeplatform.models.RelationsResponse
 import com.example.familytreeplatform.models.RelationshipPathResponse
 import com.example.familytreeplatform.feature.graph.GraphQuickAddRequest
+import com.example.familytreeplatform.feature.graph.GraphCardDetail
+import com.example.familytreeplatform.feature.graph.GraphRenderMode
+import com.example.familytreeplatform.feature.graph.GraphRenderRect
+import com.example.familytreeplatform.feature.graph.GraphTextFallbackEntry
+import com.example.familytreeplatform.feature.graph.GraphMinimapLine
+import com.example.familytreeplatform.feature.graph.GraphMinimapOverview
 import com.example.familytreeplatform.feature.graph.QuickRelationKind
+import com.example.familytreeplatform.feature.graph.graphCardDetail
+import com.example.familytreeplatform.feature.graph.graphRenderMode
+import com.example.familytreeplatform.feature.graph.orderGraphTextFallbackEntries
+import com.example.familytreeplatform.feature.graph.graphMinimapProjection
+import com.example.familytreeplatform.feature.graph.graphViewportOffsetsForCenter
+import com.example.familytreeplatform.feature.graph.minimapWorldPoint
+import com.example.familytreeplatform.feature.graph.projectMinimapRect
+import com.example.familytreeplatform.feature.graph.shouldShowGraphMinimap
+import com.example.familytreeplatform.feature.graph.visibleWorldRect
 import java.util.Calendar
 
 private data class PointDp(val x: Dp, val y: Dp)
@@ -103,6 +122,13 @@ private data class RectDp(val x: Dp, val y: Dp, val w: Dp, val h: Dp) {
     fun bottomCenter(): PointDp = PointDp(x + w / 2f, y + h)
     fun center(): PointDp = PointDp(x + w / 2f, y + h / 2f)
 }
+
+private fun RectDp.toRenderRect(density: Density): GraphRenderRect = GraphRenderRect(
+    left = with(density) { left.toPx() },
+    top = with(density) { top.toPx() },
+    right = with(density) { right.toPx() },
+    bottom = with(density) { bottom.toPx() }
+)
 
 private data class TileRender(
     val id: String,
@@ -251,6 +277,20 @@ private data class LineageEdge(
     val sourceExitY: Dp = from.y
 )
 
+private fun LineageEdge.toRenderRect(density: Density): GraphRenderRect {
+    val fromX = with(density) { from.x.toPx() }
+    val fromY = with(density) { from.y.toPx() }
+    val sourceY = with(density) { sourceExitY.toPx() }
+    val toX = with(density) { to.x.toPx() }
+    val toY = with(density) { to.y.toPx() }
+    return GraphRenderRect(
+        left = minOf(fromX, toX),
+        top = minOf(fromY, sourceY, toY),
+        right = maxOf(fromX, toX),
+        bottom = maxOf(fromY, sourceY, toY)
+    )
+}
+
 internal fun lineageHubY(sourceExitY: Float, targetY: Float): Float =
     sourceExitY + (targetY - sourceExitY) / 2f
 
@@ -378,7 +418,9 @@ fun GraphScreen(
         expandedChildPersonIds,
         expandedPartnershipPersonIds,
         relationshipPath,
-        showRelationshipPathInGraph
+        showRelationshipPathInGraph,
+        selectedPersonId,
+        inspectedPersonId
     ) {
         derivedStateOf {
             val baseLayout = buildCoupleGraphLayout(
@@ -426,7 +468,7 @@ fun GraphScreen(
             } else {
                 progressiveLayout
             }
-            augmentLayoutWithUnconnectedPersons(
+            val completeLayout = augmentLayoutWithUnconnectedPersons(
                 base = connectedLayout,
                 persons = persons,
                 relationships = allRelationships,
@@ -437,7 +479,38 @@ fun GraphScreen(
                 rankGapY = rankGapY,
                 margin = margin
             )
+            attachFocusedCareRelationships(
+                base = completeLayout,
+                relationships = allRelationships,
+                focusedPersonId = inspectedPersonId ?: selectedPersonId ?: centerPersonId
+            )
         }
+    }
+
+    val layoutTileCount = remember(layout) {
+        layout.nodes.sumOf { it.tiles().size }
+    }
+    if (graphRenderMode(layoutTileCount) == GraphRenderMode.TEXT_FALLBACK) {
+        LaunchedEffect(centerPersonId, layoutTileCount) {
+            onExportSnapshotChanged(
+                GraphExportSnapshot(
+                    width = 1f,
+                    height = 1f,
+                    tiles = emptyList(),
+                    spouseLines = emptyList(),
+                    lineageLines = emptyList()
+                )
+            )
+        }
+        LargeGraphTextFallback(
+            persons = persons,
+            centerPersonId = centerPersonId,
+            renderedTileCount = layoutTileCount,
+            onOpenPerson = onOpenPerson,
+            onBack = onBack,
+            modifier = modifier
+        )
+        return
     }
 
     val density = LocalDensity.current
@@ -706,7 +779,9 @@ fun GraphScreen(
     val lockedControls = if (canEditRelationships) emptyList() else missingRelationshipControls
     val hasParents = remember(centerMemberIds, relations, allRelationships) {
         if (allRelationships.isNotEmpty()) {
-            allRelationships.any { it.type == "PARENT_CHILD" && it.toPersonId in centerMemberIds }
+            allRelationships.any {
+                it.isLineageParentChild() && it.toPersonId in centerMemberIds
+            }
         } else {
             relations.parents.isNotEmpty()
         }
@@ -721,13 +796,13 @@ fun GraphScreen(
     LaunchedEffect(showRelationshipPathInGraph, pathPersonIds) {
         if (!showRelationshipPathInGraph) return@LaunchedEffect
         if (allRelationships.any {
-                it.type == "PARENT_CHILD" &&
+                it.isLineageParentChild() &&
                     it.toPersonId in centerMemberIds &&
                     it.fromPersonId in pathPersonIds
             }
         ) parentsCollapsed = false
         if (allRelationships.any {
-                it.type == "PARENT_CHILD" &&
+                it.isLineageParentChild() &&
                     it.fromPersonId in centerMemberIds &&
                     it.toPersonId in pathPersonIds
             }
@@ -903,6 +978,78 @@ fun GraphScreen(
             val viewportHeightPx = with(density) { maxHeight.toPx() }
             val graphWidthPx = with(density) { layout.width.toPx() }
             val graphHeightPx = with(density) { layout.height.toPx() }
+            val renderTransform = transformState.value
+            val renderViewport = remember(
+                renderTransform,
+                viewportWidthPx,
+                viewportHeightPx,
+                density
+            ) {
+                visibleWorldRect(
+                    scale = renderTransform.scale,
+                    offsetX = renderTransform.offsetX,
+                    offsetY = renderTransform.offsetY,
+                    viewportWidth = viewportWidthPx,
+                    viewportHeight = viewportHeightPx,
+                    overscanWorld = with(density) { 144.dp.toPx() }
+                )
+            }
+            val cardDetail = graphCardDetail(renderTransform.scale)
+            val renderedTiles = remember(tiles, renderViewport, density) {
+                tiles.filter { it.rect.toRenderRect(density).intersects(renderViewport) }
+            }
+            val renderedNodeIds = remember(layout.nodes, renderViewport, density) {
+                layout.nodes
+                    .filter { it.bounds().toRenderRect(density).intersects(renderViewport) }
+                    .flatMapTo(mutableSetOf()) { node -> node.tiles().map { it.id } }
+            }
+            fun pointIsRendered(point: PointDp): Boolean = renderViewport.contains(
+                x = with(density) { point.x.toPx() },
+                y = with(density) { point.y.toPx() }
+            )
+            val exactViewport = remember(
+                renderTransform,
+                viewportWidthPx,
+                viewportHeightPx
+            ) {
+                visibleWorldRect(
+                    scale = renderTransform.scale,
+                    offsetX = renderTransform.offsetX,
+                    offsetY = renderTransform.offsetY,
+                    viewportWidth = viewportWidthPx,
+                    viewportHeight = viewportHeightPx
+                )
+            }
+            val minimapOverview = remember(
+                layout.nodes,
+                layout.lineageEdges,
+                generationVisiblePersonIds,
+                visibleRelationshipIds,
+                generationFilter,
+                density
+            ) {
+                val activeNodes = layout.nodes
+                    .flatMap(GraphNode::tiles)
+                    .filter { it.id in generationVisiblePersonIds }
+                    .map { it.rect.toRenderRect(density) }
+                val activeEdges = layout.lineageEdges
+                    .filter { edge ->
+                        generationFilter == GraphGenerationFilter.ALL ||
+                            edge.relationshipIds.any { it in visibleRelationshipIds }
+                    }
+                    .map { edge ->
+                        GraphMinimapLine(
+                            fromX = with(density) { edge.from.x.toPx() },
+                            fromY = with(density) { edge.from.y.toPx() },
+                            toX = with(density) { edge.to.x.toPx() },
+                            toY = with(density) { edge.to.y.toPx() }
+                        )
+                    }
+                GraphMinimapOverview(
+                    nodeRects = activeNodes,
+                    edgeLines = activeEdges
+                )
+            }
 
             Box(
                 modifier = Modifier
@@ -1011,6 +1158,7 @@ fun GraphScreen(
 
                     layout.nodes
                         .filter { node -> node.tiles().all { it.id in generationVisiblePersonIds } }
+                        .filter { node -> node.tiles().any { it.id in renderedNodeIds } }
                         .forEach { node ->
                         node.spouseLine()?.let { (a, b) ->
                             val highlighted = showRelationshipPathInGraph &&
@@ -1041,6 +1189,7 @@ fun GraphScreen(
                             generationFilter == GraphGenerationFilter.ALL ||
                                 edge.relationshipIds.any { it in visibleRelationshipIds }
                         }
+                        .filter { edge -> edge.toRenderRect(density).intersects(renderViewport) }
                         .groupBy { edge ->
                             if (edge.type == "SPOUSE") {
                                 "spouse:${edge.relationshipIds.sorted().joinToString()}"
@@ -1099,6 +1248,42 @@ fun GraphScreen(
                             )
                             return@forEach
                         }
+                        if (edge.type == "CARE") {
+                            val end = Offset(
+                                with(density) { edge.to.x.toPx() },
+                                with(density) { edge.to.y.toPx() }
+                            )
+                            val carePattern = when (edge.meta) {
+                                "FOSTER" -> floatArrayOf(
+                                    10.dp.toPx(),
+                                    4.dp.toPx(),
+                                    2.dp.toPx(),
+                                    4.dp.toPx()
+                                )
+                                else -> floatArrayOf(4.dp.toPx(), 3.dp.toPx())
+                            }
+                            val careColor =
+                                if (highlighted) pathAccentColor else coupleRingColor
+                            drawLine(
+                                color = careColor,
+                                start = start,
+                                end = end,
+                                strokeWidth = if (highlighted) 3.dp.toPx() else 2.dp.toPx(),
+                                pathEffect = PathEffect.dashPathEffect(carePattern)
+                            )
+                            if (edge.meta == "GUARDIAN") {
+                                drawCircle(
+                                    color = careColor,
+                                    radius = 4.dp.toPx(),
+                                    center = Offset(
+                                        (start.x + end.x) / 2f,
+                                        (start.y + end.y) / 2f
+                                    ),
+                                    style = Stroke(width = 2.dp.toPx())
+                                )
+                            }
+                            return@forEach
+                        }
                         val targets = edgeGroup.map { candidate ->
                             Offset(
                                 with(density) { candidate.to.x.toPx() },
@@ -1146,6 +1331,7 @@ fun GraphScreen(
 
                 layout.nodes.filterIsInstance<SingleParentNode>()
                     .filter { generationFilter == GraphGenerationFilter.ALL }
+                    .filter { it.placeholderRect.toRenderRect(density).intersects(renderViewport) }
                     .forEach { node ->
                     PlaceholderGraphCard(
                         label = if (canEditRelationships) {
@@ -1196,7 +1382,7 @@ fun GraphScreen(
                         )
                     }
 
-                tiles.forEach { tile ->
+                renderedTiles.forEach { tile ->
                     val person = personById[tile.id]
                     if (person != null) {
                         PersonGraphCard(
@@ -1204,6 +1390,7 @@ fun GraphScreen(
                             profilePhotoUrl = profilePhotoUrls[tile.id],
                             selected = tile.id == selectedPersonId,
                             highlighted = showRelationshipPathInGraph && tile.id in pathPersonIds,
+                            detail = cardDetail,
                             onActivate = {
                                 if (selectedPersonId == tile.id) {
                                     onInspectPerson(tile.id)
@@ -1298,7 +1485,7 @@ fun GraphScreen(
                         )
                     }
 
-                    branchControls.forEach { control ->
+                    branchControls.filter { pointIsRendered(it.point) }.forEach { control ->
                         when (control.direction) {
                             BranchDirection.PARENTS -> drawControl(
                                 point = control.point,
@@ -1337,7 +1524,7 @@ fun GraphScreen(
                             pointsUp = !childrenCollapsed
                         )
                     }
-                    quickAddControls.forEach { control ->
+                    quickAddControls.filter { pointIsRendered(it.point) }.forEach { control ->
                         val center = pointOffset(control.point)
                         drawCircle(
                             color = controlAccentColor,
@@ -1358,7 +1545,7 @@ fun GraphScreen(
                             strokeWidth = 2.dp.toPx()
                         )
                     }
-                    lockedControls.forEach { control ->
+                    lockedControls.filter { pointIsRendered(it.point) }.forEach { control ->
                         val center = pointOffset(control.point)
                         drawCircle(
                             color = controlSurfaceColor,
@@ -1387,7 +1574,11 @@ fun GraphScreen(
                             cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx())
                         )
                     }
-                    if (canEditRelationships && linkHandlePoint != null) {
+                    if (
+                        canEditRelationships &&
+                        linkHandlePoint != null &&
+                        pointIsRendered(linkHandlePoint)
+                    ) {
                         val handle = pointOffset(linkHandlePoint)
                         linkDragPoint?.let { dragPoint ->
                             drawLine(
@@ -1413,7 +1604,7 @@ fun GraphScreen(
                     }
                 }
 
-                branchControls.forEach { control ->
+                branchControls.filter { pointIsRendered(it.point) }.forEach { control ->
                     val action = if (control.expanded) "Tutup" else "Buka"
                     val branch = when (control.direction) {
                         BranchDirection.PARENTS -> "orang tua"
@@ -1469,7 +1660,7 @@ fun GraphScreen(
                             }
                     )
                 }
-                quickAddControls.forEach { control ->
+                quickAddControls.filter { pointIsRendered(it.point) }.forEach { control ->
                     val relation = when (control.request.kind) {
                         QuickRelationKind.PARENT -> "orang tua"
                         QuickRelationKind.CHILD -> "anak"
@@ -1486,7 +1677,7 @@ fun GraphScreen(
                             .semantics { contentDescription = "Tambah $relation" }
                     )
                 }
-                lockedControls.forEach { control ->
+                lockedControls.filter { pointIsRendered(it.point) }.forEach { control ->
                     val relation = when (control.request.kind) {
                         QuickRelationKind.PARENT -> "orang tua"
                         QuickRelationKind.CHILD -> "anak"
@@ -1505,7 +1696,12 @@ fun GraphScreen(
                             }
                     )
                 }
-                if (canEditRelationships && linkHandlePoint != null && selectedPersonId != null) {
+                if (
+                    canEditRelationships &&
+                    linkHandlePoint != null &&
+                    selectedPersonId != null &&
+                    pointIsRendered(linkHandlePoint)
+                ) {
                     Box(
                         modifier = Modifier
                             .size(44.dp)
@@ -1552,6 +1748,40 @@ fun GraphScreen(
                     )
                 }
             }
+
+                if (
+                    minimapOverview.nodeRects.isNotEmpty() &&
+                    shouldShowGraphMinimap(
+                        graphWidth = graphWidthPx,
+                        graphHeight = graphHeightPx,
+                        viewportWorld = exactViewport
+                    )
+                ) {
+                    IdentityFreeGraphMinimap(
+                        overview = minimapOverview,
+                        graphWidth = graphWidthPx,
+                        graphHeight = graphHeightPx,
+                        viewportWorld = exactViewport,
+                        onNavigate = { worldX, worldY ->
+                            val transform = transformState.value
+                            val offsets = graphViewportOffsetsForCenter(
+                                worldX = worldX,
+                                worldY = worldY,
+                                scale = transform.scale,
+                                viewportWidth = viewportWidthPx,
+                                viewportHeight = viewportHeightPx
+                            )
+                            transformState.value = transform.copy(
+                                offsetX = offsets.first,
+                                offsetY = offsets.second
+                            )
+                            viewportInitialized = true
+                        },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .padding(top = 64.dp, end = 16.dp)
+                    )
+                }
 
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1629,6 +1859,17 @@ fun GraphScreen(
                 )
             }
 
+            val focusedCareTypes = layout.lineageEdges
+                .filter { it.type == "CARE" }
+                .mapNotNull { it.meta }
+                .toSet()
+            if (focusedCareTypes.isNotEmpty()) {
+                CareRelationshipLegend(
+                    types = focusedCareTypes,
+                    modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)
+                )
+            }
+
             inspectedPerson?.let { person ->
                 val inspectorModifier = if (useSideInspector) {
                     Modifier
@@ -1658,6 +1899,136 @@ fun GraphScreen(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun IdentityFreeGraphMinimap(
+    overview: GraphMinimapOverview,
+    graphWidth: Float,
+    graphHeight: Float,
+    viewportWorld: GraphRenderRect,
+    onNavigate: (Float, Float) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val neutralColor = MaterialTheme.colorScheme.onSurface
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+        shadowElevation = 3.dp,
+        modifier = modifier
+            .size(width = 168.dp, height = 112.dp)
+            .testTag("graph-minimap")
+            .semantics {
+                contentDescription =
+                    "Ikhtisar posisi pohon. Ketuk untuk memindahkan tampilan."
+            }
+    ) {
+        Canvas(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(overview, graphWidth, graphHeight) {
+                    detectTapGestures { tap ->
+                        val projection = graphMinimapProjection(
+                            graphWidth = graphWidth,
+                            graphHeight = graphHeight,
+                            minimapWidth = size.width.toFloat(),
+                            minimapHeight = size.height.toFloat(),
+                            padding = 6.dp.toPx()
+                        )
+                        val world = minimapWorldPoint(
+                            minimapX = tap.x,
+                            minimapY = tap.y,
+                            projection = projection,
+                            graphWidth = graphWidth,
+                            graphHeight = graphHeight
+                        )
+                        onNavigate(world.first, world.second)
+                    }
+                }
+        ) {
+            val projection = graphMinimapProjection(
+                graphWidth = graphWidth,
+                graphHeight = graphHeight,
+                minimapWidth = size.width,
+                minimapHeight = size.height,
+                padding = 6.dp.toPx()
+            )
+            overview.edgeLines.forEach { line ->
+                drawLine(
+                    color = neutralColor.copy(alpha = 0.24f),
+                    start = Offset(
+                        projection.offsetX + line.fromX * projection.scale,
+                        projection.offsetY + line.fromY * projection.scale
+                    ),
+                    end = Offset(
+                        projection.offsetX + line.toX * projection.scale,
+                        projection.offsetY + line.toY * projection.scale
+                    ),
+                    strokeWidth = 1.dp.toPx()
+                )
+            }
+            overview.nodeRects.forEach { node ->
+                val projected = projectMinimapRect(node, projection)
+                drawRect(
+                    color = neutralColor.copy(alpha = 0.38f),
+                    topLeft = Offset(projected.left, projected.top),
+                    size = Size(
+                        (projected.right - projected.left).coerceAtLeast(1.dp.toPx()),
+                        (projected.bottom - projected.top).coerceAtLeast(1.dp.toPx())
+                    )
+                )
+            }
+            val clippedLeft = viewportWorld.left.coerceIn(0f, graphWidth)
+            val clippedTop = viewportWorld.top.coerceIn(0f, graphHeight)
+            val clippedRight = viewportWorld.right.coerceIn(clippedLeft, graphWidth)
+            val clippedBottom = viewportWorld.bottom.coerceIn(clippedTop, graphHeight)
+            val viewport = projectMinimapRect(
+                GraphRenderRect(
+                    left = clippedLeft,
+                    top = clippedTop,
+                    right = clippedRight,
+                    bottom = clippedBottom
+                ),
+                projection
+            )
+            drawRect(
+                color = neutralColor.copy(alpha = 0.82f),
+                topLeft = Offset(viewport.left, viewport.top),
+                size = Size(
+                    (viewport.right - viewport.left).coerceAtLeast(1.dp.toPx()),
+                    (viewport.bottom - viewport.top).coerceAtLeast(1.dp.toPx())
+                ),
+                style = Stroke(width = 1.5.dp.toPx())
+            )
+        }
+    }
+}
+
+@Composable
+private fun CareRelationshipLegend(
+    types: Set<String>,
+    modifier: Modifier = Modifier
+) {
+    val description = buildList {
+        if ("FOSTER" in types) add("Garis dash-titik: pengasuhan sementara")
+        if ("GUARDIAN" in types) add("Garis putus dengan lingkaran: perwalian keluarga")
+    }.joinToString(". ")
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f),
+        shadowElevation = 3.dp,
+        modifier = modifier.semantics {
+            contentDescription =
+                "$description. Bukan hubungan darah atau penetapan wali legal."
+        }
+    ) {
+        Text(
+            "$description\nBukan hubungan darah atau status wali legal.",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp)
+        )
     }
 }
 
@@ -1813,11 +2184,102 @@ private fun ExplorationBreadcrumb(
 }
 
 @Composable
+private fun LargeGraphTextFallback(
+    persons: List<PersonListItem>,
+    centerPersonId: String,
+    renderedTileCount: Int,
+    onOpenPerson: (String) -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val personById = remember(persons) { persons.associateBy { it.personId } }
+    val entries = remember(persons, centerPersonId) {
+        orderGraphTextFallbackEntries(
+            persons.map { person ->
+                GraphTextFallbackEntry(
+                    personId = person.personId,
+                    displayName = cardDisplayName(person),
+                    isCenter = person.personId == centerPersonId
+                )
+            }
+        )
+    }
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .testTag("large-graph-text-fallback")
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp)) {
+            Text(
+                text = "Pohon besar dibuka sebagai daftar",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "$renderedTileCount card dari ${persons.size} person melebihi batas aman " +
+                    "tampilan visual perangkat. " +
+                    "Posisi dan hubungan tetap tersimpan; pilih nama untuk membuka profil.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            TextButton(onClick = onBack) {
+                Text("Kembali ke keluarga")
+            }
+        }
+        HorizontalDivider()
+        LazyColumn(modifier = Modifier.fillMaxSize()) {
+            items(entries, key = { it.personId }) { entry ->
+                val person = personById[entry.personId]
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenPerson(entry.personId) }
+                        .testTag("large-graph-person-${entry.personId}")
+                        .semantics {
+                            contentDescription = buildString {
+                                append("Buka profil ${entry.displayName}")
+                                if (entry.isCenter) append(", fokus saat ini")
+                            }
+                        }
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
+                ) {
+                    Text(
+                        text = entry.displayName,
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = if (entry.isCenter) {
+                            FontWeight.SemiBold
+                        } else {
+                            FontWeight.Normal
+                        }
+                    )
+                    Text(
+                        text = when {
+                            entry.isCenter -> "Fokus saat ini"
+                            person?.lifeStatus == "DECEASED" -> "Wafat"
+                            else -> "Buka profil"
+                        },
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                HorizontalDivider(
+                    modifier = Modifier.padding(horizontal = 20.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun PersonGraphCard(
     person: PersonListItem,
     profilePhotoUrl: String?,
     selected: Boolean,
     highlighted: Boolean,
+    detail: GraphCardDetail,
     onActivate: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -1862,43 +2324,98 @@ private fun PersonGraphCard(
         border = BorderStroke(if (selected || highlighted) 2.dp else 1.dp, borderColor),
         shadowElevation = if (selected) 3.dp else 1.dp
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp, vertical = 8.dp)
-        ) {
-            ProfileAvatar(
-                photoUrl = profilePhotoUrl,
-                gender = person.gender,
-                muted = deceased,
-                modifier = Modifier.size(40.dp)
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = shortName,
-                style = MaterialTheme.typography.labelLarge.copy(
-                    fontSize = 13.sp,
-                    lineHeight = 15.sp,
-                    fontWeight = FontWeight.SemiBold
-                ),
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.height(32.dp)
-            )
-            Text(
-                text = when {
+        when (detail) {
+            GraphCardDetail.FULL -> Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 8.dp, vertical = 8.dp)
+            ) {
+                ProfileAvatar(
+                    photoUrl = profilePhotoUrl,
+                    gender = person.gender,
+                    muted = deceased,
+                    modifier = Modifier.size(40.dp)
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = shortName,
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontSize = 13.sp,
+                        lineHeight = 15.sp,
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.height(32.dp)
+                )
+                Text(
+                    text = when {
+                        deceased -> "Wafat"
+                        age != null -> "$age tahun"
+                        else -> ""
+                    },
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = 11.sp,
+                        lineHeight = 14.sp
+                    ),
+                    color = contentColor.copy(alpha = 0.76f),
+                    maxLines = 1,
+                    modifier = Modifier.height(14.dp)
+                )
+            }
+
+            GraphCardDetail.COMPACT -> Column(
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 8.dp, vertical = 10.dp)
+            ) {
+                Text(
+                    text = shortName,
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontSize = 13.sp,
+                        lineHeight = 15.sp,
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+                val status = when {
                     deceased -> "Wafat"
                     age != null -> "$age tahun"
-                    else -> ""
-                },
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 11.sp,
-                    lineHeight = 14.sp
-                ),
-                color = contentColor.copy(alpha = 0.76f),
-                maxLines = 1,
-                modifier = Modifier.height(14.dp)
-            )
+                    else -> null
+                }
+                if (status != null) {
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = status,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = contentColor.copy(alpha = 0.76f),
+                        maxLines = 1
+                    )
+                }
+            }
+
+            GraphCardDetail.MINIMAL -> Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 6.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = shortName,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
 }
@@ -1988,11 +2505,38 @@ private fun PersonInspector(
         )
     }
     val parentNames = relationships
-        .filter { it.type == "PARENT_CHILD" && it.toPersonId == person.personId }
+        .filter { it.isLineageParentChild() && it.toPersonId == person.personId }
         .mapNotNull { people[it.fromPersonId]?.fullName }
     val childNames = relationships
-        .filter { it.type == "PARENT_CHILD" && it.fromPersonId == person.personId }
+        .filter { it.isLineageParentChild() && it.fromPersonId == person.personId }
         .mapNotNull { people[it.toPersonId]?.fullName }
+    val careRelationships = relationships
+        .filter {
+            it.isCareRelationship() &&
+                (it.fromPersonId == person.personId || it.toPersonId == person.personId)
+        }
+        .mapNotNull { relationship ->
+            val isCaregiver = relationship.fromPersonId == person.personId
+            val otherId =
+                if (isCaregiver) relationship.toPersonId else relationship.fromPersonId
+            val otherName = people[otherId]?.fullName ?: return@mapNotNull null
+            val role = when (relationship.meta) {
+                "FOSTER" ->
+                    if (isCaregiver) "Pengasuh $otherName" else "Diasuh oleh $otherName"
+                "GUARDIAN" ->
+                    if (isCaregiver) "Wali keluarga $otherName"
+                    else "Dalam perwalian $otherName"
+                else -> return@mapNotNull null
+            }
+            val period = when {
+                relationship.startDate != null && relationship.endDate != null ->
+                    "${relationship.startDate}–${relationship.endDate}"
+                relationship.startDate != null -> "sejak ${relationship.startDate}"
+                relationship.endDate != null -> "hingga ${relationship.endDate}"
+                else -> null
+            }
+            listOfNotNull(role, period, relationship.careContext).joinToString(" · ")
+        }
     val partnershipHistory = recordedPartnerships(person.personId, relationships)
         .mapNotNull { relationship ->
             val otherName = people[relationship.otherPersonId(person.personId)]?.fullName
@@ -2093,6 +2637,17 @@ private fun PersonInspector(
                         partnershipHistory.takeIf { it.isNotEmpty() }?.joinToString("\n")
                     )
                     InspectorValue("Anak", childNames.takeIf { it.isNotEmpty() }?.joinToString())
+                    InspectorValue(
+                        "Pengasuhan & perwalian keluarga",
+                        careRelationships.takeIf { it.isNotEmpty() }?.joinToString("\n")
+                    )
+                    if (careRelationships.isNotEmpty()) {
+                        Text(
+                            "Catatan ini tidak menyatakan hubungan darah, hak akses, atau status wali legal.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
                 if (person.birthDate != null || person.deceasedAt != null) {
                     InspectorSection(
@@ -2216,6 +2771,10 @@ internal fun relationshipPathLabel(
     nextName: String
 ): String = when (type) {
     "PARENT_CHILD" -> when {
+        meta == "FOSTER" && direction == "FORWARD" -> "pengasuh dari $nextName"
+        meta == "FOSTER" -> "anak asuh dari $nextName"
+        meta == "GUARDIAN" && direction == "FORWARD" -> "wali keluarga dari $nextName"
+        meta == "GUARDIAN" -> "dalam perwalian keluarga $nextName"
         meta == "ADOPTIVE" && direction == "FORWARD" -> "orang tua angkat dari $nextName"
         meta == "ADOPTIVE" -> "anak angkat dari $nextName"
         direction == "FORWARD" -> "orang tua dari $nextName"
@@ -2377,7 +2936,7 @@ private fun buildCoupleGraphLayout(
     val centerMemberIds = setOfNotNull(centerPersonId, activeSpouseId)
     val parentRelationships = if (allRelationships.isNotEmpty()) {
         allRelationships.filter {
-            it.type == "PARENT_CHILD" && it.toPersonId in centerMemberIds
+            it.isLineageParentChild() && it.toPersonId in centerMemberIds
         }
     } else {
         relations.parents.map {
@@ -2595,7 +3154,7 @@ private fun buildCoupleGraphLayout(
     val childLineageEdges = completeTree.children.flatMap { child ->
         val to = shiftedNodes.tileRect(child.id)?.topCenter() ?: return@flatMap emptyList()
         val matchingRelationships = allRelationships.filter {
-            it.type == "PARENT_CHILD" &&
+            it.isLineageParentChild() &&
                 it.toPersonId == child.id &&
                 it.fromPersonId in centerMemberIds
         }
@@ -2619,7 +3178,7 @@ private fun buildCoupleGraphLayout(
     }
     val siblingLineageEdges = allRelationships.mapNotNull { relationship ->
         if (
-            relationship.type != "PARENT_CHILD" ||
+            !relationship.isLineageParentChild() ||
             relationship.toPersonId !in siblingIds
         ) return@mapNotNull null
         val from = shiftedNodes.tileRect(relationship.fromPersonId)?.bottomCenter()
@@ -2717,7 +3276,7 @@ private fun augmentLayoutWithProgressiveLineage(
         }
     val combinedNodes = repositionedBaseNodes + extraNodes
     val parentEdges = plan.visibleRelationships
-        .filter { it.type == "PARENT_CHILD" }
+        .filter { it.isLineageParentChild() }
         .groupBy { it.toPersonId }
         .flatMap { (childId, childRelationships) ->
             val childRect = positions[childId] ?: return@flatMap emptyList()
@@ -2882,7 +3441,10 @@ private fun augmentLayoutWithRelationshipPath(
 
     fun traversalGenerationDelta(index: Int): Int {
         val edge = relationshipPath.edges.getOrNull(index) ?: return 0
-        if (edge.type != "PARENT_CHILD") return 0
+        if (
+            edge.type != "PARENT_CHILD" ||
+            !isLineageParentChildMeta(edge.meta)
+        ) return 0
         val currentId = pathPersonIds[index]
         val nextId = pathPersonIds[index + 1]
         return when {
@@ -3058,14 +3620,49 @@ private fun augmentLayoutWithUnconnectedPersons(
     )
 }
 
+private fun attachFocusedCareRelationships(
+    base: GraphLayout,
+    relationships: List<ExportRelationship>,
+    focusedPersonId: String
+): GraphLayout {
+    val positions = base.nodes
+        .flatMap(GraphNode::tiles)
+        .associate { it.id to it.rect }
+    val careEdges = relationships
+        .asSequence()
+        .filter {
+            it.isCareRelationship() &&
+                (it.fromPersonId == focusedPersonId || it.toPersonId == focusedPersonId)
+        }
+        .mapNotNull { relationship ->
+            val caregiver = positions[relationship.fromPersonId] ?: return@mapNotNull null
+            val recipient = positions[relationship.toPersonId] ?: return@mapNotNull null
+            LineageEdge(
+                relationshipIds = setOf(relationship.relationshipId),
+                from = caregiver.center(),
+                to = recipient.center(),
+                meta = relationship.meta,
+                type = "CARE"
+            )
+        }
+        .toList()
+    if (careEdges.isEmpty()) return base
+    return base.copy(
+        lineageEdges = base.lineageEdges
+            .filterNot { it.type == "CARE" } + careEdges
+    )
+}
+
 internal fun unconnectedPersonIds(
     persons: List<PersonListItem>,
     relationships: List<ExportRelationship>,
     visibleIds: Set<String> = emptySet()
 ): Set<String> {
-    val relatedIds = relationships.flatMapTo(mutableSetOf()) {
-        listOf(it.fromPersonId, it.toPersonId)
-    }
+    val relatedIds = relationships
+        .filterNot { it.isCareRelationship() }
+        .flatMapTo(mutableSetOf()) {
+            listOf(it.fromPersonId, it.toPersonId)
+        }
     return persons.mapNotNullTo(linkedSetOf()) { person ->
         person.personId.takeIf { it !in relatedIds && it !in visibleIds }
     }
@@ -3078,12 +3675,12 @@ internal fun findSiblingIds(
 ): List<String> {
     if (allRelationships.isEmpty()) return emptyList()
     val parentIds = allRelationships
-        .filter { it.type == "PARENT_CHILD" && it.toPersonId == personId }
+        .filter { it.isLineageParentChild() && it.toPersonId == personId }
         .map { it.fromPersonId }
         .toSet()
     if (parentIds.isEmpty()) return emptyList()
     val siblingIds = allRelationships
-        .filter { it.type == "PARENT_CHILD" && it.fromPersonId in parentIds }
+        .filter { it.isLineageParentChild() && it.fromPersonId in parentIds }
         .map { it.toPersonId }
         .filter { it != personId }
         .distinct()
@@ -3199,9 +3796,9 @@ internal fun familyGenerationLevels(
     data class GenerationStep(val personId: String, val delta: Int)
 
     val adjacency = mutableMapOf<String, MutableList<GenerationStep>>()
-    relationships.forEach { relationship ->
-        val forwardDelta = if (relationship.type == "PARENT_CHILD") 1 else 0
-        val reverseDelta = if (relationship.type == "PARENT_CHILD") -1 else 0
+    relationships.filterNot { it.isCareRelationship() }.forEach { relationship ->
+        val forwardDelta = if (relationship.isLineageParentChild()) 1 else 0
+        val reverseDelta = if (relationship.isLineageParentChild()) -1 else 0
         adjacency.getOrPut(relationship.fromPersonId) { mutableListOf() }
             .add(GenerationStep(relationship.toPersonId, forwardDelta))
         adjacency.getOrPut(relationship.toPersonId) { mutableListOf() }
@@ -3239,7 +3836,7 @@ private fun collectChildrenForVisibleParents(
     val index = LineageRelationshipIndex.from(allRelationships)
     return allRelationships
         .asSequence()
-        .filter { it.type == "PARENT_CHILD" }
+        .filter { it.isLineageParentChild() }
         .map { it.toPersonId }
         .distinct()
         .filter { childId ->

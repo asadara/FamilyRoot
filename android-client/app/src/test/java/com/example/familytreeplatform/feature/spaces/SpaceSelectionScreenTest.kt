@@ -23,7 +23,18 @@ class SpaceSelectionScreenTest {
     fun invitationFailuresExplainNextAction() {
         assertTrue(spaceSelectionErrorMessage("HTTP 404 NOT_FOUND: Invitation not found").contains("tidak ditemukan"))
         assertTrue(spaceSelectionErrorMessage("HTTP 400 VALIDATION_ERROR: Invitation has expired").contains("kedaluwarsa"))
+        assertTrue(
+            spaceSelectionErrorMessage(
+                "HTTP 403 FORBIDDEN: Invitation is not available for this account"
+            ).contains("akun lain")
+        )
         assertTrue(spaceSelectionErrorMessage("HTTP 503 INTERNAL_ERROR: unavailable").contains("Server sedang"))
+    }
+
+    @Test
+    fun archivedSpaceStatusIsExplicit() {
+        assertTrue(familySpaceStatusLabel("ARCHIVED").orEmpty().contains("hanya baca"))
+        assertEquals(null, familySpaceStatusLabel("ACTIVE"))
     }
 
     @Test

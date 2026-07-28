@@ -1,14 +1,27 @@
 import {
   ConflictException,
+  ForbiddenException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { UserPersonClaimEntity } from './user-person-claim.entity';
 import { ChangeLogEntity } from '../changes/change-log.entity';
 import { PersonEntity } from '../persons/person.entity';
 import { SpaceMemberEntity } from '../spaces/space-member.entity';
+import { ClaimConfirmationEntity } from './claim-confirmation.entity';
+import { PersonPrivacyService } from '../persons/person-privacy.service';
+
+export const REQUIRED_CLAIM_CONFIRMATIONS = 2;
+
+export function collectiveClaimStatus(
+  confirmationCount: number,
+): 'PENDING' | 'VERIFIED' {
+  return confirmationCount >= REQUIRED_CLAIM_CONFIRMATIONS
+    ? 'VERIFIED'
+    : 'PENDING';
+}
 
 @Injectable()
 export class ClaimsService {
@@ -21,6 +34,9 @@ export class ClaimsService {
     private readonly personsRepo: Repository<PersonEntity>,
     @InjectRepository(SpaceMemberEntity)
     private readonly membersRepo: Repository<SpaceMemberEntity>,
+    @InjectRepository(ClaimConfirmationEntity)
+    private readonly confirmationsRepo: Repository<ClaimConfirmationEntity>,
+    private readonly privacyService: PersonPrivacyService,
   ) {}
 
   async create(
@@ -64,7 +80,7 @@ export class ClaimsService {
     });
   }
 
-  async list(spaceId: string) {
+  async list(spaceId: string, actorUserId: string) {
     const claims = await this.claimsRepo.find({
       where: { spaceId },
       order: { requestedAt: 'DESC' },
@@ -72,44 +88,131 @@ export class ClaimsService {
 
     if (claims.length === 0) return [];
 
-    const [persons, members] = await Promise.all([
+    const [persons, members, confirmations] = await Promise.all([
       this.personsRepo.find({
         where: claims.map((claim) => ({
           spaceId,
           personId: claim.personId,
           isDeleted: false,
         })),
-        select: ['personId', 'fullName'],
+        select: ['personId', 'fullName', 'visibility'],
       }),
       this.membersRepo.find({
         where: claims.map((claim) => ({ spaceId, userId: claim.userId })),
         select: ['userId', 'role'],
+      }),
+      this.confirmationsRepo.find({
+        where: { claimId: In(claims.map((claim) => claim.claimId)) },
+        select: ['claimId'],
       }),
     ]);
 
     const personById = new Map(
       persons.map((person) => [person.personId, person]),
     );
+    const privacyDecisions = await this.privacyService.decisionsForPeople(
+      spaceId,
+      persons,
+      actorUserId,
+    );
     const memberByUserId = new Map(
       members.map((member) => [member.userId, member]),
     );
+    const confirmationCountByClaimId = confirmations.reduce(
+      (counts, confirmation) => {
+        counts.set(
+          confirmation.claimId,
+          (counts.get(confirmation.claimId) ?? 0) + 1,
+        );
+        return counts;
+      },
+      new Map<string, number>(),
+    );
 
-    return claims.map((claim) => ({
-      ...claim,
-      personName: personById.get(claim.personId)?.fullName ?? null,
-      memberRole: memberByUserId.get(claim.userId)?.role ?? null,
-    }));
+    return claims.map((claim) => {
+      const recordedCount = confirmationCountByClaimId.get(claim.claimId) ?? 0;
+      const isLegacyVerified =
+        claim.status === 'VERIFIED' && recordedCount === 0;
+      return {
+        ...claim,
+        personName: personById.get(claim.personId)
+          ? this.privacyService.redact(
+              personById.get(claim.personId) as PersonEntity,
+              privacyDecisions.get(claim.personId)!,
+            ).fullName
+          : null,
+        memberRole: memberByUserId.get(claim.userId)?.role ?? null,
+        confirmationCount: isLegacyVerified
+          ? REQUIRED_CLAIM_CONFIRMATIONS
+          : recordedCount,
+        required: REQUIRED_CLAIM_CONFIRMATIONS,
+        verificationBasis: isLegacyVerified ? 'LEGACY' : 'COLLECTIVE',
+      };
+    });
   }
 
-  async verify(claimId: string, actorUserId?: string) {
-    const claim = await this.claimsRepo.findOneBy({ claimId });
-    if (!claim) {
-      throw new NotFoundException('Claim not found');
-    }
-
+  async verify(claimId: string, actorUserId: string) {
     return this.claimsRepo.manager.transaction(async (manager) => {
+      let claimQuery = manager
+        .getRepository(UserPersonClaimEntity)
+        .createQueryBuilder('claim')
+        .where('claim.claimId = :claimId', { claimId });
+      if (manager.connection.options.type !== 'sqlite') {
+        claimQuery = claimQuery.setLock('pessimistic_write');
+      }
+      const claim = await claimQuery.getOne();
+      if (!claim) throw new NotFoundException('Claim not found');
+
+      const actorMembership = await manager.findOneBy(SpaceMemberEntity, {
+        spaceId: claim.spaceId,
+        userId: actorUserId,
+      });
+      if (
+        !actorMembership ||
+        (actorMembership.role !== 'OWNER' && actorMembership.role !== 'ADMIN')
+      ) {
+        throw new ForbiddenException('Only OWNER or ADMIN can confirm a claim');
+      }
+      if (claim.userId === actorUserId) {
+        throw new ForbiddenException(
+          'A claim owner cannot confirm their own claim',
+        );
+      }
+
+      const existingConfirmation = await manager.findOneBy(
+        ClaimConfirmationEntity,
+        { claimId, confirmedBy: actorUserId },
+      );
+      if (existingConfirmation) {
+        const confirmationCount = await manager.countBy(
+          ClaimConfirmationEntity,
+          { claimId },
+        );
+        return {
+          ...claim,
+          confirmationCount,
+          required: REQUIRED_CLAIM_CONFIRMATIONS,
+          confirmationRecorded: false,
+        };
+      }
+      if (claim.status === 'VERIFIED') {
+        throw new ConflictException('Claim is already verified');
+      }
+      if (claim.status === 'REJECTED') {
+        throw new ConflictException('Rejected claim cannot be confirmed');
+      }
+
       const beforeJson = JSON.stringify(claim);
-      claim.status = 'VERIFIED';
+      const confirmation = await manager.save(
+        manager.create(ClaimConfirmationEntity, {
+          claimId,
+          confirmedBy: actorUserId,
+        }),
+      );
+      const confirmationCount = await manager.countBy(ClaimConfirmationEntity, {
+        claimId,
+      });
+      claim.status = collectiveClaimStatus(confirmationCount);
       const saved = await manager.save(claim);
       await manager.save(
         manager.create(ChangeLogEntity, {
@@ -118,12 +221,26 @@ export class ClaimsService {
           entityType: 'CLAIM',
           entityId: saved.claimId,
           operation: 'VERIFY',
-          note: 'Verify claim',
+          note: `Confirm claim (${confirmationCount}/${REQUIRED_CLAIM_CONFIRMATIONS})`,
           beforeJson,
-          afterJson: JSON.stringify(saved),
+          afterJson: JSON.stringify({
+            claim: saved,
+            confirmation: {
+              confirmationId: confirmation.confirmationId,
+              confirmedBy: confirmation.confirmedBy,
+              confirmedAt: confirmation.confirmedAt,
+            },
+            confirmationCount,
+            required: REQUIRED_CLAIM_CONFIRMATIONS,
+          }),
         }),
       );
-      return saved;
+      return {
+        ...saved,
+        confirmationCount,
+        required: REQUIRED_CLAIM_CONFIRMATIONS,
+        confirmationRecorded: true,
+      };
     });
   }
 }

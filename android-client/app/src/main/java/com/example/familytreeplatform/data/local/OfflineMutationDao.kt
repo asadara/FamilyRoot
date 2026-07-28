@@ -23,6 +23,9 @@ interface OfflineMutationDao {
     @Query("SELECT COUNT(*) FROM offline_mutations WHERE spaceId = :spaceId")
     suspend fun countForSpace(spaceId: String): Int
 
+    @Query("SELECT COUNT(*) FROM offline_mutations")
+    suspend fun countAll(): Int
+
     @Query("SELECT COUNT(*) FROM offline_mutations WHERE personId = :personId")
     suspend fun countForPerson(personId: String): Int
 
@@ -40,6 +43,9 @@ interface OfflineMutationDao {
 
     @Query("DELETE FROM offline_mutations WHERE spaceId = :spaceId")
     suspend fun deleteBySpace(spaceId: String)
+
+    @Query("DELETE FROM offline_mutations")
+    suspend fun deleteAll()
 
     @Query("DELETE FROM offline_mutations WHERE personId = :personId AND mutationType = :mutationType")
     suspend fun deleteForPersonAndType(personId: String, mutationType: String)

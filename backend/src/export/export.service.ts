@@ -8,6 +8,12 @@ import { EditProposalEntity } from '../archive/edit-proposal.entity';
 import { FactSourceEntity } from '../archive/fact-source.entity';
 import { MediaItemEntity } from '../archive/media-item.entity';
 import { ChangeLogEntity } from '../changes/change-log.entity';
+import {
+  PersonPrivacyService,
+  privacyAccessForVisibility,
+} from '../persons/person-privacy.service';
+import { ProposalCommentEntity } from '../archive/proposal-comment.entity';
+import { UserEntity } from '../users/user.entity';
 
 type PortablePerson = Pick<
   PersonEntity,
@@ -26,6 +32,7 @@ type PortablePerson = Pick<
   | 'notes'
   | 'lifeStatus'
   | 'deceasedAt'
+  | 'visibility'
 >;
 
 interface GedcomIndividual {
@@ -59,9 +66,14 @@ export class ExportService {
     private readonly mediaRepo: Repository<MediaItemEntity>,
     @InjectRepository(EditProposalEntity)
     private readonly proposalsRepo: Repository<EditProposalEntity>,
+    @InjectRepository(ProposalCommentEntity)
+    private readonly proposalCommentsRepo: Repository<ProposalCommentEntity>,
+    @InjectRepository(UserEntity)
+    private readonly usersRepo: Repository<UserEntity>,
+    private readonly privacyService: PersonPrivacyService,
   ) {}
 
-  async exportSpace(spaceId: string) {
+  async exportSpace(spaceId: string, actorUserId: string) {
     const persons = await this.personsRepo.find({
       where: { spaceId, isDeleted: false },
       order: { createdAt: 'ASC' },
@@ -81,6 +93,7 @@ export class ExportService {
         'notes',
         'lifeStatus',
         'deceasedAt',
+        'visibility',
         'version',
         'createdAt',
         'updatedAt',
@@ -95,7 +108,7 @@ export class ExportService {
       order: { requestedAt: 'ASC' },
       select: ['claimId', 'status', 'userId', 'personId', 'requestedAt'],
     });
-    const [sources, media, proposals] = await Promise.all([
+    const [sources, media, proposals, proposalComments] = await Promise.all([
       this.sourcesRepo.find({
         where: { spaceId },
         order: { createdAt: 'ASC' },
@@ -105,26 +118,105 @@ export class ExportService {
         where: { spaceId },
         order: { createdAt: 'ASC' },
       }),
+      this.proposalCommentsRepo.find({
+        where: { spaceId },
+        order: { createdAt: 'ASC' },
+      }),
     ]);
-    return {
+    const privacyDecisions = await this.privacyService.decisionsForPeople(
       spaceId,
       persons,
-      relationships,
-      sources,
-      media,
-      proposals,
-      claims: claims.map((claim) => ({
-        claimId: claim.claimId,
-        status: claim.status,
-        userId: claim.userId,
-        personId: claim.personId,
-        createdAt: claim.requestedAt,
+      actorUserId,
+    );
+    const fullAccessPersonIds = new Set(
+      persons
+        .filter((person) => {
+          const decision = privacyDecisions.get(person.personId);
+          return (
+            decision?.access === 'FULL' &&
+            (person.visibility === 'FAMILY' || decision.canManageVisibility)
+          );
+        })
+        .map((person) => person.personId),
+    );
+    const exportedPersons = persons.map((person) =>
+      this.privacyService.redact(
+        person,
+        fullAccessPersonIds.has(person.personId)
+          ? privacyDecisions.get(person.personId)!
+          : {
+              access: privacyAccessForVisibility(person.visibility),
+              canManageVisibility: false,
+            },
+      ),
+    );
+    const exportedRelationships = relationships.map((relationship) => {
+      const full =
+        fullAccessPersonIds.has(relationship.fromPersonId) &&
+        fullAccessPersonIds.has(relationship.toPersonId);
+      return full
+        ? relationship
+        : {
+            ...relationship,
+            startDate: null,
+            endDate: null,
+            careContext: null,
+          };
+    });
+    const exportedProposals = proposals.filter((proposal) =>
+      fullAccessPersonIds.has(proposal.personId),
+    );
+    const exportedProposalIds = new Set(
+      exportedProposals.map((proposal) => proposal.proposalId),
+    );
+    const exportedProposalComments = proposalComments.filter((comment) =>
+      exportedProposalIds.has(comment.proposalId),
+    );
+    const commentAuthorIds = [
+      ...new Set(
+        exportedProposalComments.map((comment) => comment.authorUserId),
+      ),
+    ];
+    const commentAuthors = commentAuthorIds.length
+      ? await this.usersRepo.find({
+          where: commentAuthorIds.map((userId) => ({ userId })),
+          select: ['userId', 'displayName'],
+        })
+      : [];
+    const commentAuthorNames = new Map(
+      commentAuthors.map((author) => [author.userId, author.displayName]),
+    );
+    return {
+      spaceId,
+      persons: exportedPersons,
+      relationships: exportedRelationships,
+      sources: sources.filter((source) =>
+        fullAccessPersonIds.has(source.personId),
+      ),
+      media: media.filter((item) => fullAccessPersonIds.has(item.personId)),
+      proposals: exportedProposals,
+      proposalComments: exportedProposalComments.map((comment) => ({
+        commentId: comment.commentId,
+        proposalId: comment.proposalId,
+        body: comment.body,
+        authorDisplayName:
+          commentAuthorNames.get(comment.authorUserId) ?? 'Anggota keluarga',
+        createdAt: comment.createdAt,
       })),
+      claims: claims
+        .filter((claim) => fullAccessPersonIds.has(claim.personId))
+        .map((claim) => ({
+          claimId: claim.claimId,
+          status: claim.status,
+          userId: claim.userId,
+          personId: claim.personId,
+          createdAt: claim.requestedAt,
+        })),
     };
   }
 
-  async createBackup(spaceId: string) {
-    const exported = await this.exportSpace(spaceId);
+  async createBackup(spaceId: string, actorUserId: string) {
+    const exported = await this.exportSpace(spaceId, actorUserId);
     return {
       format: 'familyroot-backup',
       schemaVersion: 1,
@@ -137,8 +229,11 @@ export class ExportService {
     };
   }
 
-  async exportGedcom(spaceId: string) {
-    const { persons, relationships } = await this.exportSpace(spaceId);
+  async exportGedcom(spaceId: string, actorUserId: string) {
+    const { persons, relationships } = await this.exportSpace(
+      spaceId,
+      actorUserId,
+    );
     const refs = new Map(
       persons.map((person, index) => [person.personId, `@I${index + 1}@`]),
     );
@@ -197,7 +292,12 @@ export class ExportService {
     });
     const children = new Map<string, string[]>();
     relationships
-      .filter((relation) => relation.type === 'PARENT_CHILD')
+      .filter(
+        (relation) =>
+          relation.type === 'PARENT_CHILD' &&
+          relation.meta !== 'FOSTER' &&
+          relation.meta !== 'GUARDIAN',
+      )
       .forEach((relation) => {
         const values = children.get(relation.toPersonId) ?? [];
         values.push(relation.fromPersonId);
@@ -245,6 +345,7 @@ export class ExportService {
             deathPlace: item.deathPlace,
             lifeStatus: item.deathDate ? 'DECEASED' : 'UNKNOWN',
             deceasedAt: item.deathDate,
+            visibility: item.deathDate ? 'FAMILY' : 'LIMITED',
           }),
         );
         idMap.set(item.ref, saved.personId);
@@ -352,6 +453,8 @@ export class ExportService {
           'BIOLOGICAL',
           'ADOPTIVE',
           'STEP',
+          'FOSTER',
+          'GUARDIAN',
           'MARRIED',
           'DIVORCED',
           'WIDOWED',
@@ -370,6 +473,11 @@ export class ExportService {
           relation.fromPersonId,
           relation.toPersonId,
           meta,
+          typeof relation.startDate === 'string' ? relation.startDate : null,
+          typeof relation.endDate === 'string' ? relation.endDate : null,
+          typeof relation.careContext === 'string'
+            ? relation.careContext
+            : null,
         );
       }
       await this.saveImportAudit(
@@ -417,6 +525,14 @@ export class ExportService {
       notes: text('notes'),
       lifeStatus: status,
       deceasedAt: text('deceasedAt'),
+      visibility:
+        item.visibility === 'PRIVATE' ||
+        item.visibility === 'LIMITED' ||
+        item.visibility === 'FAMILY'
+          ? item.visibility
+          : status === 'DECEASED'
+            ? 'FAMILY'
+            : 'LIMITED',
     };
   }
 
@@ -441,12 +557,15 @@ export class ExportService {
     fromRef: string,
     toRef: string,
     meta: string | null,
+    startDate: string | null = null,
+    endDate: string | null = null,
+    careContext: string | null = null,
   ) {
     let from = idMap.get(fromRef);
     let to = idMap.get(toRef);
     if (!from || !to || from === to) return 0;
     if (type === 'SPOUSE' && from > to) [from, to] = [to, from];
-    const key = `${type}:${from}:${to}`;
+    const key = `${type}:${from}:${to}:${type === 'PARENT_CHILD' ? meta : ''}`;
     if (seen.has(key)) return 0;
     seen.add(key);
     await manager.save(
@@ -456,6 +575,10 @@ export class ExportService {
         fromPersonId: from,
         toPersonId: to,
         meta: meta as RelationshipEntity['meta'],
+        startDate,
+        endDate,
+        careContext:
+          meta === 'FOSTER' || meta === 'GUARDIAN' ? careContext : null,
       }),
     );
     return 1;

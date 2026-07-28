@@ -16,7 +16,8 @@ data class ExportRelationship(
     val meta: String?,
     val startDate: String? = null,
     val endDate: String? = null,
-    val createdAt: String
+    val createdAt: String,
+    val careContext: String? = null
 )
 
 data class ExportClaim(

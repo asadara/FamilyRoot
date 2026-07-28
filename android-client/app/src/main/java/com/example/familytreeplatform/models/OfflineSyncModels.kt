@@ -18,7 +18,10 @@ data class ProfileMutationPayload(
 data class ParentChildMutationPayload(
     val parentId: String,
     val childId: String,
-    val meta: String
+    val meta: String,
+    val startDate: String? = null,
+    val endDate: String? = null,
+    val careContext: String? = null
 )
 
 data class SpouseMutationPayload(
@@ -27,6 +30,14 @@ data class SpouseMutationPayload(
     val meta: String,
     val startDate: String?,
     val endDate: String? = null
+)
+
+data class CreatePersonMutationPayload(
+    val request: PersonRequest
+)
+
+data class DeleteRelationshipMutationPayload(
+    val relationship: RelationItem
 )
 
 data class PersonConflictSnapshot(

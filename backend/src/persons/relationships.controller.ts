@@ -13,6 +13,7 @@ import { RelationshipsService } from './relationships.service';
 import { CreateSpouseDto } from './dto/create-spouse.dto';
 import { ActorUserId } from '../common/actor-user-id.decorator';
 import { SpaceRoles } from '../common/space-roles.decorator';
+import { randomUUID } from 'crypto';
 
 @Controller('relationships')
 export class RelationshipsController {
@@ -21,6 +22,7 @@ export class RelationshipsController {
   @Get('path')
   @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
   path(
+    @ActorUserId() actorUserId: string,
     @Query('spaceId') spaceId: string,
     @Query('fromPersonId') fromPersonId: string,
     @Query('toPersonId') toPersonId: string,
@@ -38,12 +40,14 @@ export class RelationshipsController {
       spaceId,
       fromPersonId,
       toPersonId,
+      actorUserId,
     );
   }
 
   @Get()
   @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
   list(
+    @ActorUserId() actorUserId: string,
     @Query('spaceId') spaceId: string,
     @Query('personId') personId?: string,
   ) {
@@ -55,10 +59,14 @@ export class RelationshipsController {
     }
 
     if (!personId) {
-      return this.relationshipsService.findAll(spaceId);
+      return this.relationshipsService.findAll(spaceId, actorUserId);
     }
 
-    return this.relationshipsService.findByPerson(spaceId, personId);
+    return this.relationshipsService.findByPerson(
+      spaceId,
+      personId,
+      actorUserId,
+    );
   }
 
   @Post('spouse')
@@ -85,6 +93,7 @@ export class RelationshipsController {
     @ActorUserId() actorUserId: string,
     @Param('relationshipId') relationshipId: string,
     @Query('spaceId') spaceId: string,
+    @Query('clientMutationId') clientMutationId: string,
   ) {
     if (!spaceId || !isUUID(spaceId)) {
       throw new BadRequestException('Invalid spaceId');
@@ -92,10 +101,14 @@ export class RelationshipsController {
     if (!relationshipId || !isUUID(relationshipId)) {
       throw new BadRequestException('Invalid relationshipId');
     }
+    if (clientMutationId && !isUUID(clientMutationId)) {
+      throw new BadRequestException('Invalid clientMutationId');
+    }
     return this.relationshipsService.remove(
       spaceId,
       relationshipId,
       actorUserId,
+      clientMutationId || randomUUID(),
     );
   }
 }

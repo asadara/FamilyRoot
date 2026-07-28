@@ -21,12 +21,18 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -38,9 +44,12 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.familytreeplatform.models.UserNotificationItem
 
 @Composable
 fun ProfileScreen(
+    viewModel: ProfileViewModel,
     displayName: String,
     email: String?,
     userId: String?,
@@ -50,6 +59,59 @@ fun ProfileScreen(
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    if (state.showDeleteConfirmation) {
+        val impact = state.deletionImpact
+        AlertDialog(
+            onDismissRequest = viewModel::cancelAccountDeletion,
+            title = { Text("Hapus akun TRÃªdhAH?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "Akun, sesi, akses silsilah, undangan aktif, dan klaim identitas akan diputus. " +
+                            "Profil Person serta sejarah keluarga tidak ikut dihapus."
+                    )
+                    Text(
+                        "Dampak: ${impact?.membershipCount ?: 0} membership, " +
+                            "${impact?.claimCount ?: 0} klaim, " +
+                            "${impact?.activeSessionCount ?: 0} sesi aktif."
+                    )
+                    if (!impact?.ownedSpaces.isNullOrEmpty()) {
+                        Text(
+                            "Anda masih menjadi Pemilik. Pindahkan kepemilikan setiap silsilah sebelum menghapus akun.",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    if (state.pendingMutationCount > 0) {
+                        Text(
+                            "${state.pendingMutationCount} perubahan lokal belum tersinkron dan harus diselesaikan terlebih dahulu.",
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                    OutlinedTextField(
+                        value = state.deleteConfirmation,
+                        onValueChange = viewModel::setDeleteConfirmation,
+                        label = { Text("Ketik HAPUS AKUN") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = impact?.canDeleteAccount == true &&
+                        state.pendingMutationCount == 0 &&
+                        state.deleteConfirmation == "HAPUS AKUN",
+                    onClick = viewModel::confirmAccountDeletion
+                ) {
+                    Text("Hapus akun permanen")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::cancelAccountDeletion) { Text("Batal") }
+            }
+        )
+    }
     BoxWithConstraints(
         modifier = modifier
             .fillMaxSize()
@@ -102,11 +164,191 @@ fun ProfileScreen(
                 PrivacyCard(Modifier.fillMaxWidth().widthIn(max = 980.dp))
             }
             item {
+                NotificationHistoryCard(
+                    notifications = state.notifications,
+                    unreadCount = state.unreadNotificationCount,
+                    loading = state.loadingNotifications,
+                    markingAllRead = state.markingNotificationsRead,
+                    onRefresh = viewModel::refreshNotifications,
+                    onMarkRead = viewModel::markNotificationRead,
+                    onMarkAllRead = viewModel::markAllNotificationsRead,
+                    modifier = Modifier.fillMaxWidth().widthIn(max = 980.dp)
+                )
+            }
+            state.error?.let { error ->
+                item {
+                    Surface(
+                        color = MaterialTheme.colorScheme.errorContainer,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth().widthIn(max = 980.dp)
+                    ) {
+                        Text(
+                            profileErrorMessage(error),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.padding(16.dp)
+                        )
+                    }
+                }
+            }
+            item {
+                AccountLifecycleCard(
+                    loading = state.loadingDeletionImpact || state.deletingAccount,
+                    onOpenSpaceSettings = onOpenSpaceSettings,
+                    onDeleteAccount = viewModel::requestAccountDeletion,
+                    modifier = Modifier.fillMaxWidth().widthIn(max = 980.dp)
+                )
+            }
+            item {
                 OutlinedButton(onClick = onSignOut) {
                     Text("Keluar dari akun")
                 }
             }
             item { Spacer(Modifier.height(20.dp)) }
+        }
+    }
+}
+
+@Composable
+private fun NotificationHistoryCard(
+    notifications: List<UserNotificationItem>,
+    unreadCount: Int,
+    loading: Boolean,
+    markingAllRead: Boolean,
+    onRefresh: () -> Unit,
+    onMarkRead: (String) -> Unit,
+    onMarkAllRead: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    ProfileSectionCard(
+        title = "Riwayat notifikasi pribadi",
+        subtitle = if (unreadCount > 0) {
+            "$unreadCount pemberitahuan belum dibaca"
+        } else {
+            "Bukti tindakan dan status penyimpanan akun Anda"
+        },
+        modifier = modifier
+    ) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(enabled = !loading, onClick = onRefresh) {
+                Text(if (loading) "Memuat..." else "Muat ulang")
+            }
+            OutlinedButton(
+                enabled = unreadCount > 0 && !markingAllRead,
+                onClick = onMarkAllRead
+            ) {
+                Text(if (markingAllRead) "Menandai..." else "Tandai semua dibaca")
+            }
+        }
+        when {
+            loading && notifications.isEmpty() -> {
+                CircularProgressIndicator(modifier = Modifier.padding(top = 14.dp))
+            }
+            notifications.isEmpty() -> {
+                Text(
+                    "Belum ada riwayat tindakan.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 14.dp)
+                )
+            }
+            else -> notifications.forEach { notification ->
+                NotificationHistoryRow(notification, onMarkRead)
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotificationHistoryRow(
+    notification: UserNotificationItem,
+    onMarkRead: (String) -> Unit
+) {
+    val unread = notification.readAt == null
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = if (unread) {
+            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.62f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
+        },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 10.dp)
+            .clickable(enabled = unread) {
+                onMarkRead(notification.notificationId)
+            }
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    notificationKindLabel(notification.kind),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = when (notification.kind) {
+                        "ERROR" -> MaterialTheme.colorScheme.error
+                        "WARNING" -> MaterialTheme.colorScheme.tertiary
+                        else -> MaterialTheme.colorScheme.primary
+                    }
+                )
+                Spacer(Modifier.weight(1f))
+                Text(
+                    notificationTimeLabel(notification.createdAt),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Text(
+                notification.title,
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+            Text(
+                notification.message,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+            if (unread) {
+                Text(
+                    "Ketuk untuk menandai dibaca",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AccountLifecycleCard(
+    loading: Boolean,
+    onOpenSpaceSettings: () -> Unit,
+    onDeleteAccount: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    ProfileSectionCard(
+        title = "Area berisiko",
+        subtitle = "Tinjau dampak sebelum mengakhiri akses atau akun",
+        modifier = modifier
+    ) {
+        Text(
+            "Sebelum menghapus akun, ekspor data yang memang boleh Anda bawa dan pindahkan " +
+                "kepemilikan silsilah. Penghapusan akun tidak menghapus Person dari pohon keluarga.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        OutlinedButton(
+            onClick = onOpenSpaceSettings,
+            modifier = Modifier.padding(top = 12.dp)
+        ) {
+            Text("Tinjau kepemilikan & ekspor")
+        }
+        OutlinedButton(
+            enabled = !loading,
+            onClick = onDeleteAccount,
+            modifier = Modifier.padding(top = 8.dp)
+        ) {
+            Text(
+                if (loading) "Memeriksa dampak..." else "Hapus akun",
+                color = MaterialTheme.colorScheme.error
+            )
         }
     }
 }
@@ -324,3 +566,27 @@ internal fun profileInitials(displayName: String): String = displayName
     .take(2)
     .joinToString("") { it.take(1).uppercase() }
     .ifBlank { "FR" }
+
+internal fun notificationKindLabel(kind: String): String = when (kind) {
+    "SUCCESS" -> "Berhasil"
+    "WARNING" -> "Perlu perhatian"
+    "ERROR" -> "Gagal"
+    else -> "Informasi"
+}
+
+internal fun notificationTimeLabel(createdAt: String): String =
+    createdAt
+        .replace('T', ' ')
+        .take(16)
+        .ifBlank { "Baru saja" }
+
+internal fun profileErrorMessage(message: String?): String = when {
+    message.orEmpty().contains("ownership", ignoreCase = true) ->
+        "Pindahkan kepemilikan seluruh silsilah sebelum menghapus akun."
+    message.orEmpty().contains("sinkron", ignoreCase = true) ||
+        message.orEmpty().contains("sync", ignoreCase = true) ->
+        "Selesaikan perubahan yang belum tersinkron sebelum melanjutkan."
+    message.orEmpty().contains("connect", ignoreCase = true) ->
+        "Dampak akun belum dapat diperiksa. Periksa koneksi lalu coba kembali."
+    else -> "Tindakan akun belum dapat diselesaikan. Coba kembali."
+}

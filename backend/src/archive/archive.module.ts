@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ChangeLogEntity } from '../changes/change-log.entity';
-import { SpaceMemberGuard } from '../common/space-member.guard';
 import { UserPersonClaimEntity } from '../claims/user-person-claim.entity';
 import { PersonEntity } from '../persons/person.entity';
 import { SpaceMemberEntity } from '../spaces/space-member.entity';
@@ -15,6 +14,8 @@ import { OBJECT_STORAGE } from './storage/object-storage';
 import { SupabaseObjectStorage } from './storage/supabase-object-storage';
 import { normalizedSupabaseProjectUrl } from '../config/environment';
 import { PersonsModule } from '../persons/persons.module';
+import { ProposalCommentEntity } from './proposal-comment.entity';
+import { UserEntity } from '../users/user.entity';
 
 @Module({
   imports: [
@@ -27,12 +28,13 @@ import { PersonsModule } from '../persons/persons.module';
       ChangeLogEntity,
       SpaceMemberEntity,
       UserPersonClaimEntity,
+      ProposalCommentEntity,
+      UserEntity,
     ]),
   ],
   controllers: [ArchiveController],
   providers: [
     ArchiveService,
-    SpaceMemberGuard,
     {
       provide: OBJECT_STORAGE,
       useFactory: () => {

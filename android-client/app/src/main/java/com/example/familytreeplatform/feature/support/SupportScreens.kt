@@ -78,8 +78,10 @@ fun AboutScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
                 title = "Fitur utama",
                 body = "Workspace pohon interaktif dengan block keluarga, card berfoto, filter " +
                     "generasi, pencarian jalur hubungan, penambahan person langsung, profil " +
-                    "lengkap, hubungan biologis/adopsi/tiri, pemeriksaan hubungan rancu, " +
-                    "aktivitas sinkronisasi, undangan berbasis peran, serta ekspor PDF dan PNG."
+                    "lengkap, hubungan biologis/adopsi/tiri/Foster/Guardian, pemeriksaan hubungan rancu, " +
+                    "aktivitas sinkronisasi, pengelolaan anggota dan kepemilikan, " +
+                    "undangan tertarget berbasis peran, lifecycle silsilah yang aman, " +
+                    "serta ekspor PDF dan PNG."
             )
         }
         item {
@@ -151,10 +153,19 @@ fun HelpScreen(onBack: () -> Unit, modifier: Modifier = Modifier) {
             "Perubahan dapat masuk ke antrean ketika perangkat offline. Aktifkan koneksi kembali " +
             "dan pantau label Tersinkron, Menunggu, Gagal, atau Konflik di header. Detail dan " +
             "tindakan ulang tersedia melalui Aktivitas atau bagian Sinkronisasi profil.",
+        "Notifikasi tindakan" to
+            "Setelah menyimpan perubahan, banner singkat di bagian atas memberi status Berhasil, " +
+            "Perlu perhatian, Gagal, atau Menunggu sinkronisasi. Receipt yang aman disimpan pada " +
+            "Riwayat notifikasi pribadi di Profil akun dan hanya dapat dilihat oleh Anda.",
         "Undangan dan peran" to
             "Viewer hanya melihat data, Kontributor dapat menambah atau mengubah, sedangkan " +
-            "Pengelola/Pemilik dapat mengatur anggota dan undangan. Kode undangan dibedakan " +
-            "menurut peran akses.",
+            "Pengelola/Pemilik dapat mengatur anggota dan undangan. Buka Pengaturan keluarga " +
+            "untuk mengubah peran, mengeluarkan anggota, memindahkan kepemilikan, atau keluar " +
+            "dari silsilah. Email penerima dapat diisi agar kode hanya berlaku bagi akun itu. " +
+            "Pemilik harus memindahkan kepemilikan sebelum keluar.",
+        "Arsip dan hapus silsilah" to
+            "Pemilik dapat mengarsipkan silsilah menjadi hanya-baca. Penghapusan baru tersedia " +
+            "setelah diarsipkan, keputusan ekspor dikonfirmasi, dan nama silsilah diketik persis.",
         "Export pohon" to
             "Buka Alat lalu pilih Ekspor PDF atau Ekspor PNG. Export mengikuti cabang, kartu, " +
             "pasangan, dan connector yang sedang terlihat di workspace.",

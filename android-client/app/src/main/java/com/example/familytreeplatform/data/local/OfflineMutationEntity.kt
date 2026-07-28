@@ -36,4 +36,6 @@ object OfflineMutationType {
     const val UPDATE_PROFILE = "UPDATE_PROFILE"
     const val ADD_PARENT_CHILD = "ADD_PARENT_CHILD"
     const val ADD_SPOUSE = "ADD_SPOUSE"
+    const val CREATE_PERSON = "CREATE_PERSON"
+    const val DELETE_RELATIONSHIP = "DELETE_RELATIONSHIP"
 }

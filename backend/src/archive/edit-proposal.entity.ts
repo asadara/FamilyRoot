@@ -23,6 +23,9 @@ export class EditProposalEntity {
   proposedValue!: string;
 
   @Column({ type: 'text', nullable: true })
+  beforeValue!: string | null;
+
+  @Column({ type: 'text', nullable: true })
   reason!: string | null;
 
   @Column({ type: 'text', default: 'PENDING' })
@@ -33,6 +36,9 @@ export class EditProposalEntity {
 
   @Column({ type: Date, nullable: true })
   reviewedAt!: Date | null;
+
+  @Column({ type: 'text', nullable: true })
+  reviewReason!: string | null;
 
   @CreateDateColumn()
   createdAt!: Date;

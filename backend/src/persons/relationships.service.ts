@@ -6,11 +6,16 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
-import { RelationshipEntity } from './relationship.entity';
+import {
+  isCareRelationshipMeta,
+  isLineageParentChildMeta,
+  RelationshipEntity,
+} from './relationship.entity';
 import { ChangeLogEntity } from '../changes/change-log.entity';
 import { PersonEntity } from './person.entity';
 import { databaseErrorMessage } from '../common/database-error';
 import { ClientMutationEntity } from './client-mutation.entity';
+import { PersonPrivacyService } from './person-privacy.service';
 
 @Injectable()
 export class RelationshipsService {
@@ -21,6 +26,7 @@ export class RelationshipsService {
     private readonly personsRepo: Repository<PersonEntity>,
     @InjectRepository(ChangeLogEntity)
     private readonly changeRepo: Repository<ChangeLogEntity>,
+    private readonly privacyService: PersonPrivacyService,
   ) {}
 
   private async hasParentChildPath(
@@ -34,6 +40,7 @@ export class RelationshipsService {
     });
     const childrenByParent = new Map<string, string[]>();
     parentage.forEach((relationship) => {
+      if (!isLineageParentChildMeta(relationship.meta)) return;
       const children = childrenByParent.get(relationship.fromPersonId) ?? [];
       children.push(relationship.toPersonId);
       childrenByParent.set(relationship.fromPersonId, children);
@@ -54,8 +61,8 @@ export class RelationshipsService {
     return false;
   }
 
-  async findByPerson(spaceId: string, personId: string) {
-    const parents = await this.relationsRepo.find({
+  async findByPerson(spaceId: string, personId: string, actorUserId: string) {
+    const parentRelationships = await this.relationsRepo.find({
       where: { spaceId, type: 'PARENT_CHILD', toPersonId: personId },
       order: { createdAt: 'DESC' },
       select: [
@@ -67,10 +74,11 @@ export class RelationshipsService {
         'createdAt',
         'startDate',
         'endDate',
+        'careContext',
       ],
     });
 
-    const children = await this.relationsRepo.find({
+    const childRelationships = await this.relationsRepo.find({
       where: { spaceId, type: 'PARENT_CHILD', fromPersonId: personId },
       order: { createdAt: 'DESC' },
       select: [
@@ -82,6 +90,7 @@ export class RelationshipsService {
         'createdAt',
         'startDate',
         'endDate',
+        'careContext',
       ],
     });
 
@@ -100,14 +109,43 @@ export class RelationshipsService {
         'createdAt',
         'startDate',
         'endDate',
+        'careContext',
       ],
     });
 
-    return { personId, parents, children, spouses };
+    const redacted = await this.redactRelationshipDetails(
+      spaceId,
+      [...parentRelationships, ...childRelationships, ...spouses],
+      actorUserId,
+    );
+    const byId = new Map(
+      redacted.map((relationship) => [
+        relationship.relationshipId,
+        relationship,
+      ]),
+    );
+    return {
+      personId,
+      parents: parentRelationships
+        .filter((relationship) => !isCareRelationshipMeta(relationship.meta))
+        .map((relationship) => byId.get(relationship.relationshipId)),
+      children: childRelationships
+        .filter((relationship) => !isCareRelationshipMeta(relationship.meta))
+        .map((relationship) => byId.get(relationship.relationshipId)),
+      caregivers: parentRelationships
+        .filter((relationship) => isCareRelationshipMeta(relationship.meta))
+        .map((relationship) => byId.get(relationship.relationshipId)),
+      careRecipients: childRelationships
+        .filter((relationship) => isCareRelationshipMeta(relationship.meta))
+        .map((relationship) => byId.get(relationship.relationshipId)),
+      spouses: spouses.map((relationship) =>
+        byId.get(relationship.relationshipId),
+      ),
+    };
   }
 
-  findAll(spaceId: string) {
-    return this.relationsRepo.find({
+  async findAll(spaceId: string, actorUserId: string) {
+    const relationships = await this.relationsRepo.find({
       where: { spaceId },
       order: { createdAt: 'DESC' },
       select: [
@@ -118,19 +156,55 @@ export class RelationshipsService {
         'meta',
         'startDate',
         'endDate',
+        'careContext',
         'createdAt',
       ],
     });
+    return this.redactRelationshipDetails(spaceId, relationships, actorUserId);
   }
 
-  async remove(spaceId: string, relationshipId: string, actorUserId: string) {
-    const relationship = await this.relationsRepo.findOneBy({
-      spaceId,
-      relationshipId,
-    });
-    if (!relationship) throw new NotFoundException('Relationship not found');
+  async remove(
+    spaceId: string,
+    relationshipId: string,
+    actorUserId: string,
+    clientMutationId: string,
+  ) {
+    const requestFingerprint = JSON.stringify({ spaceId, relationshipId });
+    return this.relationsRepo.manager.transaction(async (manager) => {
+      const priorMutation = await manager.findOne(ClientMutationEntity, {
+        where: { clientMutationId },
+      });
+      if (priorMutation) {
+        if (
+          priorMutation.actorUserId !== actorUserId ||
+          priorMutation.requestFingerprint !== requestFingerprint
+        ) {
+          throw new ConflictException(
+            'clientMutationId was already used for another mutation',
+          );
+        }
+        return JSON.parse(priorMutation.responseJson) as {
+          relationshipId: string;
+          deleted: boolean;
+        };
+      }
+      const relationship = await manager.findOneBy(RelationshipEntity, {
+        spaceId,
+        relationshipId,
+      });
+      if (!relationship) throw new NotFoundException('Relationship not found');
+      const people = await manager.findBy(PersonEntity, {
+        spaceId,
+        personId: In([relationship.fromPersonId, relationship.toPersonId]),
+        isDeleted: false,
+      });
+      await this.privacyService.requireFullAccessForPeople(
+        spaceId,
+        people,
+        actorUserId,
+        manager,
+      );
 
-    await this.relationsRepo.manager.transaction(async (manager) => {
       await manager.remove(relationship);
       await manager.save(
         manager.create(ChangeLogEntity, {
@@ -143,18 +217,33 @@ export class RelationshipsService {
           beforeJson: JSON.stringify(relationship),
         }),
       );
+      const response = { relationshipId, deleted: true };
+      await manager.save(
+        manager.create(ClientMutationEntity, {
+          clientMutationId,
+          actorUserId,
+          spaceId,
+          operation: 'DELETE_RELATIONSHIP',
+          requestFingerprint,
+          responseJson: JSON.stringify(response),
+        }),
+      );
+      return response;
     });
-
-    return { relationshipId, deleted: true };
   }
 
-  async findPath(spaceId: string, fromPersonId: string, toPersonId: string) {
+  async findPath(
+    spaceId: string,
+    fromPersonId: string,
+    toPersonId: string,
+    actorUserId: string,
+  ) {
     const people = await this.personsRepo.find({
       where: [
         { spaceId, personId: fromPersonId, isDeleted: false },
         { spaceId, personId: toPersonId, isDeleted: false },
       ],
-      select: ['personId', 'fullName'],
+      select: ['personId', 'fullName', 'visibility'],
     });
     if (people.length < 2 && fromPersonId !== toPersonId) {
       throw new BadRequestException(
@@ -162,9 +251,20 @@ export class RelationshipsService {
       );
     }
     if (fromPersonId === toPersonId) {
+      const decisions = await this.privacyService.decisionsForPeople(
+        spaceId,
+        people,
+        actorUserId,
+      );
       return {
         found: true,
-        people: people,
+        people: people.map((person) => ({
+          personId: person.personId,
+          fullName: this.privacyService.redact(
+            person,
+            decisions.get(person.personId)!,
+          ).fullName,
+        })),
         edges: [],
       };
     }
@@ -191,8 +291,13 @@ export class RelationshipsService {
         personId,
         isDeleted: false,
       })),
-      select: ['personId', 'fullName'],
+      select: ['personId', 'fullName', 'visibility'],
     });
+    const pathDecisions = await this.privacyService.decisionsForPeople(
+      spaceId,
+      personNames,
+      actorUserId,
+    );
     const personById = new Map(
       personNames.map((person) => [person.personId, person]),
     );
@@ -274,7 +379,12 @@ export class RelationshipsService {
       found: true,
       people: pathPeople.map((personId) => ({
         personId,
-        fullName: personById.get(personId)?.fullName ?? personId,
+        fullName: personById.get(personId)
+          ? this.privacyService.redact(
+              personById.get(personId) as PersonEntity,
+              pathDecisions.get(personId)!,
+            ).fullName
+          : 'Anggota keluarga',
       })),
       edges,
     };
@@ -342,6 +452,11 @@ export class RelationshipsService {
         'Spouses must be active persons in this Family Space',
       );
     }
+    await this.privacyService.requireFullAccessForPeople(
+      spaceId,
+      [personA, personB],
+      actorUserId,
+    );
     const isAncestorPair =
       (await this.hasParentChildPath(spaceId, personAId, personBId)) ||
       (await this.hasParentChildPath(spaceId, personBId, personAId));
@@ -412,5 +527,45 @@ export class RelationshipsService {
     }
 
     return saved;
+  }
+
+  private async redactRelationshipDetails(
+    spaceId: string,
+    relationships: RelationshipEntity[],
+    actorUserId: string,
+  ) {
+    const personIds = [
+      ...new Set(
+        relationships.flatMap((relationship) => [
+          relationship.fromPersonId,
+          relationship.toPersonId,
+        ]),
+      ),
+    ];
+    const people = personIds.length
+      ? await this.personsRepo.findBy({
+          spaceId,
+          personId: In(personIds),
+          isDeleted: false,
+        })
+      : [];
+    const decisions = await this.privacyService.decisionsForPeople(
+      spaceId,
+      people,
+      actorUserId,
+    );
+    return relationships.map((relationship) => {
+      const full =
+        decisions.get(relationship.fromPersonId)?.access === 'FULL' &&
+        decisions.get(relationship.toPersonId)?.access === 'FULL';
+      return full
+        ? relationship
+        : {
+            ...relationship,
+            startDate: null,
+            endDate: null,
+            careContext: null,
+          };
+    });
   }
 }

@@ -9,9 +9,13 @@ import { EditProposalEntity } from '../archive/edit-proposal.entity';
 import { FactSourceEntity } from '../archive/fact-source.entity';
 import { MediaItemEntity } from '../archive/media-item.entity';
 import { ChangeLogEntity } from '../changes/change-log.entity';
+import { PersonsModule } from '../persons/persons.module';
+import { ProposalCommentEntity } from '../archive/proposal-comment.entity';
+import { UserEntity } from '../users/user.entity';
 
 @Module({
   imports: [
+    PersonsModule,
     TypeOrmModule.forFeature([
       PersonEntity,
       RelationshipEntity,
@@ -20,6 +24,8 @@ import { ChangeLogEntity } from '../changes/change-log.entity';
       MediaItemEntity,
       EditProposalEntity,
       ChangeLogEntity,
+      ProposalCommentEntity,
+      UserEntity,
     ]),
   ],
   controllers: [ExportController],

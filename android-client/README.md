@@ -41,7 +41,11 @@ release memakai `PRODUCTION`. Naikkan `versionCode` untuk setiap APK baru; naikk
 `API_CONTRACT_VERSION` hanya ketika kontrak APK–backend memang tidak kompatibel.
 Semua request juga membawa header versi agar backend dapat menolak APK lama setelah
 enforcement diaktifkan. Baseline gate pertama adalah `versionCode 2`,
-`versionName 0.1.1-beta`.
+`versionName 0.1.1-beta`. Source pengembangan saat ini menyiapkan lifecycle lengkap,
+claim kolektif, undangan tertarget, serta Foster/Guardian sebagai `versionCode 3`,
+`versionName 0.1.2-beta`; backend, migration, object contract, dan policy PILOT
+harus menerima build 3 sebelum APK tersebut dipasang. Backend model care tidak boleh
+di-rollout terpisah karena build lama dapat salah membaca meta baru sebagai lineage.
 
 Panduan Google Auth Platform, package/SHA-1 pilot, migration, dan acceptance test
 berada di `../docs/GOOGLE_SIGN_IN_SETUP.md`.

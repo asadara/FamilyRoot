@@ -24,8 +24,10 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -56,6 +58,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.familytreeplatform.models.ClaimReviewItem
 import com.example.familytreeplatform.models.DuplicateGroup
 import com.example.familytreeplatform.models.ProposalItem
+import com.example.familytreeplatform.models.ProposalCommentItem
+import com.example.familytreeplatform.models.SpaceMember
+import com.example.familytreeplatform.models.SpaceInvitation
 
 @Composable
 fun SpaceSettingsScreen(
@@ -106,6 +111,11 @@ fun SpaceSettingsScreen(
             else backupWriter.launch(document.fileName)
         }
     }
+    var rejectingProposalId by rememberSaveable { mutableStateOf<String?>(null) }
+    var proposalRejectionReason by rememberSaveable { mutableStateOf("") }
+    var expandedProposalDiscussionId by rememberSaveable {
+        mutableStateOf<String?>(null)
+    }
 
     if (state.showClearOfflineConfirmation) {
         AlertDialog(
@@ -125,9 +135,248 @@ fun SpaceSettingsScreen(
             }
         )
     }
+    LaunchedEffect(state.spaceDeleted) {
+        if (state.spaceDeleted) onBack()
+    }
+
+    if (state.showArchiveConfirmation) {
+        AlertDialog(
+            onDismissRequest = viewModel::cancelLifecycleConfirmation,
+            title = { Text("Arsipkan silsilah?") },
+            text = {
+                Text(
+                    "Silsilah menjadi read-only untuk semua anggota dan seluruh undangan aktif " +
+                        "akan dicabut. Data tetap tersimpan dan Pemilik dapat mengaktifkannya kembali."
+                )
+            },
+            confirmButton = {
+                Button(onClick = viewModel::confirmArchiveSpace) {
+                    Text("Arsipkan")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::cancelLifecycleConfirmation) { Text("Batal") }
+            }
+        )
+    }
+    if (state.showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = viewModel::cancelLifecycleConfirmation,
+            title = { Text("Hapus silsilah?") },
+            text = {
+                Column {
+                    Text(
+                        "Data akan disembunyikan dari semua anggota. Riwayat audit tetap disimpan. " +
+                            "Pastikan Anda telah membuat ekspor bila memerlukannya."
+                    )
+                    OutlinedTextField(
+                        value = state.deleteConfirmation,
+                        onValueChange = viewModel::setDeleteConfirmation,
+                        label = { Text("Ketik persis: ${state.spaceName}") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth().padding(top = 12.dp)
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                viewModel.setDeleteExportAcknowledged(
+                                    !state.deleteExportAcknowledged
+                                )
+                            }
+                            .padding(top = 8.dp)
+                    ) {
+                        Checkbox(
+                            checked = state.deleteExportAcknowledged,
+                            onCheckedChange = viewModel::setDeleteExportAcknowledged
+                        )
+                        Text("Saya sudah mengekspor data atau memilih untuk tidak mengekspor.")
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = state.deleteConfirmation == state.spaceName &&
+                        state.deleteExportAcknowledged &&
+                        state.lifecycleAction == null,
+                    onClick = viewModel::confirmDeleteSpace,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("Hapus silsilah") }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::cancelLifecycleConfirmation) { Text("Batal") }
+            }
+        )
+    }
+    state.pendingRoleChange?.let { change ->
+        AlertDialog(
+            onDismissRequest = viewModel::cancelMembershipConfirmation,
+            title = { Text("Ubah peran anggota?") },
+            text = {
+                Text(
+                    "${change.member.displayName} akan menjadi " +
+                        "${memberRoleLabel(change.role)}. Kewenangan aksesnya langsung mengikuti peran baru."
+                )
+            },
+            confirmButton = {
+                Button(onClick = viewModel::confirmRoleChange) { Text("Ubah peran") }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::cancelMembershipConfirmation) { Text("Batal") }
+            }
+        )
+    }
+    state.pendingRemoval?.let { member ->
+        AlertDialog(
+            onDismissRequest = viewModel::cancelMembershipConfirmation,
+            title = { Text("Keluarkan anggota?") },
+            text = {
+                Text(
+                    "${member.displayName} akan kehilangan akses ke silsilah ini. " +
+                        "Data person, hubungan keluarga, dan riwayat kontribusinya tidak ikut dihapus. " +
+                        "Cache pada perangkat anggota dibersihkan saat akses diperiksa kembali."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = viewModel::confirmRemoveMember,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("Keluarkan") }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::cancelMembershipConfirmation) { Text("Batal") }
+            }
+        )
+    }
+    state.pendingTransfer?.let { member ->
+        AlertDialog(
+            onDismissRequest = viewModel::cancelMembershipConfirmation,
+            title = { Text("Pindahkan kepemilikan?") },
+            text = {
+                Text(
+                    "${member.displayName} akan memperoleh kendali penuh sebagai Pemilik. " +
+                        "Peran Anda berubah menjadi Pengelola. Tindakan ini tidak menghapus data keluarga."
+                )
+            },
+            confirmButton = {
+                Button(onClick = viewModel::confirmTransferOwnership) {
+                    Text("Pindahkan kepemilikan")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::cancelMembershipConfirmation) { Text("Batal") }
+            }
+        )
+    }
+    state.pendingInvitationRevoke?.let { invitation ->
+        AlertDialog(
+            onDismissRequest = viewModel::cancelMembershipConfirmation,
+            title = { Text("Cabut undangan?") },
+            text = {
+                Text(
+                    "Undangan ${memberRoleLabel(invitation.role)} ini tidak dapat dipakai lagi. " +
+                        "Anggota yang sudah menerima undangan tidak ikut dikeluarkan."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = viewModel::confirmRevokeInvitation,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("Cabut undangan") }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::cancelMembershipConfirmation) { Text("Batal") }
+            }
+        )
+    }
+    if (state.showLeaveConfirmation) {
+        AlertDialog(
+            onDismissRequest = viewModel::cancelMembershipConfirmation,
+            title = { Text("Keluar dari silsilah?") },
+            text = {
+                Text(
+                    "Akses Anda dan cache keluarga pada perangkat ini akan dihapus. " +
+                        "Data keluarga di server tidak ikut terhapus. Buat ekspor terlebih dahulu bila diperlukan."
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = viewModel::confirmLeaveSpace,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("Keluar dari silsilah") }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::cancelMembershipConfirmation) { Text("Batal") }
+            }
+        )
+    }
+
+    rejectingProposalId?.let { proposalId ->
+        val proposal = state.proposals.firstOrNull { it.proposalId == proposalId }
+        AlertDialog(
+            onDismissRequest = {
+                rejectingProposalId = null
+                proposalRejectionReason = ""
+            },
+            title = { Text("Tolak usulan perubahan?") },
+            text = {
+                Column {
+                    Text(
+                        "Jelaskan alasan agar kontributor memahami keputusan untuk " +
+                            "${proposal?.personName ?: "person ini"}."
+                    )
+                    OutlinedTextField(
+                        value = proposalRejectionReason,
+                        onValueChange = { proposalRejectionReason = it.take(1000) },
+                        label = { Text("Alasan penolakan") },
+                        supportingText = {
+                            Text("${proposalRejectionReason.length}/1000")
+                        },
+                        minLines = 3,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = isProposalRejectionReasonValid(proposalRejectionReason) &&
+                        state.reviewingProposalId != proposalId,
+                    onClick = {
+                        viewModel.rejectProposal(proposalId, proposalRejectionReason)
+                        rejectingProposalId = null
+                        proposalRejectionReason = ""
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) { Text("Tolak usulan") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        rejectingProposalId = null
+                        proposalRejectionReason = ""
+                    }
+                ) { Text("Batal") }
+            }
+        )
+    }
 
     var portabilityOpen by rememberSaveable { mutableStateOf(true) }
+    var lifecycleOpen by rememberSaveable { mutableStateOf(true) }
     var privacyOpen by rememberSaveable { mutableStateOf(false) }
+    var membersOpen by rememberSaveable { mutableStateOf(true) }
     var invitationOpen by rememberSaveable { mutableStateOf(false) }
     var claimsOpen by rememberSaveable { mutableStateOf(false) }
     var proposalsOpen by rememberSaveable { mutableStateOf(false) }
@@ -158,6 +407,78 @@ fun SpaceSettingsScreen(
             }
             state.privacyMessage?.let { message ->
                 item { SettingsNotice(settingsStatusMessage(message)) }
+            }
+            state.membershipMessage?.let { message ->
+                item { SettingsNotice(message) }
+            }
+            state.lifecycleMessage?.let { message ->
+                item { SettingsNotice(message) }
+            }
+            if (state.spaceStatus == "ARCHIVED") {
+                item {
+                    SettingsNotice(
+                        "Silsilah ini sedang diarsipkan. Semua data dapat dibaca, tetapi perubahan " +
+                            "baru ditolak sampai Pemilik mengaktifkannya kembali."
+                    )
+                }
+            }
+            if (state.memberRole == "OWNER") {
+                item {
+                    SettingsSection(
+                        title = "Status silsilah",
+                        subtitle = "Arsipkan, aktifkan kembali, atau hapus dengan aman",
+                        badge = if (state.spaceStatus == "ARCHIVED") "Diarsipkan" else "Aktif",
+                        expanded = lifecycleOpen,
+                        onToggle = { lifecycleOpen = !lifecycleOpen }
+                    ) {
+                        val impact = state.lifecycleImpact
+                        Text(
+                            if (state.spaceStatus == "ARCHIVED") {
+                                "Mode read-only aktif. Data dan riwayat tidak dihapus."
+                            } else {
+                                "Arsipkan lebih dahulu sebelum penghapusan tersedia."
+                            },
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        if (impact != null) {
+                            Text(
+                                "${impact.personCount} person · ${impact.relationshipCount} hubungan · " +
+                                    "${impact.memberCount} anggota · ${impact.activeInvitationCount} undangan aktif",
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(top = 10.dp)
+                            )
+                            Text(
+                                "${impact.mediaCount} media · ${impact.sourceCount} sumber · " +
+                                    "${impact.pendingProposalCount} usulan menunggu",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        ReviewHeader(
+                            loading = state.loadingLifecycle,
+                            onRefresh = viewModel::refreshLifecycle
+                        )
+                        if (state.spaceStatus == "ACTIVE") {
+                            OutlinedButton(
+                                enabled = state.lifecycleAction == null,
+                                onClick = viewModel::requestArchiveSpace
+                            ) {
+                                Text("Arsipkan silsilah")
+                            }
+                        } else {
+                            AdaptiveActionPair(
+                                firstLabel = if (state.lifecycleAction == "RESTORE") {
+                                    "Mengaktifkan..."
+                                } else {
+                                    "Aktifkan kembali"
+                                },
+                                secondLabel = "Hapus silsilah",
+                                enabled = state.lifecycleAction == null,
+                                onFirst = viewModel::restoreSpace,
+                                onSecond = viewModel::requestDeleteSpace
+                            )
+                        }
+                    }
+                }
             }
             item {
                 SettingsSection(
@@ -198,6 +519,66 @@ fun SpaceSettingsScreen(
                             CircularProgressIndicator()
                             Text("Memproses data keluarga…")
                         }
+                    }
+                }
+            }
+            item {
+                SettingsSection(
+                    title = "Anggota & akses",
+                    subtitle = "Kelola peran, kepemilikan, dan akses silsilah",
+                    badge = "${state.members.size} anggota",
+                    expanded = membersOpen,
+                    onToggle = { membersOpen = !membersOpen }
+                ) {
+                    Text(
+                        "Pemilik mengatur seluruh anggota. Pengelola hanya dapat mengatur " +
+                            "Kontributor dan Pembaca. Perubahan akses tercatat pada Aktivitas.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    ReviewHeader(
+                        loading = state.loadingMembers,
+                        onRefresh = viewModel::refreshMembers
+                    )
+                    if (!state.loadingMembers && state.members.isEmpty()) {
+                        EmptyReview("Daftar anggota belum tersedia.")
+                    }
+                    state.members.forEach { member ->
+                        MembershipCard(
+                            member = member,
+                            actorRole = state.memberRole,
+                            actionBusy = state.membershipActionMemberId == member.memberId,
+                            onChangeRole = { role -> viewModel.requestRoleChange(member, role) },
+                            onTransfer = { viewModel.requestTransferOwnership(member) },
+                            onRemove = { viewModel.requestRemoveMember(member) }
+                        )
+                    }
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                        modifier = Modifier.padding(vertical = 16.dp)
+                    )
+                    Text("Akses saya", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        if (state.memberRole == "OWNER") {
+                            "Pemilik harus memindahkan kepemilikan sebelum keluar agar silsilah tidak kehilangan pengelola utama."
+                        } else {
+                            "Keluar hanya menghapus akses Anda. Person dan sejarah keluarga tetap tersimpan."
+                        },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                    OutlinedButton(
+                        enabled = state.memberRole != "OWNER" && !state.leavingSpace,
+                        onClick = viewModel::requestLeaveSpace,
+                        modifier = Modifier.padding(top = 12.dp)
+                    ) {
+                        Text(
+                            if (state.leavingSpace) "Sedang keluar..." else "Keluar dari silsilah",
+                            color = if (state.memberRole == "OWNER") {
+                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.38f)
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            }
+                        )
                     }
                 }
             }
@@ -254,6 +635,16 @@ fun SpaceSettingsScreen(
                         }
                     }
                     OutlinedTextField(
+                        value = state.invitationTargetEmail,
+                        onValueChange = viewModel::setInvitationTargetEmail,
+                        label = { Text("Email penerima (disarankan)") },
+                        supportingText = {
+                            Text("Jika diisi, hanya akun dengan email ini yang dapat menerima.")
+                        },
+                        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
                         value = state.expiresInDays,
                         onValueChange = viewModel::setExpiresInDays,
                         label = { Text("Masa berlaku (hari)") },
@@ -289,6 +680,12 @@ fun SpaceSettingsScreen(
                                     "${invitation.spaceName} · ${invitationRoleLabel(invitation.role)}",
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                                invitation.maskedTargetEmail?.let { target ->
+                                    Text(
+                                        "Khusus akun $target",
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                                 Text(
                                     invitation.token,
                                     style = MaterialTheme.typography.titleLarge,
@@ -320,6 +717,53 @@ fun SpaceSettingsScreen(
                                     ) { Text("Bagikan") }
                                 }
                             }
+                        }
+                    }
+                    if (state.memberRole in setOf("OWNER", "ADMIN")) {
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                            modifier = Modifier.padding(vertical = 16.dp)
+                        )
+                        Text(
+                            "Riwayat undangan",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Text(
+                            "Kode rahasia tidak ditampilkan kembali. Cabut undangan aktif yang tidak lagi diperlukan.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 4.dp, bottom = 8.dp)
+                        )
+                        listOf(
+                            listOf("ALL", "ACTIVE", "ACCEPTED"),
+                            listOf("REVOKED", "EXPIRED")
+                        ).forEach { row ->
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                row.forEach { status ->
+                                    FilterChip(
+                                        selected = state.invitationStatusFilter == status,
+                                        onClick = { viewModel.setInvitationStatusFilter(status) },
+                                        label = { Text(invitationStatusLabel(status)) },
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                }
+                            }
+                        }
+                        ReviewHeader(
+                            loading = state.loadingInvitations,
+                            onRefresh = viewModel::refreshInvitations
+                        )
+                        if (!state.loadingInvitations && state.invitations.isEmpty()) {
+                            EmptyReview("Tidak ada undangan pada filter ini.")
+                        }
+                        state.invitations.forEach { invitation ->
+                            InvitationHistoryCard(
+                                invitation = invitation,
+                                revoking = state.revokingInvitationId == invitation.inviteId,
+                                onRevoke = { viewModel.requestRevokeInvitation(invitation) }
+                            )
                         }
                     }
                 }
@@ -357,8 +801,31 @@ fun SpaceSettingsScreen(
                         ProposalCard(
                             proposal = proposal,
                             reviewingId = state.reviewingProposalId,
+                            comments = state.proposalComments[proposal.proposalId].orEmpty(),
+                            commentsExpanded =
+                                expandedProposalDiscussionId == proposal.proposalId,
+                            loadingComments =
+                                proposal.proposalId in state.loadingProposalComments,
+                            commentDraft =
+                                state.proposalCommentDrafts[proposal.proposalId].orEmpty(),
+                            postingComment =
+                                state.postingProposalCommentId == proposal.proposalId,
                             onApprove = viewModel::approveProposal,
-                            onReject = viewModel::rejectProposal
+                            onReject = { proposalId ->
+                                rejectingProposalId = proposalId
+                                proposalRejectionReason = ""
+                            },
+                            onToggleComments = { proposalId ->
+                                if (expandedProposalDiscussionId == proposalId) {
+                                    expandedProposalDiscussionId = null
+                                } else {
+                                    expandedProposalDiscussionId = proposalId
+                                    viewModel.refreshProposalComments(proposalId)
+                                }
+                            },
+                            onCommentDraftChange =
+                                viewModel::setProposalCommentDraft,
+                            onAddComment = viewModel::addProposalComment
                         )
                     }
                 }
@@ -548,12 +1015,179 @@ private fun EmptyReview(message: String) {
 }
 
 @Composable
+private fun InvitationHistoryCard(
+    invitation: SpaceInvitation,
+    revoking: Boolean,
+    onRevoke: () -> Unit
+) {
+    ReviewCard {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    memberRoleLabel(invitation.role),
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    "Dibuat ${invitation.createdAt.take(10)} oleh ${invitation.createdByName}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Surface(
+                color = MaterialTheme.colorScheme.secondaryContainer,
+                shape = CircleShape
+            ) {
+                Text(
+                    invitationStatusLabel(invitation.status),
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                )
+            }
+        }
+        invitation.acceptedByName?.let { name ->
+            Text(
+                "Diterima oleh $name",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+        }
+        invitation.maskedTargetEmail?.let { target ->
+            Text(
+                "Ditujukan ke $target",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 6.dp)
+            )
+        }
+        Text(
+            "Berlaku hingga ${invitation.expiresAt.take(10)}",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+        if (invitation.status == "ACTIVE") {
+            OutlinedButton(
+                enabled = !revoking,
+                onClick = onRevoke,
+                modifier = Modifier.padding(top = 10.dp)
+            ) {
+                Text(
+                    if (revoking) "Mencabut..." else "Cabut undangan",
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MembershipCard(
+    member: SpaceMember,
+    actorRole: String?,
+    actionBusy: Boolean,
+    onChangeRole: (String) -> Unit,
+    onTransfer: () -> Unit,
+    onRemove: () -> Unit
+) {
+    val roles = manageableRoles(actorRole, member)
+    ReviewCard {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    if (member.isCurrentUser) "${member.displayName} (Anda)" else member.displayName,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    "Bergabung ${member.joinedAt.take(10)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                shape = CircleShape
+            ) {
+                Text(
+                    memberRoleLabel(member.role),
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                )
+            }
+        }
+        if (roles.isNotEmpty()) {
+            Text(
+                "Peran akses",
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
+            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                roles.forEach { role ->
+                    FilterChip(
+                        selected = member.role == role,
+                        enabled = !actionBusy,
+                        onClick = { onChangeRole(role) },
+                        label = { Text(memberRoleLabel(role)) },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            if (actorRole == "OWNER") {
+                Spacer(Modifier.height(8.dp))
+                AdaptiveActionPair(
+                    firstLabel = "Jadikan pemilik",
+                    secondLabel = "Keluarkan",
+                    enabled = !actionBusy,
+                    outlined = true,
+                    onFirst = onTransfer,
+                    onSecond = onRemove
+                )
+            } else {
+                OutlinedButton(
+                    enabled = !actionBusy,
+                    onClick = onRemove,
+                    modifier = Modifier.padding(top = 8.dp)
+                ) {
+                    Text("Keluarkan", color = MaterialTheme.colorScheme.error)
+                }
+            }
+            if (actionBusy) {
+                Text(
+                    "Memperbarui akses...",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun ClaimCard(claim: ClaimReviewItem, verifyingId: String?, onVerify: (String) -> Unit) {
     ReviewCard {
         Text(claim.personName ?: "Person keluarga", style = MaterialTheme.typography.titleMedium)
         Text("Status: ${reviewStatusLabel(claim.status)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("Peran anggota: ${memberRoleLabel(claim.memberRole)}", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text("Kontributor ···${claim.userId.takeLast(6)}", style = MaterialTheme.typography.bodySmall)
+        Text(
+            if (claim.verificationBasis == "LEGACY") {
+                "Diverifikasi sebelum aturan konfirmasi kolektif."
+            } else {
+                "Konfirmasi keluarga: ${claim.confirmationCount}/${claim.required}"
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         if (claim.status == "PENDING") {
             Button(
                 enabled = verifyingId != claim.claimId,
@@ -568,17 +1202,70 @@ private fun ClaimCard(claim: ClaimReviewItem, verifyingId: String?, onVerify: (S
 private fun ProposalCard(
     proposal: ProposalItem,
     reviewingId: String?,
+    comments: List<ProposalCommentItem>,
+    commentsExpanded: Boolean,
+    loadingComments: Boolean,
+    commentDraft: String,
+    postingComment: Boolean,
     onApprove: (String) -> Unit,
-    onReject: (String) -> Unit
+    onReject: (String) -> Unit,
+    onToggleComments: (String) -> Unit,
+    onCommentDraftChange: (String, String) -> Unit,
+    onAddComment: (String) -> Unit
 ) {
     ReviewCard {
         Text(proposalFieldLabel(proposal.field), style = MaterialTheme.typography.titleMedium)
         proposal.personName?.takeIf { it.isNotBlank() }?.let {
             Text(it, fontWeight = FontWeight.SemiBold)
         }
-        Text(proposalValueLabel(proposal), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            "Saat ini",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+        Text(
+            proposalCurrentValueLabel(proposal),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        if (
+            proposal.beforeValue != null &&
+            proposal.beforeValue != proposal.currentValue
+        ) {
+            Text(
+                "Saat diajukan: ${proposal.beforeValue}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        Text(
+            "Usulan",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(top = 8.dp)
+        )
+        Text(
+            proposalValueLabel(proposal),
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
         Text("Status: ${reviewStatusLabel(proposal.status)}", style = MaterialTheme.typography.bodySmall)
-        proposal.reason?.takeIf { it.isNotBlank() }?.let { Text("Alasan: $it", modifier = Modifier.padding(top = 4.dp)) }
+        proposal.reason?.takeIf { it.isNotBlank() }?.let {
+            Text("Alasan pengusul: $it", modifier = Modifier.padding(top = 4.dp))
+        }
+        proposal.reviewReason?.takeIf { it.isNotBlank() }?.let {
+            Text(
+                "Catatan peninjau: $it",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp)
+            )
+        }
+        if (proposal.reviewedAt != null) {
+            Text(
+                "Keputusan review telah tercatat.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
         if (proposal.status == "PENDING") {
             AdaptiveActionPair(
                 firstLabel = "Setujui",
@@ -589,6 +1276,72 @@ private fun ProposalCard(
                 onSecond = { onReject(proposal.proposalId) }
             )
         }
+        TextButton(
+            onClick = { onToggleComments(proposal.proposalId) },
+            modifier = Modifier.padding(top = 6.dp)
+        ) {
+            Text(
+                if (commentsExpanded) {
+                    "Tutup diskusi"
+                } else {
+                    "Buka diskusi${if (comments.isEmpty()) "" else " (${comments.size})"}"
+                }
+            )
+        }
+        if (commentsExpanded) {
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f),
+                modifier = Modifier.padding(vertical = 8.dp)
+            )
+            Text("Diskusi usulan", style = MaterialTheme.typography.titleSmall)
+            when {
+                loadingComments -> CircularProgressIndicator(
+                    modifier = Modifier.padding(top = 10.dp)
+                )
+                comments.isEmpty() -> Text(
+                    "Belum ada komentar.",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 8.dp)
+                )
+                else -> comments.forEach { comment ->
+                    ProposalCommentRow(comment)
+                }
+            }
+            OutlinedTextField(
+                value = commentDraft,
+                onValueChange = {
+                    onCommentDraftChange(proposal.proposalId, it)
+                },
+                label = { Text("Tambahkan konteks") },
+                supportingText = { Text("${commentDraft.length}/1000") },
+                minLines = 2,
+                enabled = !postingComment,
+                modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
+            )
+            Button(
+                enabled = isProposalCommentValid(commentDraft) && !postingComment,
+                onClick = { onAddComment(proposal.proposalId) },
+                modifier = Modifier.padding(top = 8.dp)
+            ) {
+                Text(if (postingComment) "Mengirim…" else "Kirim komentar")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProposalCommentRow(comment: ProposalCommentItem) {
+    Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp)) {
+        Text(
+            if (comment.isMine) {
+                "${comment.authorDisplayName} · Anda"
+            } else {
+                comment.authorDisplayName
+            },
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(comment.body, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -657,11 +1410,32 @@ internal fun proposalFieldLabel(field: String): String = when (field) {
     else -> field.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
 }
 
+internal fun invitationStatusLabel(status: String?): String = when (status) {
+    "ALL" -> "Semua"
+    "ACTIVE" -> "Aktif"
+    "ACCEPTED" -> "Diterima"
+    "REVOKED" -> "Dicabut"
+    "EXPIRED" -> "Kedaluwarsa"
+    else -> "Tidak diketahui"
+}
+
 internal fun proposalValueLabel(proposal: ProposalItem): String = when (proposal.field) {
     "DELETE_PERSON" ->
         "Person hanya dapat dihapus setelah hubungan dan data terhubung diselesaikan."
     else -> proposal.proposedValue
 }
+
+internal fun proposalCurrentValueLabel(proposal: ProposalItem): String = when {
+    proposal.field == "DELETE_PERSON" -> "Person masih tersimpan."
+    proposal.currentValue.isNullOrBlank() -> "Belum diisi"
+    else -> proposal.currentValue
+}
+
+internal fun isProposalRejectionReasonValid(reason: String): Boolean =
+    reason.trim().length in 1..1000
+
+internal fun isProposalCommentValid(comment: String): Boolean =
+    comment.trim().length in 1..1000
 
 internal fun duplicateReasonLabel(reason: String): String = when {
     reason.contains("name", ignoreCase = true) -> "Nama atau identitas person terlihat serupa."
@@ -675,6 +1449,9 @@ internal fun settingsErrorMessage(message: String?): String {
     val value = message.orEmpty()
     return when {
         value.contains("Expiry", ignoreCase = true) -> "Masa berlaku harus antara 1–30 hari."
+        value.contains("targetEmail", ignoreCase = true) ||
+            value.contains("must be an email", ignoreCase = true) ->
+            "Masukkan alamat email penerima yang valid."
         value.contains("Only OWNER", ignoreCase = true) || value.contains("Only ADMIN", ignoreCase = true) ->
             "Hanya pemilik atau pengelola silsilah yang dapat membuat undangan."
         value.contains("already", ignoreCase = true) && value.contains("member", ignoreCase = true) ->

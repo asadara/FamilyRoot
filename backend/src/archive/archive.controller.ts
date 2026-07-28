@@ -3,6 +3,7 @@ import {
   Body,
   Controller,
   Get,
+  Headers,
   Param,
   Post,
   Query,
@@ -20,6 +21,7 @@ import { CreateSourceDto } from './dto/create-source.dto';
 import { ReviewProposalDto } from './dto/review-proposal.dto';
 import { UploadImageDto } from './dto/upload-image.dto';
 import { MAX_IMAGE_UPLOAD_BYTES } from './image-processor';
+import { CreateProposalCommentDto } from './dto/create-proposal-comment.dto';
 
 @Controller()
 export class ArchiveController {
@@ -29,10 +31,11 @@ export class ArchiveController {
   @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
   listSources(
     @Param('personId') personId: string,
+    @ActorUserId() actorUserId: string,
     @Query('spaceId') spaceId: string,
   ) {
     this.validateIds(spaceId, personId);
-    return this.archiveService.listSources(spaceId, personId);
+    return this.archiveService.listSources(spaceId, personId, actorUserId);
   }
 
   @Post('persons/:personId/sources')
@@ -55,18 +58,22 @@ export class ArchiveController {
   @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
   listMedia(
     @Param('personId') personId: string,
+    @ActorUserId() actorUserId: string,
     @Query('spaceId') spaceId: string,
   ) {
     this.validateIds(spaceId, personId);
-    return this.archiveService.listMedia(spaceId, personId);
+    return this.archiveService.listMedia(spaceId, personId, actorUserId);
   }
 
   @Get('spaces/:spaceId/profile-photos')
   @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
-  listProfilePhotos(@Param('spaceId') spaceId: string) {
+  listProfilePhotos(
+    @Param('spaceId') spaceId: string,
+    @ActorUserId() actorUserId: string,
+  ) {
     if (!spaceId || !isUUID(spaceId))
       throw new BadRequestException('Invalid spaceId');
-    return this.archiveService.listProfilePhotos(spaceId);
+    return this.archiveService.listProfilePhotos(spaceId, actorUserId);
   }
 
   @Post('persons/:personId/media')
@@ -115,19 +122,28 @@ export class ArchiveController {
   getMediaAccess(
     @Param('personId') personId: string,
     @Param('mediaId') mediaId: string,
+    @ActorUserId() actorUserId: string,
     @Query('spaceId') spaceId: string,
   ) {
     this.validateIds(spaceId, personId);
     if (!isUUID(mediaId)) throw new BadRequestException('Invalid mediaId');
-    return this.archiveService.getMediaAccess(spaceId, personId, mediaId);
+    return this.archiveService.getMediaAccess(
+      spaceId,
+      personId,
+      mediaId,
+      actorUserId,
+    );
   }
 
   @Get('proposals')
   @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
-  listProposals(@Query('spaceId') spaceId: string) {
+  listProposals(
+    @ActorUserId() actorUserId: string,
+    @Query('spaceId') spaceId: string,
+  ) {
     if (!spaceId || !isUUID(spaceId))
       throw new BadRequestException('Invalid spaceId');
-    return this.archiveService.listProposals(spaceId);
+    return this.archiveService.listProposals(spaceId, actorUserId);
   }
 
   @Post('proposals')
@@ -137,6 +153,37 @@ export class ArchiveController {
     @Body() dto: CreateProposalDto,
   ) {
     return this.archiveService.createProposal(dto, actorUserId);
+  }
+
+  @Get('proposals/:proposalId/comments')
+  @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
+  listProposalComments(
+    @Param('proposalId') proposalId: string,
+    @ActorUserId() actorUserId: string,
+    @Query('spaceId') spaceId: string,
+  ) {
+    this.validateProposalIds(spaceId, proposalId);
+    return this.archiveService.listProposalComments(
+      spaceId,
+      proposalId,
+      actorUserId,
+    );
+  }
+
+  @Post('proposals/:proposalId/comments')
+  @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
+  createProposalComment(
+    @Param('proposalId') proposalId: string,
+    @ActorUserId() actorUserId: string,
+    @Body() dto: CreateProposalCommentDto,
+  ) {
+    this.validateProposalIds(dto.spaceId, proposalId);
+    return this.archiveService.createProposalComment(
+      dto.spaceId,
+      proposalId,
+      dto.body,
+      actorUserId,
+    );
   }
 
   @Post('proposals/approve')
@@ -149,6 +196,7 @@ export class ArchiveController {
       dto.spaceId,
       dto.proposalId,
       actorUserId,
+      dto.reviewReason,
     );
   }
 
@@ -157,12 +205,21 @@ export class ArchiveController {
   rejectProposal(
     @ActorUserId() actorUserId: string,
     @Body() dto: ReviewProposalDto,
+    @Headers('x-app-version-code') appVersionCode?: string,
   ) {
     return this.archiveService.rejectProposal(
       dto.spaceId,
       dto.proposalId,
       actorUserId,
+      dto.reviewReason,
+      this.requiresStructuredReviewReason(appVersionCode),
     );
+  }
+
+  private requiresStructuredReviewReason(appVersionCode?: string) {
+    if (!appVersionCode) return false;
+    const versionCode = Number(appVersionCode);
+    return Number.isInteger(versionCode) && versionCode >= 3;
   }
 
   private validateIds(spaceId: string, personId: string) {
@@ -170,5 +227,12 @@ export class ArchiveController {
       throw new BadRequestException('Invalid spaceId');
     if (!personId || !isUUID(personId))
       throw new BadRequestException('Invalid personId');
+  }
+
+  private validateProposalIds(spaceId: string, proposalId: string) {
+    if (!spaceId || !isUUID(spaceId))
+      throw new BadRequestException('Invalid spaceId');
+    if (!proposalId || !isUUID(proposalId))
+      throw new BadRequestException('Invalid proposalId');
   }
 }

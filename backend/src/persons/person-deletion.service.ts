@@ -12,6 +12,7 @@ import { ChangeLogEntity } from '../changes/change-log.entity';
 import { UserPersonClaimEntity } from '../claims/user-person-claim.entity';
 import { PersonEntity } from './person.entity';
 import { RelationshipEntity } from './relationship.entity';
+import { PersonPrivacyService } from './person-privacy.service';
 
 export interface PersonDeletionBlocker {
   code: 'RELATIONSHIPS' | 'CLAIMS' | 'MEDIA' | 'SOURCES' | 'PENDING_PROPOSALS';
@@ -33,9 +34,22 @@ export interface PersonDeletionImpact {
 
 @Injectable()
 export class PersonDeletionService {
-  constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
+  constructor(
+    @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly privacyService: PersonPrivacyService,
+  ) {}
 
-  getImpact(spaceId: string, personId: string) {
+  async getImpact(spaceId: string, personId: string, actorUserId: string) {
+    const person = await this.requireActivePerson(
+      this.dataSource.manager,
+      spaceId,
+      personId,
+    );
+    await this.privacyService.requireFullAccessForPeople(
+      spaceId,
+      [person],
+      actorUserId,
+    );
     return this.getImpactWithManager(
       this.dataSource.manager,
       spaceId,
@@ -50,7 +64,13 @@ export class PersonDeletionService {
     actorUserId: string,
   ) {
     return this.dataSource.transaction(async (manager) => {
-      await this.requireActivePerson(manager, spaceId, personId);
+      const person = await this.requireActivePerson(manager, spaceId, personId);
+      await this.privacyService.requireFullAccessForPeople(
+        spaceId,
+        [person],
+        actorUserId,
+        manager,
+      );
       const existing = await manager.findOne(EditProposalEntity, {
         where: {
           spaceId,
@@ -104,6 +124,12 @@ export class PersonDeletionService {
     excludedProposalId?: string,
   ) {
     const person = await this.requireActivePerson(manager, spaceId, personId);
+    await this.privacyService.requireFullAccessForPeople(
+      spaceId,
+      [person],
+      actorUserId,
+      manager,
+    );
     const impact = await this.getImpactWithManager(
       manager,
       spaceId,

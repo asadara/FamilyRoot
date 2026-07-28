@@ -51,10 +51,13 @@ data class ProposalItem(
     val personId: String,
     val field: String,
     val proposedValue: String,
+    val beforeValue: String? = null,
+    val currentValue: String? = null,
     val reason: String? = null,
     val status: String,
     val reviewedByUserId: String? = null,
     val reviewedAt: String? = null,
+    val reviewReason: String? = null,
     val createdAt: String,
     val personName: String? = null
 )
@@ -69,7 +72,22 @@ data class ProposalRequest(
 
 data class ReviewProposalRequest(
     val spaceId: String,
-    val proposalId: String
+    val proposalId: String,
+    val reviewReason: String? = null
+)
+
+data class ProposalCommentItem(
+    val commentId: String,
+    val proposalId: String,
+    val body: String,
+    val authorDisplayName: String,
+    val isMine: Boolean = false,
+    val createdAt: String
+)
+
+data class CreateProposalCommentRequest(
+    val spaceId: String,
+    val body: String
 )
 
 data class DuplicateGroup(

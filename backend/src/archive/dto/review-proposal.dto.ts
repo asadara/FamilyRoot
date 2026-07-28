@@ -1,4 +1,4 @@
-import { IsUUID } from 'class-validator';
+import { IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class ReviewProposalDto {
   @IsUUID()
@@ -6,4 +6,9 @@ export class ReviewProposalDto {
 
   @IsUUID()
   proposalId!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  reviewReason?: string;
 }

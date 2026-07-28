@@ -8,6 +8,10 @@ import {
 
 @Entity('space_members')
 @Index(['spaceId', 'userId'], { unique: true })
+@Index('UQ_space_members_single_owner', ['spaceId'], {
+  unique: true,
+  where: `"role" = 'OWNER'`,
+})
 export class SpaceMemberEntity {
   @PrimaryGeneratedColumn('uuid')
   memberId!: string;

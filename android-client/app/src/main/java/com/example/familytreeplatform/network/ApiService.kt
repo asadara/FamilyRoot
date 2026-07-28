@@ -26,6 +26,11 @@ import com.example.familytreeplatform.models.ProposalItem
 import com.example.familytreeplatform.models.ProposalRequest
 import com.example.familytreeplatform.models.RelationshipPathResponse
 import com.example.familytreeplatform.models.ReviewProposalRequest
+import com.example.familytreeplatform.models.ProposalCommentItem
+import com.example.familytreeplatform.models.CreateProposalCommentRequest
+import com.example.familytreeplatform.models.UserNotificationItem
+import com.example.familytreeplatform.models.NotificationHistoryResponse
+import com.example.familytreeplatform.models.MarkAllNotificationsReadResponse
 import com.example.familytreeplatform.models.SourceItem
 import com.example.familytreeplatform.models.SourceRequest
 import retrofit2.Response
@@ -60,6 +65,22 @@ import com.example.familytreeplatform.models.DeletePersonResponse
 import com.example.familytreeplatform.models.PersonDeletionImpact
 import com.example.familytreeplatform.models.RequestPersonDeletionRequest
 import com.example.familytreeplatform.models.AppCompatibilityResponse
+import com.example.familytreeplatform.models.LeaveSpaceResponse
+import com.example.familytreeplatform.models.OwnershipTransferResponse
+import com.example.familytreeplatform.models.RemoveMemberResponse
+import com.example.familytreeplatform.models.SpaceMember
+import com.example.familytreeplatform.models.TransferOwnershipRequest
+import com.example.familytreeplatform.models.UpdateMemberRoleRequest
+import com.example.familytreeplatform.models.UpdatePersonVisibilityRequest
+import com.example.familytreeplatform.models.MembershipResult
+import com.example.familytreeplatform.models.RevokeInvitationResponse
+import com.example.familytreeplatform.models.SpaceInvitation
+import com.example.familytreeplatform.models.AccountDeletionImpact
+import com.example.familytreeplatform.models.DeleteAccountRequest
+import com.example.familytreeplatform.models.DeleteAccountResponse
+import com.example.familytreeplatform.models.DeleteSpaceRequest
+import com.example.familytreeplatform.models.DeleteSpaceResponse
+import com.example.familytreeplatform.models.SpaceLifecycleImpact
 import retrofit2.http.HTTP
 
 interface ApiService {
@@ -86,11 +107,40 @@ interface ApiService {
     @POST("auth/google")
     suspend fun googleLogin(@Body request: GoogleLoginRequest): Response<AuthResponse>
 
+    @GET("users/me/deletion-impact")
+    suspend fun accountDeletionImpact(): Response<AccountDeletionImpact>
+
+    @HTTP(method = "DELETE", path = "users/me", hasBody = true)
+    suspend fun deleteAccount(
+        @Body request: DeleteAccountRequest
+    ): Response<DeleteAccountResponse>
+
     @GET("spaces")
     suspend fun listSpaces(): Response<List<FamilySpace>>
 
     @POST("spaces")
     suspend fun createSpace(@Body request: CreateSpaceRequest): Response<FamilySpace>
+
+    @GET("spaces/{spaceId}/lifecycle-impact")
+    suspend fun spaceLifecycleImpact(
+        @Path("spaceId") spaceId: String
+    ): Response<SpaceLifecycleImpact>
+
+    @POST("spaces/{spaceId}/archive")
+    suspend fun archiveSpace(
+        @Path("spaceId") spaceId: String
+    ): Response<FamilySpace>
+
+    @POST("spaces/{spaceId}/restore")
+    suspend fun restoreSpace(
+        @Path("spaceId") spaceId: String
+    ): Response<FamilySpace>
+
+    @HTTP(method = "DELETE", path = "spaces/{spaceId}", hasBody = true)
+    suspend fun deleteSpace(
+        @Path("spaceId") spaceId: String,
+        @Body request: DeleteSpaceRequest
+    ): Response<DeleteSpaceResponse>
 
     @POST("spaces/invitations")
     suspend fun createInvitation(@Body request: CreateInvitationRequest): Response<CreatedInvitation>
@@ -101,11 +151,58 @@ interface ApiService {
     @POST("spaces/invitations/accept")
     suspend fun acceptInvitation(@Body request: AcceptInvitationRequest): Response<FamilySpace>
 
+    @GET("spaces/{spaceId}/invitations")
+    suspend fun listSpaceInvitations(
+        @Path("spaceId") spaceId: String,
+        @Query("status") status: String? = null
+    ): Response<List<SpaceInvitation>>
+
+    @DELETE("spaces/{spaceId}/invitations/{inviteId}")
+    suspend fun revokeSpaceInvitation(
+        @Path("spaceId") spaceId: String,
+        @Path("inviteId") inviteId: String
+    ): Response<RevokeInvitationResponse>
+
+    @GET("spaces/{spaceId}/members")
+    suspend fun listSpaceMembers(
+        @Path("spaceId") spaceId: String
+    ): Response<List<SpaceMember>>
+
+    @PATCH("spaces/{spaceId}/members/{memberId}")
+    suspend fun updateSpaceMemberRole(
+        @Path("spaceId") spaceId: String,
+        @Path("memberId") memberId: String,
+        @Body request: UpdateMemberRoleRequest
+    ): Response<MembershipResult>
+
+    @DELETE("spaces/{spaceId}/members/{memberId}")
+    suspend fun removeSpaceMember(
+        @Path("spaceId") spaceId: String,
+        @Path("memberId") memberId: String
+    ): Response<RemoveMemberResponse>
+
+    @POST("spaces/{spaceId}/ownership-transfer")
+    suspend fun transferSpaceOwnership(
+        @Path("spaceId") spaceId: String,
+        @Body request: TransferOwnershipRequest
+    ): Response<OwnershipTransferResponse>
+
+    @POST("spaces/{spaceId}/leave")
+    suspend fun leaveSpace(
+        @Path("spaceId") spaceId: String
+    ): Response<LeaveSpaceResponse>
+
     @POST("persons")
     suspend fun createPerson(@Body request: PersonRequest): Response<PersonResponse>
 
     @GET("persons")
     suspend fun listPersons(@Query("spaceId") spaceId: String): Response<List<PersonListItem>>
+
+    @PATCH("persons/{personId}/visibility")
+    suspend fun updatePersonVisibility(
+        @Path("personId") personId: String,
+        @Body request: UpdatePersonVisibilityRequest
+    ): Response<PersonListItem>
 
     @GET("persons/duplicates")
     suspend fun listDuplicates(@Query("spaceId") spaceId: String): Response<List<DuplicateGroup>>
@@ -181,6 +278,31 @@ interface ApiService {
     @POST("proposals/reject")
     suspend fun rejectProposal(@Body request: ReviewProposalRequest): Response<ProposalItem>
 
+    @GET("proposals/{proposalId}/comments")
+    suspend fun listProposalComments(
+        @Path("proposalId") proposalId: String,
+        @Query("spaceId") spaceId: String
+    ): Response<List<ProposalCommentItem>>
+
+    @POST("proposals/{proposalId}/comments")
+    suspend fun createProposalComment(
+        @Path("proposalId") proposalId: String,
+        @Body request: CreateProposalCommentRequest
+    ): Response<ProposalCommentItem>
+
+    @GET("notifications")
+    suspend fun listNotifications(
+        @Query("limit") limit: Int = 50
+    ): Response<NotificationHistoryResponse>
+
+    @PATCH("notifications/{notificationId}/read")
+    suspend fun markNotificationRead(
+        @Path("notificationId") notificationId: String
+    ): Response<UserNotificationItem>
+
+    @POST("notifications/read-all")
+    suspend fun markAllNotificationsRead(): Response<MarkAllNotificationsReadResponse>
+
     @POST("claims")
     suspend fun createClaim(@Body request: ClaimRequest): Response<ClaimResponse>
 
@@ -223,7 +345,8 @@ interface ApiService {
     @DELETE("relationships/{relationshipId}")
     suspend fun deleteRelationship(
         @Path("relationshipId") relationshipId: String,
-        @Query("spaceId") spaceId: String
+        @Query("spaceId") spaceId: String,
+        @Query("clientMutationId") clientMutationId: String
     ): Response<com.example.familytreeplatform.models.DeleteRelationshipResponse>
 
     @PATCH("persons/{personId}/life")

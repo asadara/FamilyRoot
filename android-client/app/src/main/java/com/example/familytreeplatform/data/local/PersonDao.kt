@@ -24,8 +24,14 @@ interface PersonDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAll(items: List<PersonEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsert(item: PersonEntity)
+
     @Query("DELETE FROM persons WHERE spaceId = :spaceId")
     suspend fun deleteBySpace(spaceId: String)
+
+    @Query("DELETE FROM persons")
+    suspend fun deleteAll()
 
     @Query("DELETE FROM persons WHERE personId = :personId")
     suspend fun deleteById(personId: String)

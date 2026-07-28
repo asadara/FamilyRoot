@@ -8,5 +8,6 @@ data class RelationItem(
     val meta: String?,
     val createdAt: String,
     val startDate: String? = null,
-    val endDate: String? = null
+    val endDate: String? = null,
+    val careContext: String? = null
 )

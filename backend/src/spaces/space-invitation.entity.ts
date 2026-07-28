@@ -21,6 +21,9 @@ export class SpaceInvitationEntity {
   @Column({ type: 'text' })
   role!: 'ADMIN' | 'EDITOR' | 'VIEWER';
 
+  @Column({ type: 'text', nullable: true })
+  targetEmail!: string | null;
+
   @Column({ type: 'uuid' })
   createdBy!: string;
 

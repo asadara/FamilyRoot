@@ -8,6 +8,10 @@ import {
 } from 'class-validator';
 
 export class CreatePersonDto {
+  @IsOptional()
+  @IsUUID()
+  clientMutationId?: string;
+
   @IsUUID()
   spaceId!: string;
 

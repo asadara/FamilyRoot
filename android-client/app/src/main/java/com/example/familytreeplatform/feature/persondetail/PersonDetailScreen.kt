@@ -74,6 +74,7 @@ import com.example.familytreeplatform.data.local.OfflineMutationType
 import com.example.familytreeplatform.models.MediaItem
 import com.example.familytreeplatform.models.PersonListItem
 import com.example.familytreeplatform.models.PersonDeletionImpact
+import com.example.familytreeplatform.models.personVisibilityLabel
 import com.example.familytreeplatform.models.RelationsResponse
 import com.example.familytreeplatform.models.RelationItem
 import com.example.familytreeplatform.models.SourceItem
@@ -165,6 +166,7 @@ fun PersonDetailScreen(
     }
 
     var overviewExpanded by rememberSaveable(person.personId) { mutableStateOf(true) }
+    var privacyExpanded by rememberSaveable(person.personId) { mutableStateOf(true) }
     var syncExpanded by rememberSaveable(person.personId) { mutableStateOf(false) }
     var sourcesExpanded by rememberSaveable(person.personId) { mutableStateOf(false) }
     var mediaExpanded by rememberSaveable(person.personId) { mutableStateOf(false) }
@@ -172,6 +174,7 @@ fun PersonDetailScreen(
     var relationsExpanded by rememberSaveable(person.personId) { mutableStateOf(false) }
 
     val relations = state.relations
+    val canEditVisibleProfile = canEditProfile && person.privacyAccess == "FULL"
     val relationCount = relations?.let { it.parents.size + it.children.size + it.spouses.size } ?: 0
     val relationTargets = remember(state.people, relationQuery, person.personId) {
         state.people
@@ -255,7 +258,7 @@ fun PersonDetailScreen(
                 PersonProfileHero(
                     person = person,
                     profilePhotoUrl = state.profilePhotoUrl,
-                    canEditProfile = canEditProfile,
+                    canEditProfile = canEditVisibleProfile,
                     updating = state.updating,
                     onPickPhoto = { profilePhotoPicker.launch("image/*") }
                 )
@@ -265,6 +268,23 @@ fun PersonDetailScreen(
             }
             state.error?.let { error ->
                 item { ProfileFeedback(message = personErrorMessage(error), error = true) }
+            }
+            item {
+                PersonProfileSection(
+                    title = "Privasi profil",
+                    subtitle = "Atur seberapa banyak informasi yang terlihat oleh anggota keluarga.",
+                    badge = personVisibilityLabel(person.visibility),
+                    expanded = privacyExpanded,
+                    onToggle = { privacyExpanded = !privacyExpanded }
+                ) {
+                    PersonPrivacySection(
+                        visibility = person.visibility,
+                        privacyAccess = person.privacyAccess,
+                        canManage = person.canManageVisibility,
+                        updating = state.updating,
+                        onSelect = viewModel::updateVisibility
+                    )
+                }
             }
             item {
                 PersonProfileSection(
@@ -294,7 +314,7 @@ fun PersonDetailScreen(
                         onDeathPlaceChange = { deathPlace = it },
                         notes = profileNotes,
                         onNotesChange = { profileNotes = it },
-                        canEdit = canEditProfile,
+                        canEdit = canEditVisibleProfile,
                         updating = state.updating,
                         claiming = state.claiming,
                         claimStatus = state.claim?.status,
@@ -347,7 +367,7 @@ fun PersonDetailScreen(
                         onTitleChange = { sourceTitle = it },
                         note = sourceNote,
                         onNoteChange = { sourceNote = it },
-                        canEdit = canEditProfile,
+                        canEdit = canEditVisibleProfile,
                         updating = state.updating,
                         onAdd = {
                             viewModel.addSource(sourceTitle, sourceNote)
@@ -371,7 +391,7 @@ fun PersonDetailScreen(
                         onLabelChange = { mediaLabel = it },
                         uri = mediaUri,
                         onUriChange = { mediaUri = it },
-                        canEdit = canEditProfile,
+                        canEdit = canEditVisibleProfile,
                         updating = state.updating,
                         onAdd = {
                             viewModel.addMedia(mediaLabel, mediaUri)
@@ -393,7 +413,7 @@ fun PersonDetailScreen(
                         onNotesChange = { proposalNotes = it },
                         reason = proposalReason,
                         onReasonChange = { proposalReason = it },
-                        canEdit = canEditProfile,
+                        canEdit = canEditVisibleProfile,
                         updating = state.updating,
                         onSubmit = {
                             viewModel.proposeNotes(proposalNotes, proposalReason)
@@ -418,10 +438,14 @@ fun PersonDetailScreen(
                         onQueryChange = { relationQuery = it },
                         targets = relationTargets,
                         people = state.people,
-                        canEdit = canEditProfile,
+                        canEdit = canEditVisibleProfile,
                         updating = state.updating,
-                        onAddParent = { targetId, meta -> viewModel.addParent(targetId, meta) },
-                        onAddChild = { targetId, meta -> viewModel.addChild(targetId, meta) },
+                        onAddParent = { targetId, meta, startDate, endDate, context ->
+                            viewModel.addParent(targetId, meta, startDate, endDate, context)
+                        },
+                        onAddChild = { targetId, meta, startDate, endDate, context ->
+                            viewModel.addChild(targetId, meta, startDate, endDate, context)
+                        },
                         onAddSpouse = viewModel::addSpouse,
                         onDeleteRelationship = { pendingRelationshipDelete = it },
                         onFindPath = viewModel::findPathTo,
@@ -435,7 +459,9 @@ fun PersonDetailScreen(
                     )
                 }
             }
-            personDeletionAction(spaceRole)?.let { action ->
+            personDeletionAction(spaceRole)
+                ?.takeIf { person.privacyAccess == "FULL" }
+                ?.let { action ->
                 item {
                     PersonDangerSection(
                         action = action,
@@ -693,17 +719,14 @@ private fun PersonHeroIdentity(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.semantics { heading() }
             )
-            Surface(
-                shape = RoundedCornerShape(100.dp),
-                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(7.dp),
                 modifier = Modifier.padding(top = 8.dp)
             ) {
-                Text(
-                    if (person.lifeStatus == "DECEASED") "Profil historis" else "Person keluarga",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)
+                ProfileStatusBadge(
+                    if (person.lifeStatus == "DECEASED") "Profil historis" else "Person keluarga"
                 )
+                ProfileStatusBadge(personVisibilityLabel(person.visibility))
             }
             if (canEditProfile) {
                 TextButton(
@@ -763,9 +786,30 @@ private fun PersonDetailAvatar(
 @Composable
 private fun PersonHeroFacts(person: PersonListItem, modifier: Modifier = Modifier) {
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = modifier.horizontalScroll(rememberScrollState())) {
-        ProfileFact("Gender", genderLabel(person.gender))
-        ProfileFact("Lahir", person.birthDate ?: "Belum diisi")
-        if (person.lifeStatus == "DECEASED") ProfileFact("Meninggal", person.deceasedAt ?: "Belum diisi")
+        val restricted = person.privacyAccess != "FULL"
+        ProfileFact("Gender", if (restricted) "Disembunyikan" else genderLabel(person.gender))
+        ProfileFact("Lahir", if (restricted) "Disembunyikan" else person.birthDate ?: "Belum diisi")
+        if (person.lifeStatus == "DECEASED") {
+            ProfileFact(
+                "Meninggal",
+                if (restricted) "Disembunyikan" else person.deceasedAt ?: "Belum diisi"
+            )
+        }
+    }
+}
+
+@Composable
+private fun ProfileStatusBadge(label: String) {
+    Surface(
+        shape = RoundedCornerShape(100.dp),
+        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.78f)
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp)
+        )
     }
 }
 
@@ -1120,6 +1164,72 @@ private fun SourcesSection(
 }
 
 @Composable
+private fun PersonPrivacySection(
+    visibility: String,
+    privacyAccess: String,
+    canManage: Boolean,
+    updating: Boolean,
+    onSelect: (String) -> Unit
+) {
+    Text(
+        when (privacyAccess) {
+            "MINIMUM" -> "Profil privat hanya menampilkan posisi minimum di struktur keluarga."
+            "STRUCTURE" -> "Nama tetap terlihat agar silsilah terbaca; detail pribadi disembunyikan."
+            else -> "Anda memiliki akses penuh ke profil ini."
+        },
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    if (!canManage) {
+        Text(
+            "Pengaturan ini dikelola oleh pemilik profil yang sudah diverifikasi. Jika belum ada klaim terverifikasi, Pemilik atau Pengelola silsilah menjadi pengelola sementara.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 10.dp)
+        )
+        return
+    }
+
+    Text(
+        "Pilih tingkat visibilitas",
+        style = MaterialTheme.typography.titleSmall,
+        modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+    )
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState())
+    ) {
+        listOf(
+            "FAMILY" to "Keluarga",
+            "LIMITED" to "Terbatas",
+            "PRIVATE" to "Privat"
+        ).forEach { (value, label) ->
+            FilterChip(
+                selected = visibility == value,
+                onClick = { onSelect(value) },
+                enabled = !updating,
+                label = { Text(label) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            )
+        }
+    }
+    Text(
+        when (visibility) {
+            "PRIVATE" -> "Nama dinetralkan, foto dan seluruh detail disembunyikan dari anggota lain."
+            "LIMITED" -> "Nama dan posisi keluarga terlihat; foto, umur, tanggal, lokasi, dan catatan disembunyikan."
+            else -> "Seluruh anggota Family Space dapat melihat profil dan medianya."
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(top = 10.dp)
+    )
+}
+
+@Composable
 private fun MediaSection(
     media: List<MediaItem>,
     label: String,
@@ -1224,8 +1334,8 @@ private fun RelationsSection(
     people: List<PersonListItem>,
     canEdit: Boolean,
     updating: Boolean,
-    onAddParent: (String, String) -> Unit,
-    onAddChild: (String, String) -> Unit,
+    onAddParent: (String, String, String?, String?, String?) -> Unit,
+    onAddChild: (String, String, String?, String?, String?) -> Unit,
     onAddSpouse: (String) -> Unit,
     onDeleteRelationship: (String) -> Unit,
     onFindPath: (String) -> Unit,
@@ -1237,11 +1347,26 @@ private fun RelationsSection(
             RelationCount("Orang tua", it.parents.size)
             RelationCount("Anak", it.children.size)
             RelationCount("Pasangan", it.spouses.size)
+            RelationCount("Pengasuhan", it.caregivers.size + it.careRecipients.size)
         }
         val peopleById = people.associateBy(PersonListItem::personId)
         val existing = buildList {
             addAll(it.parents.map { relation -> ExistingRelation(relation, "Orang tua", relation.fromPersonId) })
             addAll(it.children.map { relation -> ExistingRelation(relation, "Anak", relation.toPersonId) })
+            addAll(it.caregivers.map { relation ->
+                ExistingRelation(
+                    relation,
+                    if (relation.meta == "GUARDIAN") "Wali keluarga" else "Pengasuh",
+                    relation.fromPersonId
+                )
+            })
+            addAll(it.careRecipients.map { relation ->
+                ExistingRelation(
+                    relation,
+                    if (relation.meta == "GUARDIAN") "Dalam perwalian" else "Anak asuh",
+                    relation.toPersonId
+                )
+            })
             addAll(it.spouses.map { relation ->
                 val otherId = if (relation.fromPersonId == it.personId) relation.toPersonId else relation.fromPersonId
                 ExistingRelation(relation, "Pasangan", otherId)
@@ -1272,8 +1397,12 @@ private fun RelationsSection(
                         target = target,
                         canEdit = canEdit,
                         enabled = !updating,
-                onAddParent = { meta -> onAddParent(target.personId, meta) },
-                onAddChild = { meta -> onAddChild(target.personId, meta) },
+                onAddParent = { meta, startDate, endDate, context ->
+                    onAddParent(target.personId, meta, startDate, endDate, context)
+                },
+                onAddChild = { meta, startDate, endDate, context ->
+                    onAddChild(target.personId, meta, startDate, endDate, context)
+                },
                 onAddSpouse = { onAddSpouse(target.personId) },
                 onFindPath = { onFindPath(target.personId) }
             )
@@ -1308,14 +1437,20 @@ private fun RelationTargetRow(
     target: PersonListItem,
     canEdit: Boolean,
     enabled: Boolean,
-    onAddParent: (String) -> Unit,
-    onAddChild: (String) -> Unit,
+    onAddParent: (String, String?, String?, String?) -> Unit,
+    onAddChild: (String, String?, String?, String?) -> Unit,
     onAddSpouse: () -> Unit,
     onFindPath: () -> Unit
 ) {
     var moreExpanded by rememberSaveable(target.personId) { mutableStateOf(false) }
     var selectedChoiceKey by rememberSaveable(target.personId) { mutableStateOf<String?>(null) }
+    var careStartDate by rememberSaveable(target.personId) { mutableStateOf("") }
+    var careEndDate by rememberSaveable(target.personId) { mutableStateOf("") }
+    var careContext by rememberSaveable(target.personId) { mutableStateOf("") }
     val selectedChoice = relationshipChoices.firstOrNull { it.key == selectedChoiceKey }
+    val isCareChoice = selectedChoice?.meta == "FOSTER" || selectedChoice?.meta == "GUARDIAN"
+    val carePeriodValid =
+        careStartDate.isBlank() || careEndDate.isBlank() || careEndDate >= careStartDate
     val primaryChoices = relationshipChoices.take(3)
     val otherChoices = relationshipChoices.drop(3)
     Surface(
@@ -1371,17 +1506,77 @@ private fun RelationTargetRow(
                     }
                 }
             }
+            if (isCareChoice) {
+                Text(
+                    if (selectedChoice?.meta == "GUARDIAN") {
+                        "Perwalian keluarga adalah catatan pengasuhan, bukan penetapan wali legal."
+                    } else {
+                        "Pengasuhan sementara tidak mengubah hubungan darah atau tingkat generasi."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 10.dp)
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                ) {
+                    ProfileDateField(
+                        label = "Mulai (opsional)",
+                        value = careStartDate,
+                        enabled = enabled && canEdit,
+                        onValueChange = { careStartDate = it },
+                        modifier = Modifier.weight(1f)
+                    )
+                    ProfileDateField(
+                        label = "Selesai (opsional)",
+                        value = careEndDate,
+                        enabled = enabled && canEdit,
+                        onValueChange = { careEndDate = it },
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                OutlinedTextField(
+                    value = careContext,
+                    onValueChange = { careContext = it.take(1000) },
+                    enabled = enabled && canEdit,
+                    label = { Text("Konteks pengasuhan (opsional)") },
+                    supportingText = {
+                        Text(
+                            if (carePeriodValid) {
+                                "Contoh: diasuh kerabat selama orang tua bekerja di luar kota."
+                            } else {
+                                "Tanggal selesai tidak boleh sebelum tanggal mulai."
+                            }
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    minLines = 2
+                )
+            }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
             ) {
                 Button(
-                    enabled = enabled && canEdit && selectedChoice != null,
+                    enabled =
+                        enabled && canEdit && selectedChoice != null && carePeriodValid,
                     onClick = {
+                        val startDate = careStartDate.takeIf {
+                            isCareChoice && it.isNotBlank()
+                        }
+                        val endDate = careEndDate.takeIf {
+                            isCareChoice && it.isNotBlank()
+                        }
+                        val context = careContext.trim().takeIf {
+                            isCareChoice && it.isNotBlank()
+                        }
                         when (selectedChoice?.kind) {
-                            RelationChoiceKind.PARENT -> onAddParent(selectedChoice.meta)
-                            RelationChoiceKind.CHILD -> onAddChild(selectedChoice.meta)
+                            RelationChoiceKind.PARENT ->
+                                onAddParent(selectedChoice.meta, startDate, endDate, context)
+                            RelationChoiceKind.CHILD ->
+                                onAddChild(selectedChoice.meta, startDate, endDate, context)
                             RelationChoiceKind.SPOUSE -> onAddSpouse()
                             null -> Unit
                         }
@@ -1453,8 +1648,12 @@ private val relationshipChoices = listOf(
     RelationChoice("SPOUSE", "Pasangan", RelationChoiceKind.SPOUSE, "MARRIED"),
     RelationChoice("PARENT_ADOPTIVE", "Orang tua adopsi", RelationChoiceKind.PARENT, "ADOPTIVE"),
     RelationChoice("PARENT_STEP", "Orang tua tiri", RelationChoiceKind.PARENT, "STEP"),
+    RelationChoice("PARENT_FOSTER", "Pengasuh", RelationChoiceKind.PARENT, "FOSTER"),
+    RelationChoice("PARENT_GUARDIAN", "Wali keluarga", RelationChoiceKind.PARENT, "GUARDIAN"),
     RelationChoice("CHILD_ADOPTIVE", "Anak adopsi", RelationChoiceKind.CHILD, "ADOPTIVE"),
-    RelationChoice("CHILD_STEP", "Anak tiri", RelationChoiceKind.CHILD, "STEP")
+    RelationChoice("CHILD_STEP", "Anak tiri", RelationChoiceKind.CHILD, "STEP"),
+    RelationChoice("CHILD_FOSTER", "Anak asuh", RelationChoiceKind.CHILD, "FOSTER"),
+    RelationChoice("CHILD_GUARDIAN", "Dalam perwalian", RelationChoiceKind.CHILD, "GUARDIAN")
 )
 
 @Composable
@@ -1561,6 +1760,8 @@ internal fun mutationTypeLabel(type: String): String = when (type) {
     OfflineMutationType.UPDATE_LIFE_STATUS -> "Status kehidupan"
     OfflineMutationType.ADD_PARENT_CHILD -> "Hubungan orang tua–anak"
     OfflineMutationType.ADD_SPOUSE -> "Hubungan pasangan"
+    OfflineMutationType.CREATE_PERSON -> "Person baru"
+    OfflineMutationType.DELETE_RELATIONSHIP -> "Penghapusan hubungan"
     else -> "Perubahan person"
 }
 
@@ -1595,6 +1796,8 @@ internal fun relationshipMetaLabel(meta: String?): String = when (meta) {
     "BIOLOGICAL" -> "Biologis"
     "ADOPTIVE" -> "Adopsi"
     "STEP" -> "Tiri"
+    "FOSTER" -> "Pengasuhan sementara · bukan hubungan darah"
+    "GUARDIAN" -> "Perwalian keluarga · bukan penetapan wali legal"
     "MARRIED" -> "Menikah"
     "DIVORCED" -> "Bercerai"
     "WIDOWED" -> "Duda/janda"

@@ -27,4 +27,20 @@ class RelationshipPathLabelTest {
             relationshipPathLabel("SPOUSE", "MARRIED", "FORWARD", "Siti")
         )
     }
+
+    @Test
+    fun `care paths use explicit non-lineage labels`() {
+        assertEquals(
+            "pengasuh dari Budi",
+            relationshipPathLabel("PARENT_CHILD", "FOSTER", "FORWARD", "Budi")
+        )
+        assertEquals(
+            "anak asuh dari Ibu Asuh",
+            relationshipPathLabel("PARENT_CHILD", "FOSTER", "REVERSE", "Ibu Asuh")
+        )
+        assertEquals(
+            "wali keluarga dari Sari",
+            relationshipPathLabel("PARENT_CHILD", "GUARDIAN", "FORWARD", "Sari")
+        )
+    }
 }

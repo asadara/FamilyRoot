@@ -1439,3 +1439,66 @@ Pada 28 Juli 2026 alur startup memperoleh gate kompatibilitas sebelum pemulihan 
 Layar gate memakai satu status, alasan singkat, identitas versi, serta aksi
 `Perbarui aplikasi`, `Periksa lagi`, atau `Lanjutkan sementara` sesuai keadaan. Ia
 tidak memakai navigation shell karena pengguna belum dinyatakan aman untuk masuk.
+
+### 31.11 Lifecycle membership tahap awal
+
+Pada 28 Juli 2026 lifecycle anggota memperoleh baseline aman:
+
+- semua anggota dapat melihat nama tampilan, role, dan waktu bergabung tanpa email
+  akun;
+- `OWNER` dapat mengubah role anggota non-owner, mengeluarkan anggota, atau
+  mentransfer kepemilikan;
+- `ADMIN` hanya dapat mengelola `EDITOR` dan `VIEWER`, tidak dapat mengangkat atau
+  mengubah sesama `ADMIN`;
+- transfer kepemilikan adalah transaksi tunggal: target menjadi `OWNER`, pemilik lama
+  menjadi `ADMIN`, dan unique index menjaga hanya satu pemilik per silsilah;
+- pemilik tidak dapat keluar sebelum transfer, sedangkan anggota lain harus
+  menyelesaikan mutation lokal sebelum meninggalkan silsilah;
+- keluar atau dicabut akses tidak menghapus Person, relationship, atau histori
+  kontribusi;
+- aplikasi menghapus cache graph, mutation queue, dan URL foto untuk space yang tidak
+  lagi dapat diakses, kemudian kembali ke pemilih silsilah;
+- seluruh perubahan membership dicatat pada Aktivitas dan setiap tindakan berisiko
+  memakai penjelasan dampak serta konfirmasi eksplisit.
+
+### 31.12 Penutupan lifecycle, care relationship, dan claim kolektif
+
+Pada source pengembangan 28 Juli 2026, baseline berikut melengkapi keputusan di atas:
+
+- undangan aktif dapat dicabut dan riwayatnya tidak membuka kembali token;
+- undangan dapat ditargetkan ke email tertentu; mismatch tidak mengonsumsi token dan
+  alamat hanya ditampilkan dalam bentuk masking;
+- akun dapat dihapus setelah seluruh ownership ditransfer; session, membership,
+  identity, invitation, dan claim diputus, sedangkan Person dan riwayat keluarga
+  dipertahankan;
+- Family Space harus diarsipkan menjadi read-only sebelum soft-delete tersedia;
+  dampak dan kesempatan ekspor ditampilkan sebelum konfirmasi nama persis;
+- Foster dan Guardian menjadi relasi perawatan non-lineage dengan periode/konteks,
+  pola visual dan disclaimer tersendiri, tanpa inferensi parentage, partnership,
+  legalitas, atau ACL;
+- claim baru memerlukan dua konfirmasi OWNER/ADMIN berbeda dan tidak dapat
+  dikonfirmasi oleh pemilik claim sendiri.
+
+Claim yang telah berstatus verified sebelum aturan kolektif dipertahankan sebagai
+legacy; migration tidak menurunkan keputusan keluarga secara diam-diam. Enforcement
+minimum APK untuk model care tetap menjadi gerbang akhir rollout agar build lama
+tidak salah menafsirkan metadata relasi baru.
+
+### 31.13 Thread diskusi usulan
+
+Diskusi koreksi melekat pada record usulan, bukan menjadi percakapan sosial umum.
+Komentar bersifat immutable pada slice awal agar konteks keputusan tidak dapat
+diubah diam-diam; koreksi lanjutan dibuat sebagai komentar baru. Thread hanya dapat
+dibaca atau ditambah oleh anggota yang mempunyai akses privacy `FULL` ke person
+target. UI menampilkan nama akun tanpa email atau ID internal. Activity log mencatat
+bahwa komentar dibuat, tetapi tidak menggandakan isi komentar yang mungkin sensitif.
+
+### 31.14 Notifikasi tindakan dan riwayat pribadi
+
+Notifikasi utama adalah bukti status tindakan, bukan feed sosial. Android menampilkan
+feedback singkat di lapisan teratas untuk `Berhasil`, `Perlu perhatian`, `Gagal`, dan
+`Menunggu sinkronisasi`. Mutation yang mencapai backend menghasilkan receipt pribadi
+dengan copy generik; tidak ada nama Person, nilai fakta, email, token undangan, body
+request, atau error mentah pada preview. Riwayat berada di Profil akun, dapat ditandai
+dibaca, tidak terlihat oleh anggota lain, dan dihapus saat akun dihapus. Read request
+serta pemeliharaan status baca tidak menghasilkan receipt baru.

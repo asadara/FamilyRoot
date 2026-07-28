@@ -21,6 +21,8 @@ import { validateEnvironment } from './config/environment';
 import { createDatabaseOptions } from './config/database.config';
 import { AppCompatibilityModule } from './compatibility/app-compatibility.module';
 import { AppCompatibilityGuard } from './compatibility/app-compatibility.guard';
+import { NotificationsModule } from './notifications/notifications.module';
+import { MutationReceiptInterceptor } from './notifications/mutation-receipt.interceptor';
 
 @Module({
   imports: [
@@ -40,6 +42,7 @@ import { AppCompatibilityGuard } from './compatibility/app-compatibility.guard';
     ArchiveModule,
     CommonModule,
     AppCompatibilityModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [
@@ -49,6 +52,7 @@ import { AppCompatibilityGuard } from './compatibility/app-compatibility.guard';
     { provide: APP_GUARD, useExisting: SpaceMemberGuard },
     { provide: APP_FILTER, useClass: ApiExceptionFilter },
     { provide: APP_INTERCEPTOR, useClass: RequestObservabilityInterceptor },
+    { provide: APP_INTERCEPTOR, useClass: MutationReceiptInterceptor },
   ],
 })
 export class AppModule {}

@@ -8,6 +8,8 @@ import com.example.familytreeplatform.data.local.MIGRATION_1_2
 import com.example.familytreeplatform.data.local.MIGRATION_2_3
 import com.example.familytreeplatform.data.local.MIGRATION_3_4
 import com.example.familytreeplatform.data.local.MIGRATION_4_5
+import com.example.familytreeplatform.data.local.MIGRATION_5_6
+import com.example.familytreeplatform.data.local.MIGRATION_6_7
 
 class FamilyTreeApplication : Application() {
     lateinit var container: AppContainer
@@ -17,7 +19,14 @@ class FamilyTreeApplication : Application() {
         super.onCreate()
         SessionStore.initialize(this)
         val database = Room.databaseBuilder(this, FamilyTreeDatabase::class.java, "family-tree.db")
-            .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+            .addMigrations(
+                MIGRATION_1_2,
+                MIGRATION_2_3,
+                MIGRATION_3_4,
+                MIGRATION_4_5,
+                MIGRATION_5_6,
+                MIGRATION_6_7
+            )
             .build()
         container = AppContainer(
             database,
@@ -25,7 +34,8 @@ class FamilyTreeApplication : Application() {
                 personDao = database.personDao(),
                 mutationDao = database.offlineMutationDao(),
                 relationshipDao = database.relationshipDao(),
-                appContext = this
+                appContext = this,
+                database = database
             )
         )
     }

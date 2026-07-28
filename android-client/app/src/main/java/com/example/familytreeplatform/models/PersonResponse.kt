@@ -20,5 +20,8 @@ data class PersonResponse(
     val notes: String?,
     val version: Int,
     val createdAt: String,
-    val updatedAt: String
+    val updatedAt: String,
+    val visibility: String = "FAMILY",
+    val privacyAccess: String = "FULL",
+    val canManageVisibility: Boolean = false
 )

@@ -15,6 +15,9 @@ interface RelationshipDao {
     @Query("SELECT * FROM relationships WHERE spaceId = :spaceId ORDER BY createdAt DESC")
     suspend fun listBySpace(spaceId: String): List<CachedRelationshipEntity>
 
+    @Query("SELECT * FROM relationships WHERE relationshipId = :relationshipId LIMIT 1")
+    suspend fun getById(relationshipId: String): CachedRelationshipEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsert(item: CachedRelationshipEntity)
 
@@ -32,6 +35,9 @@ interface RelationshipDao {
 
     @Query("DELETE FROM relationships WHERE spaceId = :spaceId")
     suspend fun deleteBySpace(spaceId: String)
+
+    @Query("DELETE FROM relationships")
+    suspend fun deleteAll()
 
     @Transaction
     suspend fun replaceSynced(spaceId: String, items: List<CachedRelationshipEntity>) {

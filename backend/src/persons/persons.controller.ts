@@ -21,6 +21,7 @@ import { ActorUserId } from '../common/actor-user-id.decorator';
 import { SpaceRoles } from '../common/space-roles.decorator';
 import { PersonDeletionService } from './person-deletion.service';
 import { RequestPersonDeletionDto } from './dto/request-person-deletion.dto';
+import { UpdatePersonVisibilityDto } from './dto/update-person-visibility.dto';
 
 @Controller('persons')
 export class PersonsController {
@@ -31,11 +32,11 @@ export class PersonsController {
 
   @Get()
   @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
-  list(@Query('spaceId') spaceId: string) {
+  list(@ActorUserId() actorUserId: string, @Query('spaceId') spaceId: string) {
     if (!spaceId || !isUUID(spaceId)) {
       throw new BadRequestException('Invalid spaceId');
     }
-    return this.personsService.findBySpace(spaceId);
+    return this.personsService.findBySpace(spaceId, actorUserId);
   }
 
   @Post()
@@ -45,12 +46,50 @@ export class PersonsController {
   }
 
   @Get('duplicates')
-  @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
-  duplicates(@Query('spaceId') spaceId: string) {
+  @SpaceRoles('OWNER', 'ADMIN')
+  duplicates(
+    @ActorUserId() actorUserId: string,
+    @Query('spaceId') spaceId: string,
+  ) {
     if (!spaceId || !isUUID(spaceId)) {
       throw new BadRequestException('Invalid spaceId');
     }
-    return this.personsService.findDuplicateCandidates(spaceId);
+    return this.personsService.findDuplicateCandidates(spaceId, actorUserId);
+  }
+
+  @Get(':personId')
+  @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
+  detail(
+    @Param('personId') personId: string,
+    @ActorUserId() actorUserId: string,
+    @Query('spaceId') spaceId: string,
+  ) {
+    if (!spaceId || !isUUID(spaceId)) {
+      throw new BadRequestException('Invalid spaceId');
+    }
+    if (!isUUID(personId)) {
+      throw new BadRequestException('Invalid personId');
+    }
+    return this.personsService.findOneForUser(spaceId, personId, actorUserId);
+  }
+
+  @Patch(':personId/visibility')
+  @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
+  updateVisibility(
+    @Param('personId') personId: string,
+    @ActorUserId() actorUserId: string,
+    @Body() dto: UpdatePersonVisibilityDto,
+  ) {
+    if (!isUUID(personId)) {
+      throw new BadRequestException('Invalid personId');
+    }
+    return this.personsService.updateVisibility(
+      dto.spaceId,
+      personId,
+      dto.visibility,
+      actorUserId,
+      dto.expectedVersion,
+    );
   }
 
   @Post('merge')
@@ -77,6 +116,9 @@ export class PersonsController {
       dto.meta,
       actorUserId,
       dto.clientMutationId,
+      dto.startDate,
+      dto.endDate,
+      dto.careContext,
     );
   }
 
@@ -142,6 +184,7 @@ export class PersonsController {
   @SpaceRoles('OWNER', 'ADMIN', 'EDITOR')
   deletionImpact(
     @Param('personId') personId: string,
+    @ActorUserId() actorUserId: string,
     @Query('spaceId') spaceId: string,
   ) {
     if (!spaceId || !isUUID(spaceId)) {
@@ -150,7 +193,7 @@ export class PersonsController {
     if (!isUUID(personId)) {
       throw new BadRequestException('Invalid personId');
     }
-    return this.personDeletionService.getImpact(spaceId, personId);
+    return this.personDeletionService.getImpact(spaceId, personId, actorUserId);
   }
 
   @Post(':personId/deletion-requests')

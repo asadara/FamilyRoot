@@ -1,5 +1,7 @@
 package com.example.familytreeplatform.feature.graph
 
+import com.example.familytreeplatform.isCareRelationshipMeta
+import com.example.familytreeplatform.isLineageParentChild
 import com.example.familytreeplatform.models.ExportRelationship
 import com.example.familytreeplatform.models.PersonListItem
 
@@ -24,7 +26,7 @@ internal fun detectRelationshipIntegrityConflicts(
 
     relationshipsByPair.forEach { (pair, pairRelationships) ->
         val partnerships = pairRelationships.filter { it.type == "SPOUSE" }
-        val parentage = pairRelationships.filter { it.type == "PARENT_CHILD" }
+        val parentage = pairRelationships.filter { it.isLineageParentChild() }
         if (partnerships.isEmpty() || parentage.isEmpty()) return@forEach
 
         val recommended = (partnerships + parentage).maxWithOrNull(
@@ -108,17 +110,24 @@ internal fun validateProposedRelationship(
 
     requireNotNull(parentId)
     requireNotNull(childId)
-    if (relationships.any {
-            it.type == "SPOUSE" &&
-                canonicalPair(it.fromPersonId, it.toPersonId) == canonicalPair(parentId, childId)
-        }
-    ) return "Hubungan orang tua-anak tidak dapat dibuat karena kedua person sudah tercatat sebagai pasangan."
+    if (!isCareRelationshipMeta(meta)) {
+        if (relationships.any {
+                it.type == "SPOUSE" &&
+                    canonicalPair(it.fromPersonId, it.toPersonId) == canonicalPair(parentId, childId)
+            }
+        ) return "Hubungan orang tua-anak tidak dapat dibuat karena kedua person sudah tercatat sebagai pasangan."
+    }
     if (relationships.any {
             it.type == "PARENT_CHILD" &&
-                it.fromPersonId == parentId && it.toPersonId == childId
+                it.fromPersonId == parentId &&
+                it.toPersonId == childId &&
+                it.meta == meta
         }
     ) return "Hubungan orang tua-anak tersebut sudah tercatat."
-    if (hasDescendantPath(childId, parentId, relationships)) {
+    if (
+        !isCareRelationshipMeta(meta) &&
+        hasDescendantPath(childId, parentId, relationships)
+    ) {
         return "Hubungan ini membentuk lingkaran keturunan dan tidak dapat disimpan."
     }
     if (meta == "BIOLOGICAL") {
@@ -139,7 +148,7 @@ private fun hasDescendantPath(
 ): Boolean {
     val childrenByParent = relationships
         .asSequence()
-        .filter { it.type == "PARENT_CHILD" }
+        .filter { it.isLineageParentChild() }
         .groupBy({ it.fromPersonId }, { it.toPersonId })
     val queue = ArrayDeque<String>().apply { add(ancestorId) }
     val visited = mutableSetOf(ancestorId)

@@ -21,7 +21,10 @@ data class PersonEntity(
     val notes: String? = null,
     val nickName: String? = null,
     val deathPlace: String? = null,
-    @ColumnInfo(defaultValue = "1") val version: Int = 1
+    @ColumnInfo(defaultValue = "1") val version: Int = 1,
+    @ColumnInfo(defaultValue = "'FAMILY'") val visibility: String = "FAMILY",
+    @ColumnInfo(defaultValue = "'FULL'") val privacyAccess: String = "FULL",
+    @ColumnInfo(defaultValue = "0") val canManageVisibility: Boolean = false
 )
 
 fun PersonEntity.toModel() = PersonListItem(
@@ -36,7 +39,10 @@ fun PersonEntity.toModel() = PersonListItem(
     notes = notes,
     version = version,
     nickName = nickName,
-    deathPlace = deathPlace
+    deathPlace = deathPlace,
+    visibility = visibility,
+    privacyAccess = privacyAccess,
+    canManageVisibility = canManageVisibility
 )
 
 fun PersonListItem.toEntity(spaceId: String) = PersonEntity(
@@ -52,7 +58,10 @@ fun PersonListItem.toEntity(spaceId: String) = PersonEntity(
     notes = notes,
     nickName = nickName,
     deathPlace = deathPlace,
-    version = version
+    version = version,
+    visibility = visibility,
+    privacyAccess = privacyAccess,
+    canManageVisibility = canManageVisibility
 )
 
 fun PersonResponse.toEntity() = PersonEntity(
@@ -68,5 +77,8 @@ fun PersonResponse.toEntity() = PersonEntity(
     notes = notes,
     nickName = nickName,
     deathPlace = deathPlace,
-    version = version
+    version = version,
+    visibility = visibility,
+    privacyAccess = privacyAccess,
+    canManageVisibility = canManageVisibility
 )

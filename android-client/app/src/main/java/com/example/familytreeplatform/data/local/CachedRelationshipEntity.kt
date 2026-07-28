@@ -19,7 +19,8 @@ data class CachedRelationshipEntity(
     val startDate: String?,
     val endDate: String?,
     val createdAt: String,
-    val pendingMutationId: String?
+    val pendingMutationId: String?,
+    val careContext: String? = null
 )
 
 fun CachedRelationshipEntity.toModel() = RelationItem(
@@ -30,7 +31,8 @@ fun CachedRelationshipEntity.toModel() = RelationItem(
     meta = meta,
     createdAt = createdAt,
     startDate = startDate,
-    endDate = endDate
+    endDate = endDate,
+    careContext = careContext
 )
 
 fun RelationItem.toEntity(spaceId: String, pendingMutationId: String? = null) = CachedRelationshipEntity(
@@ -43,5 +45,6 @@ fun RelationItem.toEntity(spaceId: String, pendingMutationId: String? = null) = 
     startDate = startDate,
     endDate = endDate,
     createdAt = createdAt,
-    pendingMutationId = pendingMutationId
+    pendingMutationId = pendingMutationId,
+    careContext = careContext
 )

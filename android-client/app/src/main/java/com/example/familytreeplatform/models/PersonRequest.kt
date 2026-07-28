@@ -13,5 +13,6 @@ data class PersonRequest(
     val deathDate: String? = null,
     val deathPlace: String? = null,
     val idNumber: String? = null,
-    val lifeStatus: String? = null
+    val lifeStatus: String? = null,
+    val clientMutationId: String = java.util.UUID.randomUUID().toString()
 )

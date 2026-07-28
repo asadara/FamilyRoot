@@ -22,8 +22,8 @@ export class ClaimsController {
 
   @Get()
   @SpaceRoles('OWNER', 'ADMIN')
-  list(@Query('spaceId') spaceId: string) {
-    return this.claimsService.list(spaceId);
+  list(@ActorUserId() actorUserId: string, @Query('spaceId') spaceId: string) {
+    return this.claimsService.list(spaceId, actorUserId);
   }
 
   @Post('verify')
