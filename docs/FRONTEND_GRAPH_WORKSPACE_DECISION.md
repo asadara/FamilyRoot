@@ -1410,3 +1410,32 @@ Pada 28 Juli 2026 alur penghapusan person ditutup dengan aturan berikut:
 Aturan ini merupakan baseline awal. Hak person hidup untuk privasi, anonimisasi, atau
 placeholder struktural tetap dibahas pada privacy model terpisah dan tidak boleh
 disamakan dengan penghapusan record administratif oleh pengelola.
+
+### 31.10 Gate kompatibilitas APK dan backend
+
+Pada 28 Juli 2026 alur startup memperoleh gate kompatibilitas sebelum pemulihan sesi:
+
+- urutan versi ditentukan oleh integer `versionCode`, bukan label `versionName`;
+- kompatibilitas data ditentukan terpisah oleh integer `apiContractVersion`;
+- policy mempunyai channel `DEBUG`, `PILOT`, atau `PRODUCTION`, versi minimum, versi
+  terbaru, dan URL pembaruan HTTPS opsional;
+- build di bawah minimum, lebih baru dari backend, atau berbeda kontrak API diblokir
+  pada satu layar status penuh sebelum login/workspace;
+- build lama yang masih berada dalam rentang dukungan hanya memperoleh warning dan
+  dapat dilanjutkan untuk proses aplikasi saat itu;
+- aplikasi memeriksa saat startup dan ketika activity kembali aktif;
+- hasil kompatibel dapat dipakai dari cache maksimal 24 jam, tetapi cache harus cocok
+  dengan version code, kontrak API, dan channel build yang sedang berjalan;
+- tanpa jaringan dan tanpa cache valid, aplikasi tetap tertutup untuk mencegah mutasi
+  dikirim ke backend yang belum terverifikasi;
+- admin policy adalah operator sistem global melalui allowlist server, bukan role
+  `OWNER/ADMIN` pada satu silsilah;
+- setiap request APK baru membawa header build/contract/channel. Enforcement backend
+  dinonaktifkan selama rollout, lalu dapat diaktifkan agar APK legacy tanpa gate juga
+  menerima `426 UPGRADE_REQUIRED`;
+- urutan rollout wajib backend dahulu, APK berikutnya, lalu minimum version dinaikkan
+  setelah masa transisi.
+
+Layar gate memakai satu status, alasan singkat, identitas versi, serta aksi
+`Perbarui aplikasi`, `Periksa lagi`, atau `Lanjutkan sementara` sesuai keadaan. Ia
+tidak memakai navigation shell karena pengguna belum dinyatakan aman untuk masuk.

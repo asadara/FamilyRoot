@@ -34,6 +34,15 @@ $env:FAMILY_TREE_GOOGLE_WEB_CLIENT_ID='<Web application Client ID>'
 Remove-Item Env:FAMILY_TREE_GOOGLE_WEB_CLIENT_ID
 ```
 
+Setiap build membawa `VERSION_CODE`, `VERSION_NAME`, `API_CONTRACT_VERSION`, dan
+`RELEASE_CHANNEL`. Aplikasi memeriksa endpoint kompatibilitas publik sebelum
+memulihkan sesi. Build pilot memakai channel `PILOT`, debug memakai `DEBUG`, dan
+release memakai `PRODUCTION`. Naikkan `versionCode` untuk setiap APK baru; naikkan
+`API_CONTRACT_VERSION` hanya ketika kontrak APK–backend memang tidak kompatibel.
+Semua request juga membawa header versi agar backend dapat menolak APK lama setelah
+enforcement diaktifkan. Baseline gate pertama adalah `versionCode 2`,
+`versionName 0.1.1-beta`.
+
 Panduan Google Auth Platform, package/SHA-1 pilot, migration, dan acceptance test
 berada di `../docs/GOOGLE_SIGN_IN_SETUP.md`.
 

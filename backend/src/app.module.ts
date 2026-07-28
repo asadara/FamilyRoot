@@ -19,6 +19,8 @@ import { ApiExceptionFilter } from './common/api-exception.filter';
 import { RequestObservabilityInterceptor } from './common/request-observability.interceptor';
 import { validateEnvironment } from './config/environment';
 import { createDatabaseOptions } from './config/database.config';
+import { AppCompatibilityModule } from './compatibility/app-compatibility.module';
+import { AppCompatibilityGuard } from './compatibility/app-compatibility.guard';
 
 @Module({
   imports: [
@@ -37,10 +39,12 @@ import { createDatabaseOptions } from './config/database.config';
     AuthModule,
     ArchiveModule,
     CommonModule,
+    AppCompatibilityModule,
   ],
   controllers: [AppController],
   providers: [
     AppService,
+    { provide: APP_GUARD, useClass: AppCompatibilityGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useExisting: SpaceMemberGuard },
     { provide: APP_FILTER, useClass: ApiExceptionFilter },

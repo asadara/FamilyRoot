@@ -18,6 +18,7 @@ import {
 describe('Phase 1 security contract (e2e)', () => {
   let app: INestApplication<App>;
   let ownerToken: string;
+  let ownerId: string;
   let viewerToken: string;
   let viewerId: string;
   let editorToken: string;
@@ -92,7 +93,10 @@ describe('Phase 1 security contract (e2e)', () => {
     await app.init();
   });
 
-  afterAll(async () => app.close());
+  afterAll(async () => {
+    delete process.env.SYSTEM_ADMIN_USER_IDS;
+    await app.close();
+  });
 
   it('keeps health public but protects family data', async () => {
     const health = await request(app.getHttpServer())
@@ -107,6 +111,29 @@ describe('Phase 1 security contract (e2e)', () => {
       .expect(401);
   });
 
+  it('publishes a safe default Android compatibility policy', async () => {
+    await request(app.getHttpServer())
+      .get('/app-compatibility/android')
+      .query({
+        versionCode: 1,
+        versionName: '0.1.0-beta',
+        apiContractVersion: 1,
+        channel: 'PILOT',
+      })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(
+          expect.objectContaining({
+            status: 'COMPATIBLE',
+            blocking: false,
+            minimumSupportedVersionCode: 1,
+            latestVersionCode: 1,
+            backendApiContractVersion: 1,
+          }),
+        );
+      });
+  });
+
   it('registers authenticated users', async () => {
     const owner = await request(app.getHttpServer())
       .post('/auth/register')
@@ -117,6 +144,8 @@ describe('Phase 1 security contract (e2e)', () => {
       })
       .expect(201);
     ownerToken = owner.body.accessToken;
+    ownerId = owner.body.user.userId;
+    process.env.SYSTEM_ADMIN_USER_IDS = ownerId;
 
     const viewer = await request(app.getHttpServer())
       .post('/auth/register')
@@ -170,6 +199,80 @@ describe('Phase 1 security contract (e2e)', () => {
       })
       .expect(401)
       .expect(({ body }) => expect(body.code).toBe('UNAUTHENTICATED'));
+  });
+
+  it('allows only a system administrator to change Android compatibility policy', async () => {
+    const policy = {
+      channel: 'PILOT',
+      minimumSupportedVersionCode: 1,
+      latestVersionCode: 2,
+      apiContractVersion: 1,
+      enforcementEnabled: false,
+      updateUrl: 'https://familyroot.example.test/android',
+      message: 'Versi pilot terbaru sudah tersedia.',
+    };
+
+    await request(app.getHttpServer())
+      .put('/app-compatibility/android/policy')
+      .set('Authorization', `Bearer ${viewerToken}`)
+      .send(policy)
+      .expect(403);
+
+    await request(app.getHttpServer())
+      .put('/app-compatibility/android/policy')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(policy)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body).toEqual(
+          expect.objectContaining({
+            channel: 'PILOT',
+            minimumSupportedVersionCode: 1,
+            latestVersionCode: 2,
+            apiContractVersion: 1,
+            updatedByUserId: ownerId,
+          }),
+        );
+      });
+
+    await request(app.getHttpServer())
+      .get('/app-compatibility/android')
+      .query({
+        versionCode: 1,
+        apiContractVersion: 1,
+        channel: 'PILOT',
+      })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.status).toBe('UPDATE_AVAILABLE');
+        expect(body.blocking).toBe(false);
+      });
+
+    await request(app.getHttpServer())
+      .get('/app-compatibility/android')
+      .query({
+        versionCode: 3,
+        apiContractVersion: 1,
+        channel: 'PILOT',
+      })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.status).toBe('APP_TOO_NEW');
+        expect(body.blocking).toBe(true);
+      });
+
+    await request(app.getHttpServer())
+      .get('/app-compatibility/android')
+      .query({
+        versionCode: 2,
+        apiContractVersion: 2,
+        channel: 'PILOT',
+      })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.status).toBe('API_CONTRACT_MISMATCH');
+        expect(body.blocking).toBe(true);
+      });
   });
 
   it('rotates refresh tokens, detects replay, and revokes logout sessions', async () => {
@@ -934,5 +1037,43 @@ describe('Phase 1 security contract (e2e)', () => {
           ]),
         ),
       );
+  });
+
+  it('can enforce version headers after a staged rollout', async () => {
+    await request(app.getHttpServer())
+      .put('/app-compatibility/android/policy')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        channel: 'PILOT',
+        minimumSupportedVersionCode: 2,
+        latestVersionCode: 2,
+        apiContractVersion: 1,
+        enforcementEnabled: true,
+        updateUrl: 'https://familyroot.example.test/android',
+        message: 'Perbarui aplikasi untuk melanjutkan.',
+      })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .get('/spaces')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(426)
+      .expect(({ body }) => expect(body.code).toBe('UPGRADE_REQUIRED'));
+
+    await request(app.getHttpServer())
+      .get('/spaces')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('X-App-Version-Code', '1')
+      .set('X-Api-Contract-Version', '1')
+      .set('X-Release-Channel', 'PILOT')
+      .expect(426);
+
+    await request(app.getHttpServer())
+      .get('/spaces')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .set('X-App-Version-Code', '2')
+      .set('X-Api-Contract-Version', '1')
+      .set('X-Release-Channel', 'PILOT')
+      .expect(200);
   });
 });

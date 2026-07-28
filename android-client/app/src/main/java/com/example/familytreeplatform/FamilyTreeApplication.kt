@@ -8,13 +8,8 @@ import com.example.familytreeplatform.data.local.MIGRATION_1_2
 import com.example.familytreeplatform.data.local.MIGRATION_2_3
 import com.example.familytreeplatform.data.local.MIGRATION_3_4
 import com.example.familytreeplatform.data.local.MIGRATION_4_5
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
 
 class FamilyTreeApplication : Application() {
-    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     lateinit var container: AppContainer
         private set
 
@@ -33,9 +28,6 @@ class FamilyTreeApplication : Application() {
                 appContext = this
             )
         )
-        applicationScope.launch {
-            container.personRepository.restoreSession()
-        }
     }
 }
 

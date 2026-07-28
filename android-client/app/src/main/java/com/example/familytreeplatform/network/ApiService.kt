@@ -59,9 +59,18 @@ import com.example.familytreeplatform.models.DeletePersonRequest
 import com.example.familytreeplatform.models.DeletePersonResponse
 import com.example.familytreeplatform.models.PersonDeletionImpact
 import com.example.familytreeplatform.models.RequestPersonDeletionRequest
+import com.example.familytreeplatform.models.AppCompatibilityResponse
 import retrofit2.http.HTTP
 
 interface ApiService {
+    @GET("app-compatibility/android")
+    suspend fun checkAppCompatibility(
+        @Query("versionCode") versionCode: Int,
+        @Query("versionName") versionName: String,
+        @Query("apiContractVersion") apiContractVersion: Int,
+        @Query("channel") channel: String
+    ): Response<AppCompatibilityResponse>
+
     @POST("auth/login")
     suspend fun login(@Body request: LoginRequest): Response<AuthResponse>
 

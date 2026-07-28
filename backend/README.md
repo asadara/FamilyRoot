@@ -24,6 +24,17 @@ npm run migration:show
 npm run migration:run
 ```
 
+Android release compatibility is served publicly at
+`GET /app-compatibility/android`. Configure the default contract/range with
+`ANDROID_API_CONTRACT_VERSION` and channel-specific
+`ANDROID_<CHANNEL>_MIN_SUPPORTED_VERSION_CODE`,
+`ANDROID_<CHANNEL>_LATEST_VERSION_CODE`, and optional HTTPS
+`ANDROID_<CHANNEL>_UPDATE_URL`. Keep
+`ANDROID_<CHANNEL>_ENFORCEMENT_ENABLED=false` until the gate-enabled APK has been
+distributed. Database policy overrides are audited and may only be
+written by authenticated user IDs in `SYSTEM_ADMIN_USER_IDS`; this is a global
+operator allowlist, not a Family Space role.
+
 The production container and the complete Cloud Run + Supabase Free pilot procedure
 are documented in [`../docs/STEP7_CLOUD_PILOT_RUNBOOK.md`](../docs/STEP7_CLOUD_PILOT_RUNBOOK.md).
 

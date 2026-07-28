@@ -76,6 +76,25 @@ Bukti implementasi:
 - kontrak role/integrity diuji di `backend/test/app.e2e-spec.ts`; helper role diuji
   oleh unit test Android dan test cache DAO ditambahkan untuk connected test berikutnya.
 
+### P1b — Gate kompatibilitas APK/backend (`DONE`, 28 Juli 2026)
+
+Backend menyediakan policy per channel dengan minimum/latest version code, API
+contract version, update URL, allowlist admin sistem, dan audit perubahan. Android
+memeriksa policy sebelum pemulihan sesi dan saat resume, membedakan warning update
+yang masih kompatibel dari hard block, serta memakai cache maksimal 24 jam yang
+terikat pada build/contract/channel yang sama. Request gate-enabled membawa header
+versi; enforcement backend dapat diaktifkan setelah rollout untuk menolak APK legacy
+atau inkompatibel dengan `426 UPGRADE_REQUIRED`.
+
+Bukti implementasi:
+
+- `backend/src/compatibility/`
+- `backend/src/database/migrations/1753401600000-AddAppReleasePolicies.ts`
+- Android `models/AppCompatibilityModels.kt`, `feature/compatibility/`, dan gate di
+  `navigation/AppNavigation.kt`
+- kontrak status/admin diuji lewat backend e2e dan keputusan gate diuji lewat unit
+  test Android.
+
 ### P2 — Lifecycle akun, anggota, undangan, dan silsilah (`ACTIVE`)
 
 Belum tersedia endpoint dan UX lengkap untuk:

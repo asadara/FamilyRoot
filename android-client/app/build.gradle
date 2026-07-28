@@ -20,8 +20,8 @@ def googleWebClientId = providers.gradleProperty("familyTreeGoogleWebClientId")
     .orElse(providers.environmentVariable("FAMILY_TREE_GOOGLE_WEB_CLIENT_ID"))
     .orElse("")
     .get()
-def configuredVersionCode = providers.gradleProperty("familyTreeVersionCode").orElse("1").get().toInteger()
-def configuredVersionName = providers.gradleProperty("familyTreeVersionName").orElse("0.1.0-beta").get()
+def configuredVersionCode = providers.gradleProperty("familyTreeVersionCode").orElse("2").get().toInteger()
+def configuredVersionName = providers.gradleProperty("familyTreeVersionName").orElse("0.1.1-beta").get()
 def releaseStorePath = System.getenv("FAMILY_TREE_RELEASE_STORE_FILE")
 def releaseStorePassword = System.getenv("FAMILY_TREE_RELEASE_STORE_PASSWORD")
 def releaseKeyAlias = System.getenv("FAMILY_TREE_RELEASE_KEY_ALIAS")
@@ -41,6 +41,7 @@ android {
         versionName configuredVersionName
 
         buildConfigField "String", "GOOGLE_WEB_CLIENT_ID", "\"${googleWebClientId}\""
+        buildConfigField "int", "API_CONTRACT_VERSION", "1"
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -59,14 +60,17 @@ android {
     buildTypes {
         debug {
             buildConfigField "String", "API_BASE_URL", "\"${debugApiBaseUrl}\""
+            buildConfigField "String", "RELEASE_CHANNEL", "\"DEBUG\""
         }
         pilot {
             initWith debug
             matchingFallbacks = ['debug']
             buildConfigField "String", "API_BASE_URL", "\"${pilotApiBaseUrl}\""
+            buildConfigField "String", "RELEASE_CHANNEL", "\"PILOT\""
         }
         release {
             buildConfigField "String", "API_BASE_URL", "\"${releaseApiBaseUrl}\""
+            buildConfigField "String", "RELEASE_CHANNEL", "\"PRODUCTION\""
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'

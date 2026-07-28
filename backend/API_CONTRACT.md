@@ -8,6 +8,38 @@
 - Every response includes `X-Request-Id`. A safe caller-supplied value is preserved; otherwise the server creates a UUID.
 - Structured request events contain request ID, method, path without query, status, and duration. They deliberately exclude request/response bodies, query values, authentication data, user IDs, and family values.
 
+## Android release compatibility
+
+- `GET /app-compatibility/android` is public so it can run before login. Required
+  query values are `versionCode`, `apiContractVersion`, and `channel`; `versionName`
+  is informational.
+- Channels are `DEBUG`, `PILOT`, and `PRODUCTION`. Integer `versionCode` and
+  `apiContractVersion` are authoritative; display `versionName` is never used for
+  ordering.
+- The response status is one of `COMPATIBLE`, `UPDATE_AVAILABLE`, `APP_TOO_OLD`,
+  `APP_TOO_NEW`, or `API_CONTRACT_MISMATCH`. Only the first two are non-blocking.
+- `PUT /app-compatibility/android/policy` requires a valid access token and a user ID
+  listed in server-only `SYSTEM_ADMIN_USER_IDS`. A Family Space OWNER/ADMIN is not a
+  system administrator merely because of that workspace role.
+- Policy updates require `minimumSupportedVersionCode <= latestVersionCode`, a
+  positive API contract version, `enforcementEnabled`, and an optional HTTPS update
+  URL. Every update is written to `app_release_policy_audit`.
+- When no database policy exists, the backend uses the channel-specific environment
+  defaults. This preserves build `1`, API contract `1`, unless explicitly configured.
+- Android checks before session restoration and again on activity resume. A compatible
+  result may be cached for at most 24 hours and only for the exact combination of
+  version code, API contract, and channel.
+- `UPDATE_AVAILABLE` presents a warning that may be acknowledged for the current app
+  process. All other incompatibility statuses, or an unverifiable first launch without
+  a valid cache, prevent access to login and family data.
+- New clients attach `X-App-Version-Code`, `X-Api-Contract-Version`, and
+  `X-Release-Channel` to every request. Server enforcement remains disabled during
+  rollout; after it is enabled, missing or incompatible headers return
+  `426 UPGRADE_REQUIRED`. This prevents legacy clients from bypassing the UI gate.
+- Production/pilot deployments should restrict accepted client channels with
+  `ANDROID_ACCEPTED_RELEASE_CHANNELS` (for example `PILOT`) so a different channel
+  header cannot bypass the active policy.
+
 ## Authentication
 
 - `POST /auth/register` — public; accepts `email`, `displayName`, and a password of at least 10 characters.

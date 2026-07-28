@@ -776,6 +776,21 @@ yang sudah selesai:
 > `lintDebug`, dan `assemblePilot` Android. Migration/backend baru belum dideploy dan
 > APK pilot baru belum dipasang ke tablet pada snapshot ini agar build stabil yang
 > sedang dipakai pengguna tidak tergantikan tanpa persetujuan.
+> Pada 28 Juli 2026 gate kompatibilitas APK/backend ditambahkan sebagai perubahan
+> berikutnya. Backend menyimpan policy per `DEBUG/PILOT/PRODUCTION`, membedakan
+> `versionCode` dari `apiContractVersion`, dan hanya menerima perubahan policy dari
+> user ID pada `SYSTEM_ADMIN_USER_IDS`, dengan audit terpisah. Android memeriksa
+> sebelum restore session dan saat resume; update yang masih didukung memberi warning,
+> sedangkan APK terlalu lama/terlalu baru/beda kontrak atau first-check yang tidak
+> dapat diverifikasi menjadi hard block. Cache maksimum 24 jam hanya berlaku untuk
+> build, contract, dan channel yang sama. Migration/backend ini belum dideploy dan
+> APK hasilnya belum dipasang ke tablet pada snapshot dokumentasi ini. Gate pertama
+> memakai `versionCode 2`, `versionName 0.1.1-beta`; seluruh request membawa header
+> build/contract/channel. Enforcement backend default `false` agar APK tablet build 1
+> tidak terkunci sebelum rollout, lalu dapat diaktifkan untuk menghasilkan
+> `426 UPGRADE_REQUIRED` pada client legacy atau inkompatibel. Quality gate lokal
+> lulus: backend lint/build, 18 unit test, 14 e2e test; Android unit test,
+> `lintDebug`, dan `assemblePilot`.
 > Daftar di bawah tetap berguna sebagai konteks awal, tetapi keputusan terbaru dalam
 > kedua risalah tersebut mengalahkan item agenda yang sudah diselesaikan.
 

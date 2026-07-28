@@ -9,12 +9,18 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import android.content.Intent
+import android.net.Uri
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -46,6 +52,9 @@ import com.example.familytreeplatform.feature.support.HelpScreen
 import com.example.familytreeplatform.data.local.OfflineMutationStatus
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.flowOf
+import com.example.familytreeplatform.feature.compatibility.CompatibilityGateScreen
+import com.example.familytreeplatform.feature.compatibility.compatibilityRequiresGate
+import com.example.familytreeplatform.models.AppCompatibilityState
 
 object Routes {
     const val AUTH = "auth"
@@ -66,6 +75,47 @@ object Routes {
 fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostController = rememberNavController()) {
     val context = LocalContext.current
     val repository = (context.applicationContext as FamilyTreeApplication).container.personRepository
+    val scope = rememberCoroutineScope()
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val compatibility by repository.compatibilityState.collectAsState(
+        initial = AppCompatibilityState()
+    )
+
+    LaunchedEffect(repository) {
+        repository.checkAppCompatibility()
+    }
+    DisposableEffect(lifecycleOwner, repository) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                scope.launch { repository.checkAppCompatibility() }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val showCompatibilityGate = compatibilityRequiresGate(compatibility)
+    if (showCompatibilityGate) {
+        CompatibilityGateScreen(
+            state = compatibility,
+            onRetry = {
+                scope.launch { repository.checkAppCompatibility(force = true) }
+            },
+            onContinue = repository::acknowledgeCompatibilityUpdate,
+            onOpenUpdate = { url ->
+                runCatching {
+                    context.startActivity(
+                        Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                    )
+                }
+            },
+            modifier = modifier
+        )
+        return
+    }
+
     val token by SessionStore.accessToken.collectAsState()
     val spaceId by SessionStore.activeSpaceId.collectAsState()
     val spaceName by SessionStore.activeSpaceName.collectAsState()
@@ -75,7 +125,9 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
     val userId by SessionStore.userId.collectAsState()
     val restoring by SessionStore.restoring.collectAsState()
     val hasPersistedSession by SessionStore.hasPersistedSession.collectAsState()
-    val scope = rememberCoroutineScope()
+    LaunchedEffect(repository) {
+        repository.restoreSession()
+    }
     val shellPeopleFlow = remember(spaceId) {
         spaceId?.let(repository::observePersons) ?: flowOf(emptyList())
     }

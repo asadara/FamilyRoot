@@ -45,6 +45,9 @@ import com.example.familytreeplatform.models.DeletePersonResponse
 import com.example.familytreeplatform.models.PersonDeletionBlocker
 import com.example.familytreeplatform.models.PersonDeletionImpact
 import com.example.familytreeplatform.models.RequestPersonDeletionRequest
+import com.example.familytreeplatform.models.AppCompatibilityResponse
+import com.example.familytreeplatform.models.AppCompatibilityState
+import com.example.familytreeplatform.models.CompatibilityGateStatus
 import com.example.familytreeplatform.network.ApiService
 import com.example.familytreeplatform.network.ApiException
 import com.google.gson.Gson
@@ -95,6 +98,8 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -121,6 +126,21 @@ class PersonRepository(
     private val refreshLock = Any()
     private val profilePhotoUrlsBySpace =
         MutableStateFlow<Map<String, Map<String, String>>>(emptyMap())
+    private val compatibilityStateFlow = MutableStateFlow(AppCompatibilityState())
+    val compatibilityState: Flow<AppCompatibilityState> = compatibilityStateFlow
+    private val compatibilityMutex = Mutex()
+    private var lastCompatibilityCheckAt = 0L
+
+    private companion object {
+        const val COMPATIBILITY_PREFS = "app_compatibility"
+        const val COMPATIBILITY_CACHE_JSON = "policy_json"
+        const val COMPATIBILITY_CACHE_TIME = "policy_time"
+        const val COMPATIBILITY_CACHE_VERSION_CODE = "version_code"
+        const val COMPATIBILITY_CACHE_API_CONTRACT = "api_contract"
+        const val COMPATIBILITY_CACHE_CHANNEL = "release_channel"
+        const val COMPATIBILITY_CACHE_MAX_AGE_MS = 24L * 60L * 60L * 1000L
+        const val COMPATIBILITY_CHECK_THROTTLE_MS = 30L * 1000L
+    }
 
     init {
         val logging = HttpLoggingInterceptor().apply {
@@ -140,8 +160,17 @@ class PersonRepository(
             }
             chain.proceed(request)
         }
+        val compatibilityHeaders = Interceptor { chain ->
+            val request = chain.request().newBuilder()
+                .header("X-App-Version-Code", BuildConfig.VERSION_CODE.toString())
+                .header("X-Api-Contract-Version", BuildConfig.API_CONTRACT_VERSION.toString())
+                .header("X-Release-Channel", BuildConfig.RELEASE_CHANNEL)
+                .build()
+            chain.proceed(request)
+        }
         val sessionClient = OkHttpClient.Builder()
             .addInterceptor(logging)
+            .addInterceptor(compatibilityHeaders)
             .build()
         sessionApiService = Retrofit.Builder()
             .baseUrl(Config.BASE_URL)
@@ -151,6 +180,7 @@ class PersonRepository(
             .create(ApiService::class.java)
         val client = OkHttpClient.Builder()
             .addInterceptor(logging)
+            .addInterceptor(compatibilityHeaders)
             .addInterceptor(actorHeader)
             .authenticator(Authenticator { _, response -> refreshRequest(response) })
             .build()
@@ -170,6 +200,117 @@ class PersonRepository(
 
     suspend fun register(email: String, displayName: String, password: String): Result<AuthResponse> = apiResult {
         apiService.register(RegisterRequest(email, displayName, password))
+    }
+
+    suspend fun checkAppCompatibility(force: Boolean = false) {
+        compatibilityMutex.withLock {
+            val now = System.currentTimeMillis()
+            if (
+                !force &&
+                now - lastCompatibilityCheckAt < COMPATIBILITY_CHECK_THROTTLE_MS &&
+                compatibilityStateFlow.value.status != CompatibilityGateStatus.CHECKING
+            ) {
+                return
+            }
+            val previous = compatibilityStateFlow.value
+            if (previous.status == CompatibilityGateStatus.UNAVAILABLE || force) {
+                compatibilityStateFlow.value = previous.copy(
+                    status = CompatibilityGateStatus.CHECKING,
+                    error = null
+                )
+            }
+
+            val result = apiResult {
+                sessionApiService.checkAppCompatibility(
+                    versionCode = BuildConfig.VERSION_CODE,
+                    versionName = BuildConfig.VERSION_NAME,
+                    apiContractVersion = BuildConfig.API_CONTRACT_VERSION,
+                    channel = BuildConfig.RELEASE_CHANNEL
+                )
+            }
+            val response = result.getOrNull()
+            if (response != null) {
+                lastCompatibilityCheckAt = now
+                saveCompatibilityCache(response, now)
+                compatibilityStateFlow.value = response.toCompatibilityState(
+                    usingCache = false,
+                    warningAcknowledged = previous.updateWarningAcknowledged
+                )
+                return
+            }
+
+            val cached = readCompatibilityCache(now)
+            compatibilityStateFlow.value = if (cached != null) {
+                cached.toCompatibilityState(
+                    usingCache = true,
+                    warningAcknowledged = previous.updateWarningAcknowledged
+                )
+            } else {
+                AppCompatibilityState(
+                    status = CompatibilityGateStatus.UNAVAILABLE,
+                    error = result.exceptionOrNull()?.message
+                )
+            }
+        }
+    }
+
+    fun acknowledgeCompatibilityUpdate() {
+        compatibilityStateFlow.update { current ->
+            current.copy(updateWarningAcknowledged = true)
+        }
+    }
+
+    private fun AppCompatibilityResponse.toCompatibilityState(
+        usingCache: Boolean,
+        warningAcknowledged: Boolean
+    ): AppCompatibilityState {
+        val gateStatus = when {
+            blocking -> CompatibilityGateStatus.BLOCKED
+            status == "UPDATE_AVAILABLE" -> CompatibilityGateStatus.UPDATE_AVAILABLE
+            else -> CompatibilityGateStatus.COMPATIBLE
+        }
+        return AppCompatibilityState(
+            status = gateStatus,
+            response = this,
+            usingCachedPolicy = usingCache,
+            updateWarningAcknowledged = warningAcknowledged
+        )
+    }
+
+    private fun saveCompatibilityCache(response: AppCompatibilityResponse, checkedAt: Long) {
+        appContext
+            ?.getSharedPreferences(COMPATIBILITY_PREFS, Context.MODE_PRIVATE)
+            ?.edit()
+            ?.putString(COMPATIBILITY_CACHE_JSON, Gson().toJson(response))
+            ?.putLong(COMPATIBILITY_CACHE_TIME, checkedAt)
+            ?.putInt(COMPATIBILITY_CACHE_VERSION_CODE, BuildConfig.VERSION_CODE)
+            ?.putInt(COMPATIBILITY_CACHE_API_CONTRACT, BuildConfig.API_CONTRACT_VERSION)
+            ?.putString(COMPATIBILITY_CACHE_CHANNEL, BuildConfig.RELEASE_CHANNEL)
+            ?.apply()
+    }
+
+    private fun readCompatibilityCache(now: Long): AppCompatibilityResponse? {
+        val preferences = appContext
+            ?.getSharedPreferences(COMPATIBILITY_PREFS, Context.MODE_PRIVATE)
+            ?: return null
+        val checkedAt = preferences.getLong(COMPATIBILITY_CACHE_TIME, 0L)
+        val matchesCurrentBuild =
+            preferences.getInt(COMPATIBILITY_CACHE_VERSION_CODE, -1) == BuildConfig.VERSION_CODE &&
+                preferences.getInt(COMPATIBILITY_CACHE_API_CONTRACT, -1) ==
+                BuildConfig.API_CONTRACT_VERSION &&
+                preferences.getString(COMPATIBILITY_CACHE_CHANNEL, null) ==
+                BuildConfig.RELEASE_CHANNEL
+        if (
+            !matchesCurrentBuild ||
+            checkedAt <= 0L ||
+            now - checkedAt > COMPATIBILITY_CACHE_MAX_AGE_MS
+        ) {
+            return null
+        }
+        val json = preferences.getString(COMPATIBILITY_CACHE_JSON, null) ?: return null
+        return runCatching {
+            Gson().fromJson(json, AppCompatibilityResponse::class.java)
+        }.getOrNull()
     }
 
     suspend fun loginWithGoogle(idToken: String): Result<AuthResponse> = apiResult {

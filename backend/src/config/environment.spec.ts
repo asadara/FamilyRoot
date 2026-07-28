@@ -73,4 +73,25 @@ describe('environment validation', () => {
       }),
     ).toThrow('SUPABASE_URL is required in production');
   });
+
+  it('rejects malformed system administrator IDs', () => {
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: 'development',
+        SYSTEM_ADMIN_USER_IDS: 'not-a-uuid',
+      }),
+    ).toThrow('SYSTEM_ADMIN_USER_IDS must contain comma-separated UUIDs');
+  });
+
+  it('rejects an inverted Android release range', () => {
+    expect(() =>
+      validateEnvironment({
+        NODE_ENV: 'development',
+        ANDROID_PILOT_MIN_SUPPORTED_VERSION_CODE: '3',
+        ANDROID_PILOT_LATEST_VERSION_CODE: '2',
+      }),
+    ).toThrow(
+      'ANDROID_PILOT_LATEST_VERSION_CODE must be greater than or equal to ANDROID_PILOT_MIN_SUPPORTED_VERSION_CODE',
+    );
+  });
 });
