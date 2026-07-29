@@ -669,7 +669,7 @@ fun GraphScreen(
                                 point = PointDp(
                                     if (horizontalSide < 0) tile.rect.left - 22.dp
                                     else tile.rect.right + 22.dp,
-                                    tile.rect.top + 56.dp
+                                    tile.rect.top + 22.dp
                                 ),
                                 expanded = tile.id in expandedPartnershipPersonIds,
                                 horizontalSide = horizontalSide
@@ -1163,12 +1163,30 @@ fun GraphScreen(
                         node.spouseLine()?.let { (a, b) ->
                             val highlighted = showRelationshipPathInGraph &&
                                 node.tiles().count { it.id in pathPersonIds } >= 2
+                            val start = Offset(
+                                with(density) { a.x.toPx() },
+                                with(density) { a.y.toPx() }
+                            )
+                            val end = Offset(
+                                with(density) { b.x.toPx() },
+                                with(density) { b.y.toPx() }
+                            )
                             val center = Offset(
                                 with(density) { ((a.x + b.x) / 2f).toPx() },
                                 with(density) { ((a.y + b.y) / 2f).toPx() }
                             )
                             val radius = 7.dp.toPx()
                             val separation = 5.dp.toPx()
+                            drawLine(
+                                color = if (highlighted) {
+                                    pathAccentColor
+                                } else {
+                                    coupleRingColor.copy(alpha = 0.68f)
+                                },
+                                start = start,
+                                end = end,
+                                strokeWidth = if (highlighted) 3.dp.toPx() else lineStroke
+                            )
                             drawCircle(
                                 color = if (highlighted) pathAccentColor else coupleRingColor,
                                 radius = radius,
@@ -1234,6 +1252,14 @@ fun GraphScreen(
                                 edge.meta == "WIDOWED" -> coupleRingColor.copy(alpha = 0.48f)
                                 else -> coupleRingColor
                             }
+                            drawLine(
+                                color = relationshipColor.copy(
+                                    alpha = if (highlighted) 1f else 0.68f
+                                ),
+                                start = start,
+                                end = end,
+                                strokeWidth = if (highlighted) 3.dp.toPx() else lineStroke
+                            )
                             drawCircle(
                                 color = relationshipColor,
                                 radius = radius,
@@ -3574,7 +3600,10 @@ private fun augmentLayoutWithRelationshipPath(
 }
 
 internal fun cardDisplayName(person: PersonListItem): String =
-    person.nickName?.trim()?.takeIf(String::isNotBlank) ?: familiarName(person.fullName)
+    person.nickName
+        ?.trim()
+        ?.takeIf { it.isNotBlank() && it !in setOf("-", "—") }
+        ?: familiarName(person.fullName)
 
 private fun augmentLayoutWithUnconnectedPersons(
     base: GraphLayout,
@@ -3834,18 +3863,12 @@ private fun collectChildrenForVisibleParents(
         return relations.children.map { it.toPersonId }.distinct()
     }
     val index = LineageRelationshipIndex.from(allRelationships)
-    return allRelationships
-        .asSequence()
-        .filter { it.isLineageParentChild() }
-        .map { it.toPersonId }
-        .distinct()
-        .filter { childId ->
-            recordedParentGroups(childId, index).any { recordedGroup ->
-                recordedGroup == parentPersonIds ||
-                    (recordedGroup.size == 1 && recordedGroup.first() in parentPersonIds)
-            }
-        }
-        .toList()
+    val primaryPersonId = parentPersonIds.firstOrNull() ?: return emptyList()
+    return recordedChildrenForPrimaryFamily(
+        primaryPersonId = primaryPersonId,
+        visibleParentPersonIds = parentPersonIds,
+        index = index
+    )
 }
 
 /**

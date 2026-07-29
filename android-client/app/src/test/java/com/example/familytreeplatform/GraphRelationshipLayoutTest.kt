@@ -16,6 +16,10 @@ class GraphRelationshipLayoutTest {
             "Anindita",
             cardDisplayName(person("ani", "Anindita Kusuma", "1980-01-01"))
         )
+        assertEquals(
+            "Nn",
+            cardDisplayName(person("nn", "Nn", "1980-01-01").copy(nickName = "-"))
+        )
     }
 
     private val people = listOf(

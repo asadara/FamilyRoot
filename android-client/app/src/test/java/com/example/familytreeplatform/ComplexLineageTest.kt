@@ -35,14 +35,14 @@ class ComplexLineageTest {
     }
 
     @Test
-    fun `all historical relationships retain chronological left to right order`() {
+    fun `all historical relationships fan around the shared person`() {
         val relationships = listOf(
             spouse("newer", "person", "newer-partner", "DIVORCED", "2012-01-01", "2018-01-01"),
             spouse("older", "person", "older-partner", "DIVORCED", "2001-01-01", "2009-01-01")
         )
 
-        assertEquals(1, partnershipHorizontalSlot("person", "older", relationships))
-        assertEquals(2, partnershipHorizontalSlot("person", "newer", relationships))
+        assertEquals(-1, partnershipHorizontalSlot("person", "older", relationships))
+        assertEquals(1, partnershipHorizontalSlot("person", "newer", relationships))
     }
 
     @Test
@@ -198,18 +198,20 @@ class ComplexLineageTest {
     }
 
     @Test
-    fun `children from different partners keep separate ordered family blocks`() {
+    fun `widowed partners and their children keep separate outward family blocks`() {
         val relationships = listOf(
-            spouse("first", "shared", "partner-a", "MARRIED", "2000-01-01"),
-            spouse("second", "shared", "partner-b", "MARRIED", "2010-01-01"),
+            spouse("first", "shared", "partner-a", "WIDOWED", "2000-01-01"),
+            spouse("second", "shared", "partner-b", "WIDOWED", "2010-01-01"),
             parentChild("shared-a1", "shared", "a1", "BIOLOGICAL"),
             parentChild("partner-a-a1", "partner-a", "a1", "BIOLOGICAL"),
             parentChild("shared-a2", "shared", "a2", "BIOLOGICAL"),
             parentChild("partner-a-a2", "partner-a", "a2", "BIOLOGICAL"),
+            parentChild("shared-a3", "shared", "a3", "BIOLOGICAL"),
+            parentChild("partner-a-a3", "partner-a", "a3", "BIOLOGICAL"),
             parentChild("shared-b1", "shared", "b1", "BIOLOGICAL"),
             parentChild("partner-b-b1", "partner-b", "b1", "BIOLOGICAL")
         )
-        val people = setOf("shared", "partner-a", "partner-b", "a1", "a2", "b1")
+        val people = setOf("shared", "partner-a", "partner-b", "a1", "a2", "a3", "b1")
         val positions = planProgressivePlacements(
             basePositions = mapOf(
                 "shared" to LineagePlacementRect(0f, 0f, 96f, 108f)
@@ -225,16 +227,33 @@ class ComplexLineageTest {
             fallbackY = 0f
         )
 
-        val firstFamilyRight = maxOf(
-            positions.getValue("a1").right,
-            positions.getValue("a2").right
-        )
+        val firstFamily = listOf("a1", "a2", "a3").map(positions::getValue)
+        val firstFamilyRight = firstFamily.maxOf { it.right }
+        val firstJunctionX = (
+            positions.getValue("partner-a").centerX +
+                positions.getValue("shared").centerX
+            ) / 2f
+        val secondJunctionX = (
+            positions.getValue("shared").centerX +
+                positions.getValue("partner-b").centerX
+            ) / 2f
+        assertEquals(firstJunctionX, firstFamily.maxOf { it.centerX }, 0.01f)
+        assertEquals(secondJunctionX, positions.getValue("b1").centerX, 0.01f)
         assertTrue(firstFamilyRight < positions.getValue("b1").left)
         positions.values.forEachIndexed { index, firstRect ->
             positions.values.drop(index + 1).forEach { secondRect ->
                 assertFalse(firstRect.overlaps(secondRect, padding = 0f))
             }
         }
+
+        assertEquals(
+            setOf("a1", "a2", "a3", "b1"),
+            recordedChildrenForPrimaryFamily(
+                primaryPersonId = "shared",
+                visibleParentPersonIds = setOf("shared"),
+                index = LineageRelationshipIndex.from(relationships)
+            ).toSet()
+        )
     }
 
     @Test

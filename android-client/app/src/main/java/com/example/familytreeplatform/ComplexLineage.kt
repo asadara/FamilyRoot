@@ -91,8 +91,9 @@ internal fun latestCurrentPartnership(
 
 /**
  * Returns a stable horizontal slot for a partner relative to [personId]. Historical
- * relationships stay left of the current relationship. If every relationship is
- * historical, their slots progress left-to-right in chronological order.
+ * relationships stay left of a single current relationship. When every recorded
+ * relationship has ended, or several are simultaneously current, partners fan out
+ * around the shared person so no partnership junction is hidden behind another card.
  */
 internal fun partnershipHorizontalSlot(
     personId: String,
@@ -133,7 +134,15 @@ internal fun partnershipHorizontalSlot(
         }
         -(occupiedCurrentLeftSlots + historical.size - historicalIndex)
     } else {
-        historical.indexOfFirst { it.relationshipId == relationshipId }.coerceAtLeast(0) + 1
+        val historicalIndex = historical
+            .indexOfFirst { it.relationshipId == relationshipId }
+            .coerceAtLeast(0)
+        val rankFromLatest = historical.lastIndex - historicalIndex
+        when {
+            rankFromLatest == 0 -> 1
+            rankFromLatest % 2 == 1 -> -((rankFromLatest + 1) / 2)
+            else -> rankFromLatest / 2 + 1
+        }
     }
 }
 
@@ -485,25 +494,38 @@ private fun refineFamilyBlockPlacements(
                         .thenBy { it.sourceIds.joinToString() }
                 )
 
-            val totalWidth = originGroups.sumOf { it.width.toDouble() }.toFloat() +
-                siblingGap * (originGroups.size - 1).coerceAtLeast(0)
-            val familyCenterX = if (originGroups.size == 1) {
-                originGroups.first().sourceCenterX
-            } else {
-                (
-                    originGroups.first().sourceCenterX +
-                        originGroups.last().sourceCenterX
-                    ) / 2f
-            }
-            var groupCursor = familyCenterX - totalWidth / 2f
+            val parentCenterX = componentBounds(setOf(parentId)).centerX
             originGroups.forEach { group ->
-                var branchCursor = groupCursor
+                var branchCursor = group.sourceCenterX - group.width / 2f
                 group.children.forEach { (_, blockIds) ->
                     val bounds = componentBounds(blockIds)
                     shiftComponents(blockIds, branchCursor - bounds.left)
                     branchCursor += bounds.width + siblingGap
                 }
-                groupCursor += group.width + siblingGap
+
+                if (originGroups.size > 1) {
+                    val anchorChild = if (group.sourceCenterX < parentCenterX) {
+                        group.children.last()
+                    } else {
+                        group.children.first()
+                    }
+                    val anchorPersonId = connectionsByChild[anchorChild.first]
+                        .orEmpty()
+                        .firstOrNull()
+                        ?.relationship
+                        ?.toPersonId
+                    val anchorCenterX = anchorPersonId
+                        ?.let(placements::get)
+                        ?.centerX
+                    if (anchorCenterX != null) {
+                        val groupComponents = group.children
+                            .flatMapTo(linkedSetOf()) { it.second }
+                        shiftComponents(
+                            groupComponents,
+                            group.sourceCenterX - anchorCenterX
+                        )
+                    }
+                }
             }
             return@forEach
         }
@@ -867,6 +889,29 @@ internal fun recordedChildrenForParentGroup(
         .filter { childId -> parentPersonIds in recordedParentGroups(childId, index) }
         .toList()
 }
+
+/**
+ * Direct children of the focused person remain visible even when they belong to
+ * different recorded partnerships. Exact co-parent groups are preserved for
+ * connector rendering; this function only decides which child cards are visible.
+ */
+internal fun recordedChildrenForPrimaryFamily(
+    primaryPersonId: String,
+    visibleParentPersonIds: Set<String>,
+    index: LineageRelationshipIndex
+): List<String> = index.relationships
+    .asSequence()
+    .filter { it.isLineageParentChild() }
+    .map { it.toPersonId }
+    .distinct()
+    .filter { childId ->
+        recordedParentGroups(childId, index).any { recordedGroup ->
+            recordedGroup == visibleParentPersonIds ||
+                (recordedGroup.size == 1 && recordedGroup.first() in visibleParentPersonIds) ||
+                primaryPersonId in recordedGroup
+        }
+    }
+    .toList()
 
 private val partnershipChronologyComparator =
     compareBy<ExportRelationship> { partnershipChronologyDate(it) == null }
