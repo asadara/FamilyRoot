@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -20,6 +21,7 @@ import { PersonDeletionService } from '../persons/person-deletion.service';
 import { PersonPrivacyService } from '../persons/person-privacy.service';
 import { ProposalCommentEntity } from './proposal-comment.entity';
 import { UserEntity } from '../users/user.entity';
+import { ClientMutationEntity } from '../persons/client-mutation.entity';
 
 @Injectable()
 export class ArchiveService {
@@ -73,19 +75,49 @@ export class ArchiveService {
       type: 'DOCUMENT' | 'STORY' | 'PHOTO' | 'OTHER';
       url?: string | null;
       note?: string | null;
+      clientMutationId?: string;
     },
     actorUserId: string,
   ) {
     await this.assertFullPrivacyAccess(spaceId, personId, actorUserId);
+    const clientMutationId = input.clientMutationId ?? randomUUID();
+    const normalized = {
+      spaceId,
+      personId,
+      title: input.title.trim(),
+      type: input.type,
+      url: input.url?.trim() || null,
+      note: input.note?.trim() || null,
+    };
+    const requestFingerprint = JSON.stringify(normalized);
     return this.sourcesRepo.manager.transaction(async (manager) => {
-      const saved = await manager.save(
-        manager.create(FactSourceEntity, {
+      const priorMutation = await manager.findOne(ClientMutationEntity, {
+        where: { clientMutationId },
+      });
+      if (priorMutation) {
+        if (
+          priorMutation.actorUserId !== actorUserId ||
+          priorMutation.operation !== 'CREATE_SOURCE' ||
+          priorMutation.requestFingerprint !== requestFingerprint
+        ) {
+          throw new ConflictException(
+            'clientMutationId was already used for another mutation',
+          );
+        }
+        const priorSource = JSON.parse(
+          priorMutation.responseJson,
+        ) as FactSourceEntity;
+        const current = await manager.findOneBy(FactSourceEntity, {
+          sourceId: priorSource.sourceId,
           spaceId,
           personId,
-          title: input.title.trim(),
-          type: input.type,
-          url: input.url?.trim() || null,
-          note: input.note?.trim() || null,
+        });
+        if (!current) throw new NotFoundException('Source not found');
+        return current;
+      }
+      const saved = await manager.save(
+        manager.create(FactSourceEntity, {
+          ...normalized,
         }),
       );
       await manager.save(
@@ -97,6 +129,16 @@ export class ArchiveService {
           operation: 'CREATE',
           note: 'Add fact source',
           afterJson: JSON.stringify(saved),
+        }),
+      );
+      await manager.save(
+        manager.create(ClientMutationEntity, {
+          clientMutationId,
+          actorUserId,
+          spaceId,
+          operation: 'CREATE_SOURCE',
+          requestFingerprint,
+          responseJson: JSON.stringify(saved),
         }),
       );
       return saved;

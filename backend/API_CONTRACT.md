@@ -266,15 +266,22 @@ Phase 4 concurrency contract (initial slice):
 - `DELETE /relationships/:relationshipId?spaceId=...&clientMutationId=...` is
   idempotent when the mutation ID is supplied and returns the recorded deletion
   result on replay.
+- `POST /persons/:personId/sources` accepts optional UUID `clientMutationId`.
+  Replaying the same actor and normalized source payload returns the original
+  source without a second row or audit entry; reuse for a different operation or
+  payload returns `409 CONFLICT`. Legacy online clients may omit the value.
 - `GET /relationships?spaceId=...` returns both `PARENT_CHILD` and `SPOUSE` edges, including `type`, dates, and metadata, so clients can maintain one offline graph cache.
 - `FOSTER` and `GUARDIAN` are care-relationship metadata, not lineage. They may carry
   optional start/end dates and `careContext`, never affect generation/cycle/parent
   inference, and are returned separately as caregiver/care-recipient relations.
 - Backup JSON retains care relationships. GEDCOM intentionally excludes them because
   there is no safe supported mapping in the current GEDCOM subset.
-- Android queues create-person and relationship deletion with optimistic Room state.
+- Android queues create-person, source creation, and relationship deletion with
+  optimistic Room state.
   Create-person atomically remaps its local ID through cached edges and dependent
-  mutation payloads after server success. Permanent errors roll back optimistic
+  mutation payloads/source rows after server success. Source creation uses a
+  privacy-aware Room cache, remains visible after process restart, and replaces its
+  local row with the idempotent server result. Permanent errors roll back optimistic
   state; retry explicitly reapplies it. Relationship deletion retains a rollback
   snapshot and treats a server `404` as already converged.
 

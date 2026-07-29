@@ -110,6 +110,8 @@ import com.example.familytreeplatform.data.local.OfflineMutationStatus
 import com.example.familytreeplatform.data.local.OfflineMutationType
 import com.example.familytreeplatform.data.local.RelationshipDao
 import com.example.familytreeplatform.data.local.CachedRelationshipEntity
+import com.example.familytreeplatform.data.local.SourceDao
+import com.example.familytreeplatform.data.local.CachedSourceEntity
 import com.example.familytreeplatform.data.local.FamilyTreeDatabase
 import com.example.familytreeplatform.data.local.toEntity
 import com.example.familytreeplatform.data.local.toModel
@@ -121,6 +123,7 @@ import com.example.familytreeplatform.models.ParentChildMutationPayload
 import com.example.familytreeplatform.models.SpouseMutationPayload
 import com.example.familytreeplatform.models.CreatePersonMutationPayload
 import com.example.familytreeplatform.models.DeleteRelationshipMutationPayload
+import com.example.familytreeplatform.models.CreateSourceMutationPayload
 import com.example.familytreeplatform.sync.OfflineSyncScheduler
 import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
@@ -152,6 +155,7 @@ class PersonRepository(
     private val personDao: PersonDao? = null,
     private val mutationDao: OfflineMutationDao? = null,
     private val relationshipDao: RelationshipDao? = null,
+    private val sourceDao: SourceDao? = null,
     private val appContext: Context? = null,
     private val database: FamilyTreeDatabase? = null
 ) {
@@ -390,6 +394,7 @@ class PersonRepository(
         if (result.isSuccess) {
             runCatching { personDao?.deleteAll() }
             runCatching { relationshipDao?.deleteAll() }
+            runCatching { sourceDao?.deleteAll() }
             runCatching { mutationDao?.deleteAll() }
             profilePhotoUrlsBySpace.value = emptyMap()
             clearPrivateImageCaches()
@@ -449,6 +454,7 @@ class PersonRepository(
             "Resolve or sync pending offline changes before clearing this device"
         }
         relationshipDao?.deleteBySpace(spaceId)
+        sourceDao?.deleteBySpace(spaceId)
         personDao?.deleteBySpace(spaceId)
         profilePhotoUrlsBySpace.update { current -> current - spaceId }
         clearPrivateImageCaches()
@@ -605,6 +611,7 @@ class PersonRepository(
 
     private suspend fun purgeRevokedSpaceAccess(spaceId: String) {
         runCatching { relationshipDao?.deleteBySpace(spaceId) }
+        runCatching { sourceDao?.deleteBySpace(spaceId) }
         runCatching { personDao?.deleteBySpace(spaceId) }
         runCatching { mutationDao?.deleteBySpace(spaceId) }
         profilePhotoUrlsBySpace.update { current -> current - spaceId }
@@ -779,6 +786,14 @@ class PersonRepository(
                     if (restrictedPersonIds.isNotEmpty()) {
                         purgeRestrictedPhotoCache(spaceId, restrictedPersonIds)
                     }
+                    val fullAccessPersonIds = list
+                        .filter { it.privacyAccess == "FULL" }
+                        .mapTo(mutableSetOf()) { it.personId }
+                    sourceDao?.listBySpace(spaceId)
+                        ?.map { it.personId }
+                        ?.distinct()
+                        ?.filter { it !in fullAccessPersonIds }
+                        ?.forEach { sourceDao.deleteByPerson(it) }
                     personDao?.replaceSpace(spaceId, list.map { it.toEntity(spaceId) })
                     reapplyQueuedMutations(spaceId)
                     val mergedLocal = personDao
@@ -1172,11 +1187,107 @@ class PersonRepository(
     suspend fun mergePersons(request: MergePersonsRequest): Result<Map<String, Any>> =
         apiResult { apiService.mergePersons(request) }
 
-    suspend fun listSources(spaceId: String, personId: String): Result<List<SourceItem>> =
-        apiResult { apiService.listSources(personId, spaceId) }
+    suspend fun listSources(spaceId: String, personId: String): Result<List<SourceItem>> {
+        val cachedPerson = personDao?.getById(personId)
+        if (
+            cachedPerson != null &&
+            !canReapplySensitiveMutation(cachedPerson.privacyAccess)
+        ) {
+            sourceDao?.deleteByPerson(personId)
+            return Result.success(emptyList())
+        }
+        val remote = apiResult { apiService.listSources(personId, spaceId) }
+        remote.onSuccess { items ->
+            sourceDao?.replaceSynced(personId, items.map { it.toEntity() })
+        }
+        val cached = sourceDao?.listByPerson(personId)?.map { it.toModel() }.orEmpty()
+        return if (remote.isSuccess || cached.isNotEmpty()) {
+            Result.success(cached.ifEmpty { remote.getOrNull().orEmpty() })
+        } else {
+            Result.failure(
+                remote.exceptionOrNull() ?: IllegalStateException("Source cache is unavailable")
+            )
+        }
+    }
+
+    fun observeSources(personId: String): Flow<List<SourceItem>> =
+        sourceDao?.observeByPerson(personId)?.map { items ->
+            items.map { it.toModel() }
+        } ?: flowOf(emptyList())
 
     suspend fun createSource(personId: String, request: SourceRequest): Result<SourceItem> =
-        apiResult { apiService.createSource(personId, request) }
+        runCatching {
+            val localPerson = requireNotNull(personDao?.getById(personId)) {
+                "Person tidak tersedia di perangkat."
+            }
+            require(canReapplySensitiveMutation(localPerson.privacyAccess)) {
+                "Akses penuh diperlukan untuk menambah sumber."
+            }
+            val normalized = request.copy(
+                title = request.title.trim(),
+                url = request.url?.trim()?.ifBlank { null },
+                note = request.note?.trim()?.ifBlank { null }
+            )
+            require(normalized.title.isNotBlank()) { "Judul sumber wajib diisi." }
+            require(normalized.title.length <= 120) { "Judul sumber terlalu panjang." }
+            require(normalized.url == null || normalized.url.length <= 500) {
+                "Tautan sumber terlalu panjang."
+            }
+            require(normalized.note == null || normalized.note.length <= 1000) {
+                "Catatan sumber terlalu panjang."
+            }
+            require(normalized.type in setOf("DOCUMENT", "STORY", "PHOTO", "OTHER")) {
+                "Jenis sumber tidak dikenali."
+            }
+            val queueDao = requireNotNull(mutationDao) {
+                "Antrean sinkronisasi tidak tersedia."
+            }
+            val cacheDao = requireNotNull(sourceDao) {
+                "Cache sumber tidak tersedia."
+            }
+            val room = requireNotNull(database) {
+                "Database lokal tidak tersedia."
+            }
+            val mutationId = normalized.clientMutationId ?: UUID.randomUUID().toString()
+            val queuedRequest = normalized.copy(clientMutationId = mutationId)
+            val now = System.currentTimeMillis()
+            val local = CachedSourceEntity(
+                sourceId = "local-$mutationId",
+                spaceId = normalized.spaceId,
+                personId = personId,
+                title = normalized.title,
+                type = normalized.type,
+                url = normalized.url,
+                note = normalized.note,
+                createdAt = isoTime(now),
+                pendingMutationId = mutationId
+            )
+            room.withTransaction {
+                queueDao.upsert(
+                    OfflineMutationEntity(
+                        mutationId = mutationId,
+                        spaceId = normalized.spaceId,
+                        personId = personId,
+                        mutationType = OfflineMutationType.CREATE_SOURCE,
+                        payloadJson = Gson().toJson(
+                            CreateSourceMutationPayload(queuedRequest)
+                        ),
+                        baseVersion = 0,
+                        status = OfflineMutationStatus.PENDING,
+                        attemptCount = 0,
+                        lastError = null,
+                        conflictVersion = null,
+                        conflictPayloadJson = null,
+                        createdAt = now,
+                        updatedAt = now
+                    )
+                )
+                cacheDao.upsert(local)
+            }
+            appContext?.let(OfflineSyncScheduler::enqueue)
+            ActionFeedbackStore.waitingForSync()
+            local.toModel()
+        }
 
     suspend fun listMedia(spaceId: String, personId: String): Result<List<MediaItem>> =
         apiResult { apiService.listMedia(personId, spaceId) }
@@ -1223,6 +1334,7 @@ class PersonRepository(
             apiService.deletePerson(personId, DeletePersonRequest(spaceId))
         }
         if (result.getOrNull()?.deleted == true) {
+            sourceDao?.deleteByPerson(personId)
             personDao?.deleteById(personId)
             profilePhotoUrlsBySpace.update { current ->
                 current + (spaceId to (current[spaceId].orEmpty() - personId))
@@ -1580,6 +1692,9 @@ class PersonRepository(
         if (mutation.mutationType == OfflineMutationType.CREATE_PERSON) {
             return syncCreatePersonMutation(mutation)
         }
+        if (mutation.mutationType == OfflineMutationType.CREATE_SOURCE) {
+            return syncCreateSourceMutation(mutation)
+        }
         return try {
             val response: Response<PersonResponse> = when (mutation.mutationType) {
                 OfflineMutationType.UPDATE_LIFE_STATUS -> {
@@ -1709,6 +1824,75 @@ class PersonRepository(
         }
     }
 
+    private suspend fun syncCreateSourceMutation(
+        mutation: OfflineMutationEntity
+    ): SyncBatchResult {
+        val queueDao = mutationDao ?: return SyncBatchResult.COMPLETE
+        val cacheDao = sourceDao ?: return invalidMutationPayload(queueDao, mutation)
+        val room = database ?: return invalidMutationPayload(queueDao, mutation)
+        if (!canReapplySensitiveMutation(personDao?.getById(mutation.personId)?.privacyAccess)) {
+            room.withTransaction {
+                cacheDao.deleteByMutation(mutation.mutationId)
+                queueDao.markStatus(
+                    mutation.mutationId,
+                    OfflineMutationStatus.FAILED,
+                    "Akses penuh ke person sudah tidak tersedia.",
+                    System.currentTimeMillis()
+                )
+            }
+            return SyncBatchResult.COMPLETE
+        }
+        val payload = runCatching {
+            Gson().fromJson(
+                mutation.payloadJson,
+                CreateSourceMutationPayload::class.java
+            )
+        }.getOrNull() ?: return invalidMutationPayload(queueDao, mutation)
+        return try {
+            val response = apiService.createSource(
+                mutation.personId,
+                payload.request.copy(clientMutationId = mutation.mutationId)
+            )
+            if (response.isSuccessful) {
+                val source = response.body()
+                    ?: return markMutationForRetry(
+                        queueDao,
+                        mutation,
+                        "Empty sync response"
+                    )
+                room.withTransaction {
+                    cacheDao.deleteByMutation(mutation.mutationId)
+                    cacheDao.upsert(source.toEntity())
+                    queueDao.delete(mutation.mutationId)
+                }
+                SyncBatchResult.COMPLETE
+            } else if (response.code() >= 500 || response.code() == 401) {
+                markMutationForRetry(
+                    queueDao,
+                    mutation,
+                    parseError(response)
+                )
+            } else {
+                room.withTransaction {
+                    cacheDao.deleteByMutation(mutation.mutationId)
+                    queueDao.markStatus(
+                        mutation.mutationId,
+                        OfflineMutationStatus.FAILED,
+                        parseError(response),
+                        System.currentTimeMillis()
+                    )
+                }
+                SyncBatchResult.COMPLETE
+            }
+        } catch (error: Exception) {
+            markMutationForRetry(
+                queueDao,
+                mutation,
+                error.message ?: "Network unavailable"
+            )
+        }
+    }
+
     private suspend fun syncCreatePersonMutation(
         mutation: OfflineMutationEntity
     ): SyncBatchResult {
@@ -1753,6 +1937,10 @@ class PersonRepository(
                                 )
                             )
                         }
+                    sourceDao?.remapPerson(
+                        mutation.personId,
+                        serverPerson.personId
+                    )
                     peopleDao.deleteById(mutation.personId)
                     peopleDao.upsert(serverPerson.toEntity())
                     queueDao.delete(mutation.mutationId)
@@ -1780,6 +1968,7 @@ class PersonRepository(
                         }
                         .forEach { dependent ->
                             relationsDao.deleteByMutation(dependent.mutationId)
+                            sourceDao?.deleteByMutation(dependent.mutationId)
                             queueDao.markStatus(
                                 dependent.mutationId,
                                 OfflineMutationStatus.FAILED,
@@ -1935,6 +2124,9 @@ class PersonRepository(
         dao: OfflineMutationDao,
         mutation: OfflineMutationEntity
     ): SyncBatchResult {
+        if (mutation.mutationType == OfflineMutationType.CREATE_SOURCE) {
+            sourceDao?.deleteByMutation(mutation.mutationId)
+        }
         dao.markStatus(
             mutation.mutationId,
             OfflineMutationStatus.FAILED,
@@ -1955,7 +2147,8 @@ class PersonRepository(
         val localDao = personDao
         if (
             mutation.mutationType == OfflineMutationType.UPDATE_LIFE_STATUS ||
-            mutation.mutationType == OfflineMutationType.UPDATE_PROFILE
+            mutation.mutationType == OfflineMutationType.UPDATE_PROFILE ||
+            mutation.mutationType == OfflineMutationType.CREATE_SOURCE
         ) {
             val privacyAccess = localDao?.getById(mutation.personId)?.privacyAccess
             if (!canReapplySensitiveMutation(privacyAccess)) return
@@ -2054,6 +2247,27 @@ class PersonRepository(
                     )
                 }.getOrNull()?.let { payload ->
                     relationshipDao?.delete(payload.relationship.relationshipId)
+                }
+                OfflineMutationType.CREATE_SOURCE -> runCatching {
+                    Gson().fromJson(
+                        mutation.payloadJson,
+                        CreateSourceMutationPayload::class.java
+                    )
+                }.getOrNull()?.let { payload ->
+                    val request = payload.request
+                    sourceDao?.upsert(
+                        CachedSourceEntity(
+                            sourceId = "local-${mutation.mutationId}",
+                            spaceId = mutation.spaceId,
+                            personId = mutation.personId,
+                            title = request.title,
+                            type = request.type,
+                            url = request.url,
+                            note = request.note,
+                            createdAt = isoTime(mutation.createdAt),
+                            pendingMutationId = mutation.mutationId
+                        )
+                    )
                 }
         }
     }

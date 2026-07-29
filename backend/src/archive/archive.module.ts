@@ -16,6 +16,7 @@ import { normalizedSupabaseProjectUrl } from '../config/environment';
 import { PersonsModule } from '../persons/persons.module';
 import { ProposalCommentEntity } from './proposal-comment.entity';
 import { UserEntity } from '../users/user.entity';
+import { ClientMutationEntity } from '../persons/client-mutation.entity';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { UserEntity } from '../users/user.entity';
       UserPersonClaimEntity,
       ProposalCommentEntity,
       UserEntity,
+      ClientMutationEntity,
     ]),
   ],
   controllers: [ArchiveController],

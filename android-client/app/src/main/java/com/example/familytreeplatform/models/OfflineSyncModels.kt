@@ -40,6 +40,10 @@ data class DeleteRelationshipMutationPayload(
     val relationship: RelationItem
 )
 
+data class CreateSourceMutationPayload(
+    val request: SourceRequest
+)
+
 data class PersonConflictSnapshot(
     val personId: String,
     val version: Int,

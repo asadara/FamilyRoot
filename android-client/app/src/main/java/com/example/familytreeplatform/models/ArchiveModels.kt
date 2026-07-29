@@ -8,7 +8,8 @@ data class SourceItem(
     val type: String,
     val url: String? = null,
     val note: String? = null,
-    val createdAt: String
+    val createdAt: String,
+    val pendingSync: Boolean = false
 )
 
 data class SourceRequest(
@@ -16,7 +17,8 @@ data class SourceRequest(
     val title: String,
     val type: String = "DOCUMENT",
     val url: String? = null,
-    val note: String? = null
+    val note: String? = null,
+    val clientMutationId: String? = null
 )
 
 data class MediaItem(

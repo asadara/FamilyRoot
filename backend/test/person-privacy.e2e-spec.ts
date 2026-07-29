@@ -144,16 +144,41 @@ describe('Person privacy pilot (e2e)', () => {
       })
       .expect(201);
 
-    await request(app.getHttpServer())
+    const sourceMutationId = '55555555-5555-4555-8555-555555555555';
+    const source = await request(app.getHttpServer())
       .post(`/persons/${personId}/sources`)
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({
         spaceId,
+        clientMutationId: sourceMutationId,
         title: 'Arsip keluarga',
         type: 'STORY',
         note: 'Catatan privat',
       })
       .expect(201);
+    await request(app.getHttpServer())
+      .post(`/persons/${personId}/sources`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        spaceId,
+        clientMutationId: sourceMutationId,
+        title: 'Arsip keluarga',
+        type: 'STORY',
+        note: 'Catatan privat',
+      })
+      .expect(201)
+      .expect(({ body }) => expect(body.sourceId).toBe(source.body.sourceId));
+    await request(app.getHttpServer())
+      .post(`/persons/${personId}/sources`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        spaceId,
+        clientMutationId: sourceMutationId,
+        title: 'Sumber berbeda',
+        type: 'STORY',
+        note: 'Catatan privat',
+      })
+      .expect(409);
     await request(app.getHttpServer())
       .post(`/persons/${personId}/media`)
       .set('Authorization', `Bearer ${ownerToken}`)

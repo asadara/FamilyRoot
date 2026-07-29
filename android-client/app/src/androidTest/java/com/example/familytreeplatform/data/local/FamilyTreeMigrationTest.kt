@@ -59,4 +59,32 @@ class FamilyTreeMigrationTest {
             }
         }
     }
+
+    @Test
+    @Throws(IOException::class)
+    fun migrate7To8AddsPersistentSourceCache() {
+        helper.createDatabase(databaseName, 7).close()
+
+        helper.runMigrationsAndValidate(
+            databaseName,
+            8,
+            true,
+            MIGRATION_7_8
+        ).use { database ->
+            database.execSQL(
+                """INSERT INTO sources
+                    (sourceId, spaceId, personId, title, type, url, note, createdAt, pendingMutationId)
+                    VALUES
+                    ('source-1', 'space-1', 'person-1', 'Arsip', 'STORY', NULL,
+                     'Catatan', '2026-07-29T00:00:00.000Z', 'mutation-1')"""
+            )
+            database.query(
+                "SELECT title, pendingMutationId FROM sources WHERE sourceId = 'source-1'"
+            ).use { cursor ->
+                cursor.moveToFirst()
+                assertEquals("Arsip", cursor.getString(0))
+                assertEquals("mutation-1", cursor.getString(1))
+            }
+        }
+    }
 }

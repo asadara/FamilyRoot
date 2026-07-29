@@ -95,6 +95,11 @@ class PersonDetailViewModel(
             }
         }
         viewModelScope.launch {
+            repository.observeSources(personId).collectLatest { sources ->
+                _uiState.update { it.copy(sources = sources) }
+            }
+        }
+        viewModelScope.launch {
             repository.listPersons(spaceId)
         }
         refreshRelations()
@@ -193,7 +198,7 @@ class PersonDetailViewModel(
                 )
             ).onSuccess {
                 refreshArchive()
-                _uiState.update { it.copy(updating = false, message = "Source added") }
+                _uiState.update { it.copy(updating = false, message = "Source sync queued") }
             }.onFailure { error ->
                 _uiState.update { it.copy(updating = false, error = error.message) }
             }

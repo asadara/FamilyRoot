@@ -187,13 +187,13 @@ Room mutation queue saat ini hanya memuat:
 - `UPDATE_PROFILE`;
 - `ADD_PARENT_CHILD`;
 - `ADD_SPOUSE`;
-- `DELETE_RELATIONSHIP`.
+- `DELETE_RELATIONSHIP`;
+- `CREATE_SOURCE`.
 
 Belum masuk queue:
 
 - delete person;
 - foto dan media;
-- source;
 - proposal/review;
 - invitation dan lifecycle membership/silsilah.
 
@@ -208,6 +208,14 @@ relationship menyimpan snapshot untuk rollback, menganggap `404` sebagai konverg
 dan membatalkan relasi lokal yang belum sync secara atomik. Keduanya memakai
 `clientMutationId` idempoten dan audit server. Room instrumentation pada perangkat
 serta continuity selection selama remap tetap menjadi acceptance final.
+
+Create source kini memakai cache Room privacy-aware dan `clientMutationId` idempoten.
+Catatan langsung tampil dengan label menunggu sinkronisasi, bertahan setelah process
+death, ikut diremap bersama Person lokal, dan diganti dengan hasil server tanpa
+duplikasi. Penolakan permanen me-rollback catatan optimistis; penyempitan privacy atau
+pencabutan akses membersihkan cache sumber. Foto/binary, review, lifecycle, claim,
+dan penghapusan tetap online-only karena membutuhkan otorisasi mutakhir, dampak
+destruktif, atau transfer file yang tidak aman untuk queue generik.
 
 ### P6 — Undangan tertarget dan dapat dicabut (`PARTIAL`)
 

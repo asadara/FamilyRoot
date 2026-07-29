@@ -91,6 +91,20 @@ class OfflineMutationRemapTest {
         assertFalse(unrelated.referencesPerson(LOCAL_ID))
     }
 
+    @Test
+    fun `source dependency follows focus person remap`() {
+        val source = mutation(
+            type = OfflineMutationType.CREATE_SOURCE,
+            personId = LOCAL_ID,
+            payload = "{}"
+        )
+
+        val remapped = source.remapPersonReference(LOCAL_ID, SERVER_ID)
+
+        assertEquals(SERVER_ID, remapped.personId)
+        assertTrue(source.referencesPerson(LOCAL_ID))
+    }
+
     private fun mutation(
         type: String,
         personId: String = "focus",

@@ -1,7 +1,7 @@
 # FamilyRoot — Project Memory dan Session Handoff
 
 > **Status:** Memori operasional aktif untuk melanjutkan pekerjaan lintas sesi chat
-> **Snapshot diperbarui:** 28 Juli 2026, Asia/Jakarta
+> **Snapshot diperbarui:** 29 Juli 2026, Asia/Jakarta
 > **Repository:** `asadara/FamilyRoot`
 > **Branch:** `main`
 > **Baseline sebelum implementasi frontend v2:** `b8679d3ca772cf3786a381e0716fedc4906f24da` (`feat: complete phase 4 data sustainability`)
@@ -794,6 +794,12 @@ yang sudah selesai:
 > `lintDebug`, dan `assemblePilot`. Policy PILOT saat rollout menerima build 1–2
 > dengan contract 1 dan enforcement tetap `false`; enforcement hanya boleh menjadi
 > gerbang penutup setelah fase pengembangan dinyatakan selesai.
+> Pada 29 Juli 2026 policy PILOT menerima build 1–3 dengan contract 1 dan
+> enforcement tetap `false`. Cloud Run `SYSTEM_ADMIN_USER_IDS` telah dikoreksi agar
+> hanya berisi UUID satu akun Gmail aktif milik pemilik aplikasi. Identitas aktual
+> tidak disimpan di Git. Revision `familyroot-api-pilot-00024-fgv` aktif 100%, akses
+> `PUT /app-compatibility/android/policy` berhasil tanpa `403`, dan audit mencatat
+> aktor yang sama. Perubahan operasional ini tidak memerlukan rebuild APK.
 > P2 lifecycle kini mencakup membership, transfer ownership, leave, revoke invitation,
 > hapus akun tanpa menghapus Person/riwayat keluarga, serta arsip read-only dan
 > soft-delete Family Space dengan ringkasan dampak dan konfirmasi aman. Unique index
@@ -818,6 +824,12 @@ yang sudah selesai:
 > Room state, idempotency server, rollback, retry, serta remap ID lokal atomik.
 > Acceptance Room instrumentation dan continuity selection saat remap tetap perlu
 > diuji pada perangkat final.
+> Pada 29 Juli 2026 P5 bertambah dengan offline `CREATE_SOURCE`. Backend memakai
+> `clientMutationId` lintas operasi untuk replay idempoten dan menolak reuse berbeda.
+> Android Room v8 menyimpan sumber optimistis, menampilkan status menunggu sync,
+> mengamati hasil worker, meremap sumber yang bergantung pada Person lokal, serta
+> membersihkan cache saat privacy/akses menyempit atau server menolak permanen.
+> Foto/media binary, review, lifecycle, claim, dan penghapusan tetap online-only.
 > P8 Graph besar ditutup dengan viewport culling, tiga tingkat detail berdasarkan
 > zoom, fallback daftar tekstual di atas 800 card, dan minimap privacy-safe tanpa
 > identitas/metadata yang hanya memproyeksikan geometri aktif serta viewport.

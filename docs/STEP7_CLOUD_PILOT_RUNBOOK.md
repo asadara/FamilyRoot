@@ -124,6 +124,9 @@ Kerjakan bagian ini hanya setelah menerima risiko tersebut.
    - `DB_POOL_MAX=5`;
    - `SUPABASE_URL=https://PROJECT_REF.supabase.co`;
    - `SUPABASE_STORAGE_BUCKET=family-media`;
+   - `SYSTEM_ADMIN_USER_IDS=<UUID-user-global-yang-dipercaya>`. Gunakan `userId`
+     aplikasi, bukan alamat email dan bukan role OWNER/ADMIN pada Family Space.
+     Pisahkan dengan koma hanya jika lebih dari satu operator benar-benar diperlukan;
    - `CORS_ORIGINS=` untuk APK native. Tambahkan hanya origin HTTPS yang eksplisit
      saat client web benar-benar tersedia.
 8. Referensikan secret sebagai environment variable:
@@ -259,3 +262,17 @@ meminta data terbaru, halaman profil juga mendapat pull-to-refresh dari posisi p
 atas beserta indikator dan refresh person/relationship/source/media. Regression/unit
 test, lint, assemble, dan seluruh 20 instrumentation test lulus; gesture refresh pada
 APK terbaru menunggu konfirmasi visual pemilik.
+
+### Bukti system administrator PILOT — 29 Juli 2026
+
+- `SYSTEM_ADMIN_USER_IDS` pada Cloud Run diperbarui agar hanya berisi UUID satu akun
+  Gmail aktif milik pemilik aplikasi; UUID dan email tidak dicatat di repository;
+- akun Google Cloud operator dicocokkan dengan akun Gmail aktif aplikasi sebelum
+  revision dibuat;
+- revision `familyroot-api-pilot-00024-fgv` melayani 100% trafik;
+- `PUT /app-compatibility/android/policy` berhasil memakai access token singkat akun
+  tersebut dan menulis satu audit dengan aktor yang sama;
+- policy PILOT tetap `minimum=1`, `latest=3`, `apiContractVersion=1`, dan
+  `enforcementEnabled=false`;
+- perubahan ini tidak memerlukan migration database, commit source aplikasi, maupun
+  build ulang APK.

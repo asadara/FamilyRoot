@@ -10,6 +10,7 @@ import com.example.familytreeplatform.data.local.MIGRATION_3_4
 import com.example.familytreeplatform.data.local.MIGRATION_4_5
 import com.example.familytreeplatform.data.local.MIGRATION_5_6
 import com.example.familytreeplatform.data.local.MIGRATION_6_7
+import com.example.familytreeplatform.data.local.MIGRATION_7_8
 
 class FamilyTreeApplication : Application() {
     lateinit var container: AppContainer
@@ -25,7 +26,8 @@ class FamilyTreeApplication : Application() {
                 MIGRATION_3_4,
                 MIGRATION_4_5,
                 MIGRATION_5_6,
-                MIGRATION_6_7
+                MIGRATION_6_7,
+                MIGRATION_7_8
             )
             .build()
         container = AppContainer(
@@ -34,6 +36,7 @@ class FamilyTreeApplication : Application() {
                 personDao = database.personDao(),
                 mutationDao = database.offlineMutationDao(),
                 relationshipDao = database.relationshipDao(),
+                sourceDao = database.sourceDao(),
                 appContext = this,
                 database = database
             )

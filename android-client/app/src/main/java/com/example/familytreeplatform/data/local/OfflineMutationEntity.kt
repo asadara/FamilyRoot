@@ -38,4 +38,5 @@ object OfflineMutationType {
     const val ADD_SPOUSE = "ADD_SPOUSE"
     const val CREATE_PERSON = "CREATE_PERSON"
     const val DELETE_RELATIONSHIP = "DELETE_RELATIONSHIP"
+    const val CREATE_SOURCE = "CREATE_SOURCE"
 }

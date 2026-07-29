@@ -1140,7 +1140,15 @@ private fun SourcesSection(
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
-    sources.forEach { source -> ArchiveRow(source.title, source.note ?: "Catatan sumber keluarga") }
+    sources.forEach { source ->
+        ArchiveRow(
+            source.title,
+            listOfNotNull(
+                source.note ?: "Catatan sumber keluarga",
+                "Menunggu sinkronisasi".takeIf { source.pendingSync }
+            ).joinToString(" · ")
+        )
+    }
     if (sources.isEmpty()) EmptySectionMessage("Belum ada catatan sumber.")
     if (canEdit) {
         OutlinedTextField(
@@ -1762,6 +1770,7 @@ internal fun mutationTypeLabel(type: String): String = when (type) {
     OfflineMutationType.ADD_SPOUSE -> "Hubungan pasangan"
     OfflineMutationType.CREATE_PERSON -> "Person baru"
     OfflineMutationType.DELETE_RELATIONSHIP -> "Penghapusan hubungan"
+    OfflineMutationType.CREATE_SOURCE -> "Catatan sumber"
     else -> "Perubahan person"
 }
 
@@ -1781,6 +1790,8 @@ internal fun claimStatusLabel(status: String): String = when (status.uppercase()
 }
 
 internal fun personMessage(message: String): String = when {
+    message.contains("Source sync queued", true) ->
+        "Catatan sumber disimpan di perangkat dan menunggu sinkronisasi."
     message.contains("Source added", true) -> "Catatan sumber berhasil ditambahkan."
     message.contains("Media added", true) -> "Tautan kenangan berhasil ditambahkan."
     message.contains("Proposal submitted", true) -> "Usulan berhasil dikirim untuk ditinjau keluarga."

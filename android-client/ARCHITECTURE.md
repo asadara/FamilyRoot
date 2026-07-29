@@ -210,6 +210,12 @@ Slice offline-write yang sudah aktif:
 - Room v4 menyimpan cache graph parent-child dan spouse; create relation masuk antrean idempoten dan tampil optimistis;
 - validasi lokal mencegah self-link, duplicate, cycle, pasangan tidak valid, dan lebih dari dua orang tua biologis sebelum queue; backend tetap memvalidasi ulang sebagai source of truth;
 - jika backend menolak relasi karena graph server sudah berubah, edge optimistis di-rollback dan item ditandai `FAILED` agar garis lineage yang tidak sah tidak tertinggal.
+- Room v8 menyimpan cache catatan sumber; `CREATE_SOURCE` tampil optimistis, bertahan
+  melewati process death, tersinkron dengan `clientMutationId`, dan ikut diremap bila
+  dibuat untuk Person lokal yang kemudian memperoleh ID server;
+- cache sumber hanya dibaca/diterapkan ulang ketika akses privacy Person masih
+  `FULL`; penyempitan akses, pencabutan Family Space, penghapusan akun/Person, atau
+  penolakan permanen server membersihkan isi lokal yang relevan.
 
 ### Session persisten Fase 4
 

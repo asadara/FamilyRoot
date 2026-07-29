@@ -79,3 +79,26 @@ val MIGRATION_6_7 = object : Migration(6, 7) {
         db.execSQL("ALTER TABLE persons ADD COLUMN canManageVisibility INTEGER NOT NULL DEFAULT 0")
     }
 }
+
+val MIGRATION_7_8 = object : Migration(7, 8) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            """CREATE TABLE IF NOT EXISTS sources (
+                sourceId TEXT NOT NULL PRIMARY KEY,
+                spaceId TEXT NOT NULL,
+                personId TEXT NOT NULL,
+                title TEXT NOT NULL,
+                type TEXT NOT NULL,
+                url TEXT,
+                note TEXT,
+                createdAt TEXT NOT NULL,
+                pendingMutationId TEXT
+            )"""
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_sources_spaceId ON sources(spaceId)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS index_sources_personId ON sources(personId)")
+        db.execSQL(
+            "CREATE INDEX IF NOT EXISTS index_sources_pendingMutationId ON sources(pendingMutationId)"
+        )
+    }
+}

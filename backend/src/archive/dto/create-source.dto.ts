@@ -4,6 +4,10 @@ export class CreateSourceDto {
   @IsUUID()
   spaceId!: string;
 
+  @IsOptional()
+  @IsUUID()
+  clientMutationId?: string;
+
   @IsString()
   @MaxLength(120)
   title!: string;
