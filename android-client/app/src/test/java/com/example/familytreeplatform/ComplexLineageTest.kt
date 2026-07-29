@@ -472,6 +472,118 @@ class ComplexLineageTest {
     }
 
     @Test
+    fun `existing ancestry compacts toward the child before reserving space for in laws`() {
+        val relationships = listOf(
+            spouse("cangkring-sikem", "cangkring", "sikem", "WIDOWED", "1930-01-01"),
+            spouse("cangkring-nn", "cangkring", "nn", "WIDOWED", "1940-01-01"),
+            parentChild("cangkring-kalinem", "cangkring", "kalinem", "BIOLOGICAL"),
+            parentChild("sikem-kalinem", "sikem", "kalinem", "BIOLOGICAL"),
+            parentChild("cangkring-kasinem", "cangkring", "kasinem", "BIOLOGICAL"),
+            parentChild("sikem-kasinem", "sikem", "kasinem", "BIOLOGICAL"),
+            parentChild("cangkring-lasiyem", "cangkring", "lasiyem", "BIOLOGICAL"),
+            parentChild("sikem-lasiyem", "sikem", "lasiyem", "BIOLOGICAL"),
+            parentChild("cangkring-karto", "cangkring", "karto", "BIOLOGICAL"),
+            parentChild("nn-karto", "nn", "karto", "BIOLOGICAL"),
+            parentChild("kalinem-paridjo", "kalinem", "paridjo", "BIOLOGICAL"),
+            spouse("paridjo-setiyasih", "paridjo", "setiyasih", "MARRIED", "1970-01-01"),
+            parentChild("paridjo-restu", "paridjo", "restu", "BIOLOGICAL"),
+            parentChild("setiyasih-restu", "setiyasih", "restu", "BIOLOGICAL"),
+            parentChild("paridjo-nurul", "paridjo", "nurul", "BIOLOGICAL"),
+            parentChild("setiyasih-nurul", "setiyasih", "nurul", "BIOLOGICAL"),
+            parentChild("paridjo-kunto", "paridjo", "kunto", "BIOLOGICAL"),
+            parentChild("setiyasih-kunto", "setiyasih", "kunto", "BIOLOGICAL"),
+            parentChild("paridjo-aji", "paridjo", "aji", "BIOLOGICAL"),
+            parentChild("setiyasih-aji", "setiyasih", "aji", "BIOLOGICAL")
+        )
+        val people = relationships
+            .flatMapTo(linkedSetOf()) { listOf(it.fromPersonId, it.toPersonId) }
+        val positions = planProgressivePlacements(
+            basePositions = mapOf(
+                "aji" to LineagePlacementRect(0f, 456f, 96f, 108f)
+            ),
+            visiblePersonIds = people,
+            visibleRelationships = relationships,
+            allRelationships = relationships,
+            tileWidth = 96f,
+            tileHeight = 108f,
+            siblingGap = 28f,
+            partnershipGap = 28f,
+            rankGap = 44f,
+            fallbackY = 456f
+        )
+
+        assertEquals(
+            positions.getValue("paridjo").centerX,
+            positions.getValue("kalinem").centerX,
+            0.01f
+        )
+        positions.values.forEachIndexed { index, first ->
+            positions.values.drop(index + 1).forEach { second ->
+                assertFalse(first.overlaps(second, padding = 0f))
+            }
+        }
+    }
+
+    @Test
+    fun `two in law ancestry blocks keep the shortest safe horizontal gap`() {
+        val relationships = listOf(
+            parentChild("kalinem-paridjo", "kalinem", "paridjo", "BIOLOGICAL"),
+            spouse("paridjo-setiyasih", "paridjo", "setiyasih", "MARRIED", "1970-01-01"),
+            spouse("setiyasih-parents", "setiyasih-father", "setiyasih-mother", "MARRIED", "1940-01-01"),
+            parentChild(
+                "setiyasih-father-child",
+                "setiyasih-father",
+                "setiyasih",
+                "BIOLOGICAL"
+            ),
+            parentChild(
+                "setiyasih-mother-child",
+                "setiyasih-mother",
+                "setiyasih",
+                "BIOLOGICAL"
+            )
+        )
+        val people = relationships
+            .flatMapTo(linkedSetOf()) { listOf(it.fromPersonId, it.toPersonId) }
+        val positions = planProgressivePlacements(
+            basePositions = mapOf(
+                "paridjo" to LineagePlacementRect(0f, 152f, 96f, 108f)
+            ),
+            visiblePersonIds = people,
+            visibleRelationships = relationships,
+            allRelationships = relationships,
+            tileWidth = 96f,
+            tileHeight = 108f,
+            siblingGap = 28f,
+            partnershipGap = 28f,
+            rankGap = 44f,
+            fallbackY = 152f
+        )
+
+        assertEquals(
+            positions.getValue("paridjo").centerX,
+            positions.getValue("kalinem").centerX,
+            0.01f
+        )
+        val kalinem = positions.getValue("kalinem")
+        val inLawParents = listOf("setiyasih-father", "setiyasih-mother")
+            .map(positions::getValue)
+        val nearestInLawGap = inLawParents.minOf { parent ->
+            when {
+                parent.left >= kalinem.right -> parent.left - kalinem.right
+                kalinem.left >= parent.right -> kalinem.left - parent.right
+                else -> 0f
+            }
+        }
+        assertEquals(28f, nearestInLawGap, 0.01f)
+        positions.values.forEachIndexed { index, first ->
+            positions.values.drop(index + 1).forEach { second ->
+                assertFalse(first.overlaps(second, padding = 0f))
+            }
+        }
+    }
+
+    @Test
     fun `progressive planner handles ten thousand people within the phase budget`() {
         val relationships = (0 until 9_999).map { index ->
             parentChild(

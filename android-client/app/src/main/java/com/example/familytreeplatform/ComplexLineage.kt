@@ -345,11 +345,18 @@ internal fun planProgressivePlacements(
         primaryUnitId = primaryUnitId,
         siblingGap = siblingGap
     )
-    return resolvePlacementCollisions(
+    val collisionResolvedPlacements = resolvePlacementCollisions(
         placements = refinedPlacements,
         components = components,
         primaryUnitId = primaryUnitId,
         horizontalStep = horizontalStep,
+        siblingGap = siblingGap
+    )
+    return compactSingleChildAncestry(
+        placements = collisionResolvedPlacements,
+        components = components,
+        componentRelationships = componentRelationships,
+        primaryUnitId = primaryUnitId,
         siblingGap = siblingGap
     )
 }
@@ -648,6 +655,154 @@ private fun resolvePlacementCollisions(
             shift(componentId, candidate.left - proposed.left)
             occupied += candidate
         }
+    return result
+}
+
+/**
+ * A visible parent family with only one visible child does not need to reserve
+ * horizontal room for hypothetical relatives. Move its complete ancestry side
+ * toward that child's own card. Cutting the connecting lineage edge before the
+ * move keeps the child's partnership and descendants stable; if an in-law block
+ * already occupies the ideal position, boundary candidates choose the nearest
+ * collision-free gap.
+ */
+private fun compactSingleChildAncestry(
+    placements: Map<String, LineagePlacementRect>,
+    components: PartnershipComponents,
+    componentRelationships: List<ComponentRelationship>,
+    primaryUnitId: String?,
+    siblingGap: Float
+): Map<String, LineagePlacementRect> {
+    if (componentRelationships.isEmpty() || placements.size > 512) return placements
+    val result = placements.toMutableMap()
+    val outgoingChildrenBySource = componentRelationships
+        .groupBy { it.fromComponentId }
+        .mapValues { (_, connections) ->
+            connections.mapTo(linkedSetOf()) { it.toComponentId }
+        }
+    val adjacency = buildMap<String, MutableSet<String>> {
+        componentRelationships.forEach { connection ->
+            getOrPut(connection.fromComponentId) { linkedSetOf() }
+                .add(connection.toComponentId)
+            getOrPut(connection.toComponentId) { linkedSetOf() }
+                .add(connection.fromComponentId)
+        }
+    }
+
+    data class SingleChildAnchor(
+        val sourceComponentId: String,
+        val childComponentId: String,
+        val childPersonId: String,
+        val sourcePersonIds: Set<String>
+    )
+
+    val anchors = componentRelationships
+        .groupBy {
+            Triple(it.fromComponentId, it.toComponentId, it.relationship.toPersonId)
+        }
+        .mapNotNull { (key, connections) ->
+            val (sourceComponentId, childComponentId, childPersonId) = key
+            if (outgoingChildrenBySource[sourceComponentId]?.size != 1) {
+                return@mapNotNull null
+            }
+            SingleChildAnchor(
+                sourceComponentId = sourceComponentId,
+                childComponentId = childComponentId,
+                childPersonId = childPersonId,
+                sourcePersonIds = connections
+                    .mapTo(linkedSetOf()) { it.relationship.fromPersonId }
+            )
+        }
+        .sortedWith(
+            compareByDescending<SingleChildAnchor> {
+                result[it.childPersonId]?.top ?: Float.MIN_VALUE
+            }.thenBy { it.sourceComponentId }
+                .thenBy { it.childComponentId }
+                .thenBy { it.childPersonId }
+        )
+
+    fun ancestrySide(anchor: SingleChildAnchor): Set<String> {
+        val side = linkedSetOf<String>()
+        val queue = ArrayDeque<String>().apply { add(anchor.sourceComponentId) }
+        while (queue.isNotEmpty()) {
+            val componentId = queue.removeFirst()
+            if (componentId == anchor.childComponentId || !side.add(componentId)) continue
+            adjacency[componentId].orEmpty().forEach { adjacentId ->
+                if (adjacentId != anchor.childComponentId) queue.addLast(adjacentId)
+            }
+        }
+        return side
+    }
+
+    fun verticalRangesConflict(
+        first: LineagePlacementRect,
+        second: LineagePlacementRect
+    ): Boolean = first.top < second.bottom + siblingGap &&
+        first.bottom + siblingGap > second.top
+
+    anchors.forEach { anchor ->
+        val movingComponents = ancestrySide(anchor)
+        if (
+            movingComponents.isEmpty() ||
+            primaryUnitId in movingComponents
+        ) return@forEach
+        val movingPersonIds = movingComponents
+            .flatMapTo(linkedSetOf()) { components.personIdsByComponent[it].orEmpty() }
+            .filterTo(linkedSetOf()) { it in result }
+        val stationaryPersonIds = result.keys - movingPersonIds
+        val sourceRects = anchor.sourcePersonIds.mapNotNull(result::get)
+        val childRect = result[anchor.childPersonId]
+        if (
+            movingPersonIds.isEmpty() ||
+            stationaryPersonIds.isEmpty() ||
+            sourceRects.isEmpty() ||
+            childRect == null
+        ) return@forEach
+
+        val sourceCenterX = sourceRects.map { it.centerX }.average().toFloat()
+        val desiredDx = childRect.centerX - sourceCenterX
+        if (kotlin.math.abs(desiredDx) < 0.01f) return@forEach
+
+        val movingRects = movingPersonIds.map(result::getValue)
+        val stationaryRects = stationaryPersonIds.map(result::getValue)
+        val candidateShifts = linkedSetOf(0f, desiredDx)
+        movingRects.forEach { movingRect ->
+            stationaryRects
+                .filter { stationaryRect ->
+                    verticalRangesConflict(movingRect, stationaryRect)
+                }
+                .forEach { stationaryRect ->
+                    candidateShifts += stationaryRect.left - siblingGap - movingRect.right
+                    candidateShifts += stationaryRect.right + siblingGap - movingRect.left
+                }
+        }
+        val bestDx = candidateShifts
+            .asSequence()
+            .filter { dx ->
+                movingRects.none { movingRect ->
+                    stationaryRects.any { stationaryRect ->
+                        movingRect.shifted(dx).overlaps(
+                            stationaryRect,
+                            padding = siblingGap
+                        )
+                    }
+                }
+            }
+            .minWithOrNull(
+                compareBy<Float> { dx -> kotlin.math.abs(desiredDx - dx) }
+                    .thenBy { dx -> kotlin.math.abs(dx) }
+                    .thenBy { it }
+            )
+            ?: return@forEach
+        if (
+            kotlin.math.abs(desiredDx - bestDx) + 0.01f >=
+            kotlin.math.abs(desiredDx)
+        ) return@forEach
+
+        movingPersonIds.forEach { personId ->
+            result[personId] = result.getValue(personId).shifted(bestDx)
+        }
+    }
     return result
 }
 
