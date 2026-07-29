@@ -257,6 +257,99 @@ class ComplexLineageTest {
     }
 
     @Test
+    fun `two widowed parents remarry without merging their inherited child blocks`() {
+        val relationships = listOf(
+            spouse(
+                "sikem-first-marriage",
+                "sikem",
+                "sikem-first-partner",
+                "WIDOWED",
+                "1925-01-01",
+                "1935-01-01"
+            ),
+            spouse(
+                "cangkring-first-marriage",
+                "cangkring",
+                "cangkring-first-partner",
+                "WIDOWED",
+                "1926-01-01",
+                "1936-01-01"
+            ),
+            spouse(
+                "sikem-cangkring",
+                "sikem",
+                "cangkring",
+                "MARRIED",
+                "1938-01-01"
+            ),
+            parentChild("sikem-old-a", "sikem", "sikem-child-a", "BIOLOGICAL"),
+            parentChild(
+                "sikem-old-b",
+                "sikem-first-partner",
+                "sikem-child-a",
+                "BIOLOGICAL"
+            ),
+            parentChild("cangkring-old-a", "cangkring", "cangkring-child-a", "BIOLOGICAL"),
+            parentChild(
+                "cangkring-old-b",
+                "cangkring-first-partner",
+                "cangkring-child-a",
+                "BIOLOGICAL"
+            ),
+            parentChild("shared-a-sikem", "sikem", "shared-child-a", "BIOLOGICAL"),
+            parentChild("shared-a-cangkring", "cangkring", "shared-child-a", "BIOLOGICAL"),
+            parentChild("shared-b-sikem", "sikem", "shared-child-b", "BIOLOGICAL"),
+            parentChild("shared-b-cangkring", "cangkring", "shared-child-b", "BIOLOGICAL")
+        )
+        val people = relationships
+            .flatMapTo(linkedSetOf()) { listOf(it.fromPersonId, it.toPersonId) }
+        listOf("sikem", "cangkring").forEach { focusedPersonId ->
+            val positions = planProgressivePlacements(
+                basePositions = mapOf(
+                    focusedPersonId to LineagePlacementRect(0f, 0f, 96f, 108f)
+                ),
+                visiblePersonIds = people,
+                visibleRelationships = relationships,
+                allRelationships = relationships,
+                tileWidth = 96f,
+                tileHeight = 108f,
+                siblingGap = 28f,
+                partnershipGap = 28f,
+                rankGap = 44f,
+                fallbackY = 0f
+            )
+
+            val sikemX = positions.getValue("sikem").centerX
+            val cangkringX = positions.getValue("cangkring").centerX
+            val sikemOldX = positions.getValue("sikem-first-partner").centerX
+            val cangkringOldX =
+                positions.getValue("cangkring-first-partner").centerX
+            assertTrue((sikemOldX - sikemX) * (cangkringX - sikemX) < 0f)
+            assertTrue((cangkringOldX - cangkringX) * (sikemX - cangkringX) < 0f)
+
+            val familyBlocks = listOf(
+                ((sikemOldX + sikemX) / 2f) to
+                    listOf(positions.getValue("sikem-child-a")),
+                ((sikemX + cangkringX) / 2f) to
+                    listOf("shared-child-a", "shared-child-b").map(positions::getValue),
+                ((cangkringX + cangkringOldX) / 2f) to
+                    listOf(positions.getValue("cangkring-child-a"))
+            ).sortedBy { it.first }
+            familyBlocks.zipWithNext().forEach { (leftFamily, rightFamily) ->
+                assertTrue(
+                    leftFamily.second.maxOf { it.right } <
+                        rightFamily.second.minOf { it.left }
+                )
+            }
+            positions.values.forEachIndexed { index, firstRect ->
+                positions.values.drop(index + 1).forEach { secondRect ->
+                    assertFalse(firstRect.overlaps(secondRect, padding = 0f))
+                }
+            }
+        }
+    }
+
+    @Test
     fun `partnership expansion reveals every recorded partner without inferring children`() {
         val relationships = listOf(
             spouse("old", "person", "old-partner", "DIVORCED", "2000-01-01", "2007-01-01"),

@@ -343,6 +343,7 @@ internal fun planProgressivePlacements(
         components = components,
         componentRelationships = componentRelationships,
         primaryUnitId = primaryUnitId,
+        relationshipIndex = relationshipIndex,
         siblingGap = siblingGap
     )
     val collisionResolvedPlacements = resolvePlacementCollisions(
@@ -373,6 +374,7 @@ private fun refineFamilyBlockPlacements(
     components: PartnershipComponents,
     componentRelationships: List<ComponentRelationship>,
     primaryUnitId: String?,
+    relationshipIndex: LineageRelationshipIndex,
     siblingGap: Float
 ): Map<String, LineagePlacementRect> {
     if (
@@ -501,7 +503,21 @@ private fun refineFamilyBlockPlacements(
                         .thenBy { it.sourceIds.joinToString() }
                 )
 
-            val parentCenterX = componentBounds(setOf(parentId)).centerX
+            val currentFamilyGroup = originGroups.firstOrNull { group ->
+                group.sourceIds.size == 2 &&
+                    relationshipIndex.relationships.any { relationship ->
+                        isCurrentPartnership(relationship) &&
+                            setOf(
+                                relationship.fromPersonId,
+                                relationship.toPersonId
+                            ) == group.sourceIds
+                    }
+            }
+            val familyAxisX = currentFamilyGroup?.sourceCenterX
+                ?: componentBounds(setOf(parentId)).centerX
+            fun groupComponents(group: OriginGroup): Set<String> =
+                group.children.flatMapTo(linkedSetOf()) { it.second }
+
             originGroups.forEach { group ->
                 var branchCursor = group.sourceCenterX - group.width / 2f
                 group.children.forEach { (_, blockIds) ->
@@ -510,29 +526,60 @@ private fun refineFamilyBlockPlacements(
                     branchCursor += bounds.width + siblingGap
                 }
 
-                if (originGroups.size > 1) {
-                    val anchorChild = if (group.sourceCenterX < parentCenterX) {
-                        group.children.last()
-                    } else {
-                        group.children.first()
+                if (originGroups.size > 1 && group != currentFamilyGroup) {
+                    val direction = group.sourceCenterX.compareTo(familyAxisX)
+                    val anchorChild = when {
+                        direction < 0 -> group.children.last()
+                        direction > 0 -> group.children.first()
+                        else -> null
                     }
-                    val anchorPersonId = connectionsByChild[anchorChild.first]
-                        .orEmpty()
-                        .firstOrNull()
-                        ?.relationship
-                        ?.toPersonId
-                    val anchorCenterX = anchorPersonId
-                        ?.let(placements::get)
-                        ?.centerX
-                    if (anchorCenterX != null) {
-                        val groupComponents = group.children
-                            .flatMapTo(linkedSetOf()) { it.second }
-                        shiftComponents(
-                            groupComponents,
-                            group.sourceCenterX - anchorCenterX
-                        )
+                    if (anchorChild != null) {
+                        val anchorPersonId = connectionsByChild[anchorChild.first]
+                            .orEmpty()
+                            .firstOrNull()
+                            ?.relationship
+                            ?.toPersonId
+                        val anchorCenterX = anchorPersonId
+                            ?.let(placements::get)
+                            ?.centerX
+                        if (anchorCenterX != null) {
+                            shiftComponents(
+                                groupComponents(group),
+                                group.sourceCenterX - anchorCenterX
+                            )
+                        }
                     }
                 }
+            }
+
+            if (currentFamilyGroup != null) {
+                val currentBounds = componentBounds(groupComponents(currentFamilyGroup))
+                var leftCursor = currentBounds.left - siblingGap
+                originGroups
+                    .filter { it.sourceCenterX < currentFamilyGroup.sourceCenterX }
+                    .sortedByDescending { it.sourceCenterX }
+                    .forEach { group ->
+                        val groupIds = groupComponents(group)
+                        var bounds = componentBounds(groupIds)
+                        if (bounds.right > leftCursor) {
+                            shiftComponents(groupIds, leftCursor - bounds.right)
+                            bounds = componentBounds(groupIds)
+                        }
+                        leftCursor = bounds.left - siblingGap
+                    }
+                var rightCursor = currentBounds.right + siblingGap
+                originGroups
+                    .filter { it.sourceCenterX > currentFamilyGroup.sourceCenterX }
+                    .sortedBy { it.sourceCenterX }
+                    .forEach { group ->
+                        val groupIds = groupComponents(group)
+                        var bounds = componentBounds(groupIds)
+                        if (bounds.left < rightCursor) {
+                            shiftComponents(groupIds, rightCursor - bounds.left)
+                            bounds = componentBounds(groupIds)
+                        }
+                        rightCursor = bounds.right + siblingGap
+                    }
             }
             return@forEach
         }
@@ -890,17 +937,39 @@ private fun buildAtomicPlacementUnit(
         val knownRect = relativeRects.getValue(knownPersonId)
         componentPartnerships
             .filter { it.fromPersonId == knownPersonId || it.toPersonId == knownPersonId }
-            .sortedWith(partnershipChronologyComparator)
+            .sortedWith(
+                compareByDescending<ExportRelationship>(::isCurrentPartnership)
+                    .then(partnershipChronologyComparator)
+            )
             .forEach { relationship ->
                 val partnerId = relationship.otherPersonId(knownPersonId)
                 if (partnerId in relativeRects) return@forEach
-                var slot = kotlin.math.round(knownRect.x / partnershipStep).toInt() +
-                    partnershipHorizontalSlot(
+                val knownSlot = kotlin.math.round(knownRect.x / partnershipStep).toInt()
+                var relativeSlot = partnershipHorizontalSlot(
                         personId = knownPersonId,
                         relationshipId = relationship.relationshipId,
                         index = relationshipIndex
                     )
-                val direction = slot.compareTo(kotlin.math.round(knownRect.x / partnershipStep).toInt())
+                if (!isCurrentPartnership(relationship)) {
+                    val currentPartnerRect = relationshipIndex
+                        .partnerships(knownPersonId)
+                        .filter(::isCurrentPartnership)
+                        .lastOrNull()
+                        ?.otherPersonId(knownPersonId)
+                        ?.let(relativeRects::get)
+                    if (currentPartnerRect != null) {
+                        val currentPartnerSlot =
+                            kotlin.math.round(currentPartnerRect.x / partnershipStep).toInt()
+                        val outwardDirection = knownSlot
+                            .compareTo(currentPartnerSlot)
+                            .takeIf { it != 0 }
+                        if (outwardDirection != null) {
+                            relativeSlot = kotlin.math.abs(relativeSlot) * outwardDirection
+                        }
+                    }
+                }
+                var slot = knownSlot + relativeSlot
+                val direction = slot.compareTo(knownSlot)
                     .takeIf { it != 0 } ?: 1
                 while (slot in occupiedSlots) slot += direction
                 occupiedSlots += slot
