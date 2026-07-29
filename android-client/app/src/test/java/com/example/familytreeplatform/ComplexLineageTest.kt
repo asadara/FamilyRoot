@@ -169,6 +169,75 @@ class ComplexLineageTest {
     }
 
     @Test
+    fun `two simultaneous partnerships use opposite sides of the shared person`() {
+        val relationships = listOf(
+            spouse("first", "shared", "partner-a", "MARRIED", "2000-01-01"),
+            spouse("second", "shared", "partner-b", "MARRIED", "2010-01-01")
+        )
+
+        assertEquals(-1, partnershipHorizontalSlot("shared", "first", relationships))
+        assertEquals(1, partnershipHorizontalSlot("shared", "second", relationships))
+
+        val positions = planProgressivePlacements(
+            basePositions = mapOf(
+                "shared" to LineagePlacementRect(0f, 0f, 96f, 108f)
+            ),
+            visiblePersonIds = setOf("shared", "partner-a", "partner-b"),
+            visibleRelationships = relationships,
+            allRelationships = relationships,
+            tileWidth = 96f,
+            tileHeight = 108f,
+            siblingGap = 28f,
+            partnershipGap = 28f,
+            rankGap = 44f,
+            fallbackY = 0f
+        )
+
+        assertTrue(positions.getValue("partner-a").right < positions.getValue("shared").left)
+        assertTrue(positions.getValue("partner-b").left > positions.getValue("shared").right)
+    }
+
+    @Test
+    fun `children from different partners keep separate ordered family blocks`() {
+        val relationships = listOf(
+            spouse("first", "shared", "partner-a", "MARRIED", "2000-01-01"),
+            spouse("second", "shared", "partner-b", "MARRIED", "2010-01-01"),
+            parentChild("shared-a1", "shared", "a1", "BIOLOGICAL"),
+            parentChild("partner-a-a1", "partner-a", "a1", "BIOLOGICAL"),
+            parentChild("shared-a2", "shared", "a2", "BIOLOGICAL"),
+            parentChild("partner-a-a2", "partner-a", "a2", "BIOLOGICAL"),
+            parentChild("shared-b1", "shared", "b1", "BIOLOGICAL"),
+            parentChild("partner-b-b1", "partner-b", "b1", "BIOLOGICAL")
+        )
+        val people = setOf("shared", "partner-a", "partner-b", "a1", "a2", "b1")
+        val positions = planProgressivePlacements(
+            basePositions = mapOf(
+                "shared" to LineagePlacementRect(0f, 0f, 96f, 108f)
+            ),
+            visiblePersonIds = people,
+            visibleRelationships = relationships,
+            allRelationships = relationships,
+            tileWidth = 96f,
+            tileHeight = 108f,
+            siblingGap = 28f,
+            partnershipGap = 28f,
+            rankGap = 44f,
+            fallbackY = 0f
+        )
+
+        val firstFamilyRight = maxOf(
+            positions.getValue("a1").right,
+            positions.getValue("a2").right
+        )
+        assertTrue(firstFamilyRight < positions.getValue("b1").left)
+        positions.values.forEachIndexed { index, firstRect ->
+            positions.values.drop(index + 1).forEach { secondRect ->
+                assertFalse(firstRect.overlaps(secondRect, padding = 0f))
+            }
+        }
+    }
+
+    @Test
     fun `partnership expansion reveals every recorded partner without inferring children`() {
         val relationships = listOf(
             spouse("old", "person", "old-partner", "DIVORCED", "2000-01-01", "2007-01-01"),

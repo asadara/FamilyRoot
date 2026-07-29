@@ -867,7 +867,8 @@ class PersonRepository(
         }
         val dao = requireNotNull(mutationDao) { "Offline mutation queue is unavailable" }
         val now = System.currentTimeMillis()
-        val payload = LifeStatusMutationPayload(lifeStatus, deceasedAt)
+        val normalizedDate = normalizeLifeStatusDate(lifeStatus, deceasedAt)
+        val payload = LifeStatusMutationPayload(lifeStatus, normalizedDate)
         val mutation = OfflineMutationEntity(
             mutationId = UUID.randomUUID().toString(),
             spaceId = spaceId,
@@ -885,7 +886,7 @@ class PersonRepository(
         )
         dao.deleteForPersonAndType(personId, OfflineMutationType.UPDATE_LIFE_STATUS)
         dao.upsert(mutation)
-        localPersonDao.updateLifeStatusLocally(personId, lifeStatus, deceasedAt)
+        localPersonDao.updateLifeStatusLocally(personId, lifeStatus, normalizedDate)
         appContext?.let(OfflineSyncScheduler::enqueue)
         ActionFeedbackStore.waitingForSync()
         mutation
@@ -1173,6 +1174,23 @@ class PersonRepository(
     suspend fun retryFailedMutation(mutationId: String, baseVersion: Int) {
         mutationDao?.retryWithVersion(mutationId, baseVersion, System.currentTimeMillis())
         mutationDao?.getById(mutationId)?.let { reapplyMutation(it) }
+        appContext?.let(OfflineSyncScheduler::enqueue)
+        ActionFeedbackStore.waitingForSync()
+    }
+
+    suspend fun retryFailedMutationsForSpace(spaceId: String) {
+        val dao = mutationDao ?: return
+        val failed = dao.listForSpace(spaceId)
+            .filter { it.status == OfflineMutationStatus.FAILED }
+        if (failed.isEmpty()) return
+        failed.forEach { mutation ->
+            dao.retryWithVersion(
+                mutation.mutationId,
+                mutation.baseVersion,
+                System.currentTimeMillis()
+            )
+            dao.getById(mutation.mutationId)?.let { reapplyMutation(it) }
+        }
         appContext?.let(OfflineSyncScheduler::enqueue)
         ActionFeedbackStore.waitingForSync()
     }
@@ -1701,12 +1719,17 @@ class PersonRepository(
                     val payload = runCatching {
                         Gson().fromJson(mutation.payloadJson, LifeStatusMutationPayload::class.java)
                     }.getOrNull() ?: return invalidMutationPayload(dao, mutation)
+                    val normalizedDate = runCatching {
+                        normalizeLifeStatusDate(payload.lifeStatus, payload.deceasedAt)
+                    }.getOrElse {
+                        return invalidMutationPayload(dao, mutation)
+                    }
                     apiService.updateLifeStatus(
                         mutation.personId,
                         UpdateLifeStatusRequest(
                             spaceId = mutation.spaceId,
                             lifeStatus = payload.lifeStatus,
-                            deceasedAt = payload.deceasedAt,
+                            deceasedAt = normalizedDate,
                             expectedVersion = mutation.baseVersion,
                             clientMutationId = mutation.mutationId
                         )
@@ -2157,7 +2180,15 @@ class PersonRepository(
                 OfflineMutationType.UPDATE_LIFE_STATUS -> runCatching {
                     Gson().fromJson(mutation.payloadJson, LifeStatusMutationPayload::class.java)
                 }.getOrNull()?.let { payload ->
-                    localDao?.updateLifeStatusLocally(mutation.personId, payload.lifeStatus, payload.deceasedAt)
+                    runCatching {
+                        normalizeLifeStatusDate(payload.lifeStatus, payload.deceasedAt)
+                    }.onSuccess { normalizedDate ->
+                        localDao?.updateLifeStatusLocally(
+                            mutation.personId,
+                            payload.lifeStatus,
+                            normalizedDate
+                        )
+                    }
                 }
                 OfflineMutationType.UPDATE_PROFILE -> runCatching {
                     Gson().fromJson(mutation.payloadJson, ProfileMutationPayload::class.java)

@@ -278,7 +278,7 @@ class PersonDetailViewModel(
                     input.deathPlace.trim() != current.deathPlace.orEmpty() ||
                     input.notes.trim() != current.notes.orEmpty()
             val normalizedDeceasedAt = deceasedAt.takeIf {
-                input.lifeStatus == "DECEASED"
+                input.lifeStatus == "DECEASED" && deceasedAt.isNotBlank()
             }
             val lifeChanged =
                 input.lifeStatus != current.lifeStatus ||

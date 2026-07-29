@@ -45,12 +45,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.familytreeplatform.data.local.OfflineMutationEntity
+import com.example.familytreeplatform.data.local.OfflineMutationStatus
+import com.example.familytreeplatform.data.local.OfflineMutationType
 import com.example.familytreeplatform.models.ChangeLog
+import com.example.familytreeplatform.models.PersonListItem
 
 @Composable
 fun ActivityScreen(
     viewModel: ActivityViewModel,
     currentUserId: String? = null,
+    syncMutations: List<OfflineMutationEntity> = emptyList(),
+    people: List<PersonListItem> = emptyList(),
+    onRetrySync: (mutationId: String, baseVersion: Int) -> Unit = { _, _ -> },
+    onRetryAllSync: () -> Unit = {},
+    onOpenPerson: (String) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -60,6 +69,13 @@ fun ActivityScreen(
         state.logs.filter(selectedFilter::matches)
     }
     val summary = remember(state.logs) { activitySummary(state.logs) }
+    val syncIssues = remember(syncMutations) {
+        syncMutations.filter {
+            it.status == OfflineMutationStatus.FAILED ||
+                it.status == OfflineMutationStatus.CONFLICT
+        }
+    }
+    val peopleById = remember(people) { people.associateBy { it.personId } }
 
     BoxWithConstraints(
         modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
@@ -74,11 +90,21 @@ fun ActivityScreen(
                 onToggleExpanded = { summaryExpanded = !summaryExpanded },
                 modifier = Modifier.fillMaxWidth().padding(top = 16.dp, bottom = 14.dp)
             )
+            if (syncIssues.isNotEmpty()) {
+                SyncIssuesCard(
+                    mutations = syncIssues,
+                    peopleById = peopleById,
+                    onRetry = onRetrySync,
+                    onRetryAll = onRetryAllSync,
+                    onOpenPerson = onOpenPerson,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp)
+                )
+            }
             Card(
                 shape = RoundedCornerShape(20.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxWidth().weight(1f)
             ) {
                 Column(modifier = Modifier.fillMaxSize().padding(horizontal = if (wide) 20.dp else 14.dp)) {
                     Row(
@@ -147,6 +173,111 @@ fun ActivityScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SyncIssuesCard(
+    mutations: List<OfflineMutationEntity>,
+    peopleById: Map<String, PersonListItem>,
+    onRetry: (mutationId: String, baseVersion: Int) -> Unit,
+    onRetryAll: () -> Unit,
+    onOpenPerson: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.errorContainer
+        ),
+        modifier = modifier
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(16.dp, 12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Perlu perhatian · ${mutations.size}",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.weight(1f)
+                )
+                if (mutations.count { it.status == OfflineMutationStatus.FAILED } > 1) {
+                    TextButton(onClick = onRetryAll) {
+                        Text("Coba semua")
+                    }
+                }
+            }
+            Text(
+                "Perubahan tetap tersimpan di tablet. Tinjau atau kirim ulang dari sini.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.78f),
+                modifier = Modifier.padding(top = 2.dp, bottom = 6.dp)
+            )
+            mutations.take(6).forEach { mutation ->
+                val personName = peopleById[mutation.personId]?.fullName ?: "Person terkait"
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp)
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            personName,
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            syncIssueDescription(mutation),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.78f),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    if (mutation.status == OfflineMutationStatus.FAILED) {
+                        TextButton(
+                            onClick = {
+                                onRetry(mutation.mutationId, mutation.baseVersion)
+                            }
+                        ) {
+                            Text("Coba lagi")
+                        }
+                    } else {
+                        TextButton(onClick = { onOpenPerson(mutation.personId) }) {
+                            Text("Tinjau")
+                        }
+                    }
+                }
+            }
+            if (mutations.size > 6) {
+                Text(
+                    "${mutations.size - 6} item lain tersedia melalui profil person terkait.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.72f),
+                    modifier = Modifier.padding(top = 4.dp)
+                )
+            }
+        }
+    }
+}
+
+private fun syncIssueDescription(mutation: OfflineMutationEntity): String {
+    val action = when (mutation.mutationType) {
+        OfflineMutationType.UPDATE_LIFE_STATUS -> "Pembaruan status kehidupan"
+        OfflineMutationType.UPDATE_PROFILE -> "Pembaruan profil"
+        OfflineMutationType.ADD_PARENT_CHILD -> "Penambahan hubungan orang tua dan anak"
+        OfflineMutationType.ADD_SPOUSE -> "Penambahan hubungan pasangan"
+        OfflineMutationType.CREATE_PERSON -> "Penambahan person"
+        OfflineMutationType.DELETE_RELATIONSHIP -> "Penghapusan hubungan"
+        OfflineMutationType.CREATE_SOURCE -> "Penambahan sumber"
+        else -> "Perubahan data"
+    }
+    return when {
+        mutation.status == OfflineMutationStatus.CONFLICT ->
+            "$action memiliki versi berbeda di server."
+        mutation.lastError?.contains("deceasedAt", ignoreCase = true) == true ->
+            "$action ditolak karena format tanggal kosong; coba lagi untuk memperbaikinya."
+        else -> "$action belum diterima server."
     }
 }
 

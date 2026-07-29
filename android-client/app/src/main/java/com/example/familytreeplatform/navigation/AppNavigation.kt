@@ -411,6 +411,21 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 ActivityScreen(
                     viewModel = activityViewModel,
                     currentUserId = userId,
+                    syncMutations = syncMutations,
+                    people = shellPeople,
+                    onRetrySync = { mutationId, baseVersion ->
+                        scope.launch {
+                            repository.retryFailedMutation(mutationId, baseVersion)
+                        }
+                    },
+                    onRetryAllSync = {
+                        scope.launch {
+                            repository.retryFailedMutationsForSpace(selectedSpaceId)
+                        }
+                    },
+                    onOpenPerson = { personId ->
+                        navController.navigate(Routes.personDetail(personId))
+                    },
                     modifier = shellModifier
                 )
             }

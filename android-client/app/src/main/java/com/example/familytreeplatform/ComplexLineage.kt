@@ -114,12 +114,24 @@ internal fun partnershipHorizontalSlot(
     val historical = ordered.filterNot(::isCurrentPartnership)
     val current = ordered.filter(::isCurrentPartnership)
     return if (isCurrentPartnership(target)) {
-        current.indexOfFirst { it.relationshipId == relationshipId }.coerceAtLeast(0) + 1
+        val currentIndex = current
+            .indexOfFirst { it.relationshipId == relationshipId }
+            .coerceAtLeast(0)
+        val rankFromLatest = current.lastIndex - currentIndex
+        when {
+            rankFromLatest == 0 -> 1
+            rankFromLatest % 2 == 1 -> -((rankFromLatest + 1) / 2)
+            else -> rankFromLatest / 2 + 1
+        }
     } else if (current.isNotEmpty()) {
         val historicalIndex = historical
             .indexOfFirst { it.relationshipId == relationshipId }
             .coerceAtLeast(0)
-        -(historical.size - historicalIndex)
+        val occupiedCurrentLeftSlots = current.indices.count { currentIndex ->
+            val rankFromLatest = current.lastIndex - currentIndex
+            rankFromLatest % 2 == 1
+        }
+        -(occupiedCurrentLeftSlots + historical.size - historicalIndex)
     } else {
         historical.indexOfFirst { it.relationshipId == relationshipId }.coerceAtLeast(0) + 1
     }
@@ -209,7 +221,9 @@ internal fun planProgressivePlacements(
         repeat(attempts) { index ->
             val step = when {
                 index == 0 -> 0
-                preferredDirection != 0 -> index * preferredDirection
+                preferredDirection != 0 && index % 2 == 1 ->
+                    ((index + 1) / 2) * preferredDirection
+                preferredDirection != 0 -> -(index / 2) * preferredDirection
                 index % 2 == 1 -> (index + 1) / 2
                 else -> -(index / 2)
             }
@@ -314,12 +328,19 @@ internal fun planProgressivePlacements(
             unit.personIds.forEach { personId -> put(personId, unit.rectFor(personId, origin)) }
         }
     }
-    return refineFamilyBlockPlacements(
+    val refinedPlacements = refineFamilyBlockPlacements(
         initialPlacements = initialPlacements,
         basePositions = basePositions,
         components = components,
         componentRelationships = componentRelationships,
         primaryUnitId = primaryUnitId,
+        siblingGap = siblingGap
+    )
+    return resolvePlacementCollisions(
+        placements = refinedPlacements,
+        components = components,
+        primaryUnitId = primaryUnitId,
+        horizontalStep = horizontalStep,
         siblingGap = siblingGap
     )
 }
@@ -422,18 +443,67 @@ private fun refineFamilyBlockPlacements(
         val primaryChild = childBlocks.firstOrNull { it.first == primaryUnitId }
 
         if (primaryChild == null) {
-            val orderedBlocks = childBlocks.sortedWith(
-                compareBy<Pair<String, Set<String>>> {
-                    componentBounds(it.second).left
-                }.thenBy { it.first }
+            data class OriginGroup(
+                val sourceIds: Set<String>,
+                val children: List<Pair<String, Set<String>>>,
+                val sourceCenterX: Float,
+                val width: Float
             )
-            val widths = orderedBlocks.map { componentBounds(it.second).width }
-            val totalWidth = widths.sum() + siblingGap * (widths.size - 1)
-            var cursor = sourceCenterX - totalWidth / 2f
-            orderedBlocks.forEachIndexed { index, (_, blockIds) ->
-                val bounds = componentBounds(blockIds)
-                shiftComponents(blockIds, cursor - bounds.left)
-                cursor += widths[index] + siblingGap
+
+            val connectionsByChild = parentConnections.groupBy { it.toComponentId }
+            val originGroups = childBlocks
+                .groupBy { (childId, _) ->
+                    connectionsByChild[childId]
+                        .orEmpty()
+                        .mapTo(sortedSetOf()) { it.relationship.fromPersonId }
+                }
+                .map { (sourceIds, branches) ->
+                    val orderedBranches = branches.sortedWith(
+                        compareBy<Pair<String, Set<String>>> {
+                            componentBounds(it.second).left
+                        }.thenBy { it.first }
+                    )
+                    val branchWidths = orderedBranches.map {
+                        componentBounds(it.second).width
+                    }
+                    val groupWidth = branchWidths.sum() +
+                        siblingGap * (branchWidths.size - 1).coerceAtLeast(0)
+                    val groupSourceRects = sourceIds.mapNotNull(placements::get)
+                    OriginGroup(
+                        sourceIds = sourceIds,
+                        children = orderedBranches,
+                        sourceCenterX = groupSourceRects
+                            .map { it.centerX }
+                            .average()
+                            .toFloat()
+                            .takeUnless(Float::isNaN) ?: sourceCenterX,
+                        width = groupWidth
+                    )
+                }
+                .sortedWith(
+                    compareBy<OriginGroup> { it.sourceCenterX }
+                        .thenBy { it.sourceIds.joinToString() }
+                )
+
+            val totalWidth = originGroups.sumOf { it.width.toDouble() }.toFloat() +
+                siblingGap * (originGroups.size - 1).coerceAtLeast(0)
+            val familyCenterX = if (originGroups.size == 1) {
+                originGroups.first().sourceCenterX
+            } else {
+                (
+                    originGroups.first().sourceCenterX +
+                        originGroups.last().sourceCenterX
+                    ) / 2f
+            }
+            var groupCursor = familyCenterX - totalWidth / 2f
+            originGroups.forEach { group ->
+                var branchCursor = groupCursor
+                group.children.forEach { (_, blockIds) ->
+                    val bounds = componentBounds(blockIds)
+                    shiftComponents(blockIds, branchCursor - bounds.left)
+                    branchCursor += bounds.width + siblingGap
+                }
+                groupCursor += group.width + siblingGap
             }
             return@forEach
         }
@@ -487,6 +557,76 @@ private fun refineFamilyBlockPlacements(
         shiftComponents(setOf(primaryUnitId), base.x - placed.x)
     }
     return placements
+}
+
+/**
+ * Family-block refinement can move complete descendant branches after the initial
+ * spatial pass. Run one final deterministic pass over partnership components so
+ * no card can overlap another card. Candidates alternate around the requested
+ * position, preventing the old right-only drift on dense trees.
+ */
+private fun resolvePlacementCollisions(
+    placements: Map<String, LineagePlacementRect>,
+    components: PartnershipComponents,
+    primaryUnitId: String?,
+    horizontalStep: Float,
+    siblingGap: Float
+): Map<String, LineagePlacementRect> {
+    if (placements.size < 2 || placements.size > 512) return placements
+    val result = placements.toMutableMap()
+
+    fun bounds(componentId: String): LineagePlacementRect {
+        val rects = components.personIdsByComponent
+            .getValue(componentId)
+            .mapNotNull(result::get)
+        return LineagePlacementRect(
+            x = rects.minOf { it.left },
+            y = rects.minOf { it.top },
+            width = rects.maxOf { it.right } - rects.minOf { it.left },
+            height = rects.maxOf { it.bottom } - rects.minOf { it.top }
+        )
+    }
+
+    fun shift(componentId: String, dx: Float) {
+        components.personIdsByComponent.getValue(componentId).forEach { personId ->
+            result[personId] = result.getValue(personId).shifted(dx)
+        }
+    }
+
+    val primaryCenterX = primaryUnitId?.let { bounds(it).centerX }
+        ?: placements.values.map { it.centerX }.average().toFloat()
+    val occupied = mutableListOf<LineagePlacementRect>()
+    components.personIdsByComponent.keys
+        .filter { componentId ->
+            components.personIdsByComponent.getValue(componentId).any(placements::containsKey)
+        }
+        .sortedWith(
+            compareByDescending<String> { it == primaryUnitId }
+                .thenBy { kotlin.math.abs(bounds(it).centerX - primaryCenterX) }
+                .thenBy { bounds(it).top }
+                .thenBy { it }
+        )
+        .forEach { componentId ->
+            val proposed = bounds(componentId)
+            val preferredDirection = proposed.centerX.compareTo(primaryCenterX).takeIf { it != 0 } ?: 1
+            val attempts = placements.size + 8
+            val candidate = (0 until attempts).firstNotNullOfOrNull { index ->
+                val step = when {
+                    index == 0 -> 0
+                    index % 2 == 1 -> ((index + 1) / 2) * preferredDirection
+                    else -> -(index / 2) * preferredDirection
+                }
+                proposed.shifted(horizontalStep * step).takeIf { rect ->
+                    occupied.none { rect.overlaps(it, padding = siblingGap) }
+                }
+            } ?: run {
+                val rightEdge = occupied.maxOfOrNull { it.right } ?: proposed.left
+                proposed.shifted(rightEdge + siblingGap - proposed.left)
+            }
+            shift(componentId, candidate.left - proposed.left)
+            occupied += candidate
+        }
+    return result
 }
 
 private data class UnitOrigin(val x: Float, val y: Float) {
