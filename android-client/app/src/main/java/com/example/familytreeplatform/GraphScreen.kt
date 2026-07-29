@@ -301,7 +301,8 @@ private data class BranchControl(
     val direction: BranchDirection,
     val point: PointDp,
     val expanded: Boolean,
-    val horizontalSide: Int = 0
+    val horizontalSide: Int = 0,
+    val childFamilyKey: String? = null
 )
 
 private data class QuickAddControl(
@@ -395,7 +396,7 @@ fun GraphScreen(
         centerPersonId,
         stateSaver = PersonIdSetSaver
     ) { mutableStateOf(emptySet()) }
-    var expandedChildPersonIds by rememberSaveable(
+    var expandedChildFamilyKeys by rememberSaveable(
         centerPersonId,
         stateSaver = PersonIdSetSaver
     ) { mutableStateOf(emptySet()) }
@@ -407,23 +408,16 @@ fun GraphScreen(
         LineageRelationshipIndex.from(allRelationships)
     }
 
-    val layout by remember(
+    val baseLayout by remember(
         centerPersonId,
         persons,
         relations,
         allRelationships,
         childrenCollapsed,
-        parentsCollapsed,
-        expandedParentPersonIds,
-        expandedChildPersonIds,
-        expandedPartnershipPersonIds,
-        relationshipPath,
-        showRelationshipPathInGraph,
-        selectedPersonId,
-        inspectedPersonId
+        parentsCollapsed
     ) {
         derivedStateOf {
-            val baseLayout = buildCoupleGraphLayout(
+            buildCoupleGraphLayout(
                 centerPersonId = centerPersonId,
                 relations = relations,
                 allRelationships = allRelationships,
@@ -439,11 +433,31 @@ fun GraphScreen(
                 rankGapY = rankGapY,
                 margin = margin
             )
+        }
+    }
+    val baseVisiblePersonIds = remember(baseLayout) {
+        baseLayout.nodes
+            .flatMap(GraphNode::tiles)
+            .mapTo(linkedSetOf()) { it.id }
+    }
+    val layout by remember(
+        baseLayout,
+        persons,
+        allRelationships,
+        expandedParentPersonIds,
+        expandedChildFamilyKeys,
+        expandedPartnershipPersonIds,
+        relationshipPath,
+        showRelationshipPathInGraph,
+        selectedPersonId,
+        inspectedPersonId
+    ) {
+        derivedStateOf {
             val progressiveLayout = augmentLayoutWithProgressiveLineage(
                 base = baseLayout,
                 relationships = allRelationships,
                 expandedParentPersonIds = expandedParentPersonIds,
-                expandedChildPersonIds = expandedChildPersonIds,
+                expandedChildFamilyKeys = expandedChildFamilyKeys,
                 expandedPartnershipPersonIds = expandedPartnershipPersonIds,
                 displayName = displayName,
                 tileW = tileW,
@@ -579,7 +593,7 @@ fun GraphScreen(
         centerMemberIds,
         allRelationships,
         expandedParentPersonIds,
-        expandedChildPersonIds,
+        expandedChildFamilyKeys,
         expandedPartnershipPersonIds,
         selectedPersonId
     ) {
@@ -605,41 +619,51 @@ fun GraphScreen(
                             )
                         }
                     }
-                    val childFamilyPersonIds =
-                        relationshipIndex.recordedChildFamilyPersonIds(tile.id)
-                    if (
-                        tile.id !in centerMemberIds &&
-                        (
-                            tile.id in expandedChildPersonIds ||
-                                childFamilyPersonIds.any { it !in visiblePersonIds }
-                            )
-                    ) {
-                        val currentPartnerId = latestCurrentPartnership(
-                            tile.id,
-                            allRelationships
-                        )?.otherPersonId(tile.id)?.takeIf { it in visiblePersonIds }
-                        val partnerRect = currentPartnerId?.let { partnerId ->
+                    val childFamilies = recordedChildFamilies(tile.id, relationshipIndex)
+                    childFamilies.forEachIndexed { familyIndex, family ->
+                        val expanded = family.key in expandedChildFamilyKeys
+                        val hasHiddenFamilyMember =
+                            family.childPersonIds.any { it !in visiblePersonIds } ||
+                                family.parentPersonIds.any { it !in visiblePersonIds }
+                        if (
+                            tile.id in centerMemberIds ||
+                            (!expanded && !hasHiddenFamilyMember)
+                        ) return@forEachIndexed
+
+                        val coParentId = family.parentPersonIds
+                            .firstOrNull { it != tile.id }
+                        val coParentRect = coParentId?.let { partnerId ->
                             tiles.firstOrNull { it.id == partnerId }?.rect
                         }
-                        val hasSharedChildren = currentPartnerId != null &&
-                            recordedChildrenForParentGroup(
-                                setOf(tile.id, currentPartnerId),
-                                relationshipIndex
-                            ).isNotEmpty()
-                        val childPoint = if (hasSharedChildren && partnerRect != null) {
+                        val recordedPartnership = coParentId != null &&
+                            relationshipIndex.partnerships(tile.id).any {
+                                it.otherPersonId(tile.id) == coParentId
+                            }
+                        if (recordedPartnership && coParentRect == null) {
+                            // The side control reveals the direct partner first. Once
+                            // visible, the child control belongs to that exact ring.
+                            return@forEachIndexed
+                        }
+                        val childPoint = if (coParentRect != null) {
                             PointDp(
-                                x = (tile.rect.center().x + partnerRect.center().x) / 2f,
-                                y = maxOf(tile.rect.bottom, partnerRect.bottom) + 22.dp
+                                x = (tile.rect.center().x + coParentRect.center().x) / 2f,
+                                y = maxOf(tile.rect.bottom, coParentRect.bottom) + 22.dp
                             )
                         } else {
-                            PointDp(tile.rect.bottomCenter().x, tile.rect.bottom + 22.dp)
+                            val offsetIndex =
+                                familyIndex - (childFamilies.lastIndex / 2f)
+                            PointDp(
+                                tile.rect.bottomCenter().x + 34.dp * offsetIndex,
+                                tile.rect.bottom + 22.dp
+                            )
                         }
                         add(
                             BranchControl(
                                 personId = tile.id,
                                 direction = BranchDirection.CHILDREN,
                                 point = childPoint,
-                                expanded = tile.id in expandedChildPersonIds
+                                expanded = expanded,
+                                childFamilyKey = family.key
                             )
                         )
                     }
@@ -654,14 +678,33 @@ fun GraphScreen(
                             it.otherPersonId(tile.id) !in visiblePersonIds
                         }
                         val sideSource = hiddenRelationships.ifEmpty { partnershipRelationships }
-                        val horizontalSide = if (sideSource.any {
+                        val currentPartnerRect = partnershipRelationships
+                            .filter(::isCurrentPartnership)
+                            .lastOrNull()
+                            ?.otherPersonId(tile.id)
+                            ?.let { partnerId ->
+                                tiles.firstOrNull { it.id == partnerId }?.rect
+                            }
+                        val opensHistoricalPartners =
+                            hiddenRelationships.isNotEmpty() &&
+                                hiddenRelationships.all { !isCurrentPartnership(it) }
+                        val horizontalSide = if (
+                            opensHistoricalPartners &&
+                            currentPartnerRect != null
+                        ) {
+                            if (currentPartnerRect.center().x < tile.rect.center().x) 1 else -1
+                        } else if (sideSource.any {
                                 partnershipHorizontalSlot(
                                     personId = tile.id,
                                     relationshipId = it.relationshipId,
                                     relationships = allRelationships
                                 ) < 0
                             }
-                        ) -1 else 1
+                        ) {
+                            -1
+                        } else {
+                            1
+                        }
                         add(
                             BranchControl(
                                 personId = tile.id,
@@ -679,31 +722,69 @@ fun GraphScreen(
                 }
         }
     }
+    fun currentExpansionState() = ProgressiveLineageExpansionState(
+        parentPersonIds = expandedParentPersonIds,
+        childFamilyKeys = expandedChildFamilyKeys,
+        partnershipPersonIds = expandedPartnershipPersonIds
+    )
+    fun applyExpansionState(state: ProgressiveLineageExpansionState) {
+        expandedParentPersonIds = state.parentPersonIds
+        expandedChildFamilyKeys = state.childFamilyKeys
+        expandedPartnershipPersonIds = state.partnershipPersonIds
+    }
     val toggleBranch: (BranchControl) -> Unit = { control ->
-        when (control.direction) {
+        val before = currentExpansionState()
+        val afterRootToggle = when (control.direction) {
             BranchDirection.PARENTS -> {
-                expandedParentPersonIds = if (control.personId in expandedParentPersonIds) {
-                    expandedParentPersonIds - control.personId
-                } else {
-                    expandedParentPersonIds + control.personId
-                }
+                before.copy(
+                    parentPersonIds = if (control.personId in before.parentPersonIds) {
+                        before.parentPersonIds - control.personId
+                    } else {
+                        before.parentPersonIds + control.personId
+                    }
+                )
             }
             BranchDirection.CHILDREN -> {
-                expandedChildPersonIds = if (control.personId in expandedChildPersonIds) {
-                    expandedChildPersonIds - control.personId
-                } else {
-                    expandedChildPersonIds + control.personId
-                }
+                val familyKey = requireNotNull(control.childFamilyKey)
+                before.copy(
+                    childFamilyKeys = if (familyKey in before.childFamilyKeys) {
+                        before.childFamilyKeys - familyKey
+                    } else {
+                        before.childFamilyKeys + familyKey
+                    }
+                )
             }
             BranchDirection.PARTNERSHIPS -> {
-                expandedPartnershipPersonIds =
-                    if (control.personId in expandedPartnershipPersonIds) {
-                        expandedPartnershipPersonIds - control.personId
+                before.copy(
+                    partnershipPersonIds =
+                    if (control.personId in before.partnershipPersonIds) {
+                        before.partnershipPersonIds - control.personId
                     } else {
-                        expandedPartnershipPersonIds + control.personId
+                        before.partnershipPersonIds + control.personId
                     }
+                )
             }
         }
+        val collapsing = when (control.direction) {
+            BranchDirection.PARENTS ->
+                control.personId in before.parentPersonIds
+            BranchDirection.CHILDREN ->
+                control.childFamilyKey in before.childFamilyKeys
+            BranchDirection.PARTNERSHIPS ->
+                control.personId in before.partnershipPersonIds
+        }
+        applyExpansionState(
+            if (collapsing) {
+                pruneHiddenLineageExpansions(
+                    beforeBaseVisiblePersonIds = baseVisiblePersonIds,
+                    before = before,
+                    afterRootToggle = afterRootToggle,
+                    relationships = allRelationships
+                )
+            } else {
+                afterRootToggle
+            }
+        )
     }
     val missingRelationshipControls = remember(
         selectedPersonId,
@@ -793,6 +874,62 @@ fun GraphScreen(
             allRelationships = allRelationships
         ).isNotEmpty()
     }
+    fun visibleBasePersonIds(
+        collapseParents: Boolean,
+        collapseChildren: Boolean
+    ): Set<String> = buildCoupleGraphLayout(
+        centerPersonId = centerPersonId,
+        relations = relations,
+        allRelationships = allRelationships,
+        displayName = displayName,
+        persons = persons,
+        childrenCollapsed = collapseChildren,
+        parentsCollapsed = collapseParents,
+        siblingsCollapsed = false,
+        tileW = tileW,
+        tileH = tileH,
+        spouseGapX = spouseGapX,
+        siblingGapX = siblingGapX,
+        rankGapY = rankGapY,
+        margin = margin
+    ).nodes.flatMap(GraphNode::tiles).mapTo(linkedSetOf()) { it.id }
+
+    val toggleCenterParents: () -> Unit = {
+        if (!parentsCollapsed) {
+            val before = currentExpansionState()
+            applyExpansionState(
+                pruneHiddenLineageExpansions(
+                    beforeBaseVisiblePersonIds = baseVisiblePersonIds,
+                    afterBaseVisiblePersonIds = visibleBasePersonIds(
+                        collapseParents = true,
+                        collapseChildren = childrenCollapsed
+                    ),
+                    before = before,
+                    afterRootToggle = before,
+                    relationships = allRelationships
+                )
+            )
+        }
+        parentsCollapsed = !parentsCollapsed
+    }
+    val toggleCenterChildren: () -> Unit = {
+        if (!childrenCollapsed) {
+            val before = currentExpansionState()
+            applyExpansionState(
+                pruneHiddenLineageExpansions(
+                    beforeBaseVisiblePersonIds = baseVisiblePersonIds,
+                    afterBaseVisiblePersonIds = visibleBasePersonIds(
+                        collapseParents = parentsCollapsed,
+                        collapseChildren = true
+                    ),
+                    before = before,
+                    afterRootToggle = before,
+                    relationships = allRelationships
+                )
+            )
+        }
+        childrenCollapsed = !childrenCollapsed
+    }
     LaunchedEffect(showRelationshipPathInGraph, pathPersonIds) {
         if (!showRelationshipPathInGraph) return@LaunchedEffect
         if (allRelationships.any {
@@ -813,27 +950,47 @@ fun GraphScreen(
     }
     var resetViewVersion by remember { mutableStateOf(0) }
     var viewportInitialized by remember(centerPersonId) { mutableStateOf(false) }
-    var previousCenterPoint by remember(centerPersonId) { mutableStateOf<PointDp?>(null) }
+    var previousViewportAnchorId by remember(centerPersonId) {
+        mutableStateOf<String?>(null)
+    }
+    var previousViewportAnchorPoint by remember(centerPersonId) {
+        mutableStateOf<PointDp?>(null)
+    }
     val minScale = 0.5f
     val maxScale = 2.5f
 
-    val currentCenterPoint = layout.center.bounds().center()
-    LaunchedEffect(currentCenterPoint, showRelationshipPathInGraph) {
-        val previous = previousCenterPoint
+    val viewportAnchorId = selectedPersonId ?: centerPersonId
+    val currentViewportAnchorPoint = tiles
+        .firstOrNull { it.id == viewportAnchorId }
+        ?.rect
+        ?.center()
+        ?: layout.center.bounds().center()
+    LaunchedEffect(
+        viewportAnchorId,
+        currentViewportAnchorPoint,
+        showRelationshipPathInGraph
+    ) {
+        val previous = previousViewportAnchorPoint
         if (
             previous != null &&
+            previousViewportAnchorId == viewportAnchorId &&
             viewportInitialized &&
             !showRelationshipPathInGraph
         ) {
             val transform = transformState.value
-            val deltaX = with(density) { (currentCenterPoint.x - previous.x).toPx() }
-            val deltaY = with(density) { (currentCenterPoint.y - previous.y).toPx() }
+            val deltaX = with(density) {
+                (currentViewportAnchorPoint.x - previous.x).toPx()
+            }
+            val deltaY = with(density) {
+                (currentViewportAnchorPoint.y - previous.y).toPx()
+            }
             transformState.value = transform.copy(
                 offsetX = transform.offsetX - deltaX * transform.scale,
                 offsetY = transform.offsetY - deltaY * transform.scale
             )
         }
-        previousCenterPoint = currentCenterPoint
+        previousViewportAnchorId = viewportAnchorId
+        previousViewportAnchorPoint = currentViewportAnchorPoint
     }
 
     LaunchedEffect(resetViewRequest) {
@@ -899,11 +1056,11 @@ fun GraphScreen(
                             } else null
                             when {
                                 hits(parentControl) -> {
-                                    parentsCollapsed = !parentsCollapsed
+                                    toggleCenterParents()
                                     return@detectTapGestures
                                 }
                                 hits(childControl) -> {
-                                    childrenCollapsed = !childrenCollapsed
+                                    toggleCenterChildren()
                                     return@detectTapGestures
                                 }
                             }
@@ -1642,7 +1799,16 @@ fun GraphScreen(
                             .size(40.dp)
                             .offset(control.point.x - 20.dp, control.point.y - 20.dp)
                             .testTag(
-                                "lineage-${control.direction.name.lowercase()}-${control.personId}"
+                                buildString {
+                                    append("lineage-")
+                                    append(control.direction.name.lowercase())
+                                    append("-")
+                                    append(control.personId)
+                                    control.childFamilyKey?.let { key ->
+                                        append("-")
+                                        append(key.hashCode())
+                                    }
+                                }
                             )
                             .clickable { toggleBranch(control) }
                             .semantics {
@@ -1660,7 +1826,7 @@ fun GraphScreen(
                             .size(40.dp)
                             .offset(point.x - 20.dp, point.y - 20.dp)
                             .testTag("lineage-parents-center")
-                            .clickable { parentsCollapsed = !parentsCollapsed }
+                            .clickable(onClick = toggleCenterParents)
                             .semantics {
                                 contentDescription =
                                     if (parentsCollapsed) "Buka cabang orang tua"
@@ -1678,7 +1844,7 @@ fun GraphScreen(
                             .size(40.dp)
                             .offset(point.x - 20.dp, point.y - 20.dp)
                             .testTag("lineage-children-center")
-                            .clickable { childrenCollapsed = !childrenCollapsed }
+                            .clickable(onClick = toggleCenterChildren)
                             .semantics {
                                 contentDescription =
                                     if (childrenCollapsed) "Buka cabang anak"
@@ -3232,7 +3398,7 @@ private fun augmentLayoutWithProgressiveLineage(
     base: GraphLayout,
     relationships: List<ExportRelationship>,
     expandedParentPersonIds: Set<String>,
-    expandedChildPersonIds: Set<String>,
+    expandedChildFamilyKeys: Set<String>,
     expandedPartnershipPersonIds: Set<String>,
     displayName: (String) -> String,
     tileW: Dp,
@@ -3250,8 +3416,9 @@ private fun augmentLayoutWithProgressiveLineage(
     val plan = planProgressiveLineage(
         baseVisiblePersonIds = basePersonIds,
         expandedParentPersonIds = expandedParentPersonIds,
-        expandedChildPersonIds = expandedChildPersonIds,
+        expandedChildPersonIds = emptySet(),
         expandedPartnershipPersonIds = expandedPartnershipPersonIds,
+        expandedChildFamilyKeys = expandedChildFamilyKeys,
         relationships = relationships
     )
     val basePositions = base.nodes

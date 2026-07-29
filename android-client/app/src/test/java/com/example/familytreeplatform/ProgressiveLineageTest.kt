@@ -63,6 +63,125 @@ class ProgressiveLineageTest {
     }
 
     @Test
+    fun `child expansion belongs to one exact partnership ring`() {
+        val relationships = listOf(
+            spouse("parent", "partner-a"),
+            spouse("parent", "partner-b"),
+            parentChild("parent", "child-a"),
+            parentChild("partner-a", "child-a"),
+            parentChild("parent", "child-b"),
+            parentChild("partner-b", "child-b")
+        )
+        val plan = planProgressiveLineage(
+            baseVisiblePersonIds = setOf("parent", "partner-a", "partner-b"),
+            expandedParentPersonIds = emptySet(),
+            expandedChildPersonIds = emptySet(),
+            expandedChildFamilyKeys = setOf(
+                childFamilyBranchKey(setOf("parent", "partner-a"))
+            ),
+            relationships = relationships
+        )
+
+        assertTrue("child-a" in plan.visiblePersonIds)
+        assertFalse("child-b" in plan.visiblePersonIds)
+    }
+
+    @Test
+    fun `collapsed child branch forgets hidden deeper expansion state`() {
+        val childFamilyKey =
+            childFamilyBranchKey(setOf("younger", "younger-spouse"))
+        val grandchildFamilyKey =
+            childFamilyBranchKey(setOf("younger-child", "grandchild-parent"))
+        val before = ProgressiveLineageExpansionState(
+            childFamilyKeys = setOf(childFamilyKey, grandchildFamilyKey),
+            partnershipPersonIds = setOf("younger-child")
+        )
+        val collapsed = pruneHiddenLineageExpansions(
+            beforeBaseVisiblePersonIds = initialVisible,
+            before = before,
+            afterRootToggle = before.copy(
+                childFamilyKeys = before.childFamilyKeys - childFamilyKey
+            ),
+            relationships = activeSpaceRelationships
+        )
+
+        assertFalse(grandchildFamilyKey in collapsed.childFamilyKeys)
+        assertFalse("younger-child" in collapsed.partnershipPersonIds)
+
+        val reopened = planProgressiveLineage(
+            baseVisiblePersonIds = initialVisible,
+            expandedParentPersonIds = collapsed.parentPersonIds,
+            expandedChildPersonIds = emptySet(),
+            expandedPartnershipPersonIds = collapsed.partnershipPersonIds,
+            expandedChildFamilyKeys = collapsed.childFamilyKeys + childFamilyKey,
+            relationships = activeSpaceRelationships
+        )
+        assertTrue("younger-child" in reopened.visiblePersonIds)
+        assertFalse("grandchild" in reopened.visiblePersonIds)
+    }
+
+    @Test
+    fun `collapsed parent branch reopens only one ancestor generation`() {
+        val relationships = listOf(
+            parentChild("parent", "child"),
+            parentChild("grandparent", "parent")
+        )
+        val before = ProgressiveLineageExpansionState(
+            parentPersonIds = setOf("child", "parent")
+        )
+        val collapsed = pruneHiddenLineageExpansions(
+            beforeBaseVisiblePersonIds = setOf("child"),
+            before = before,
+            afterRootToggle = before.copy(
+                parentPersonIds = before.parentPersonIds - "child"
+            ),
+            relationships = relationships
+        )
+
+        assertFalse("parent" in collapsed.parentPersonIds)
+        val reopened = planProgressiveLineage(
+            baseVisiblePersonIds = setOf("child"),
+            expandedParentPersonIds = collapsed.parentPersonIds + "child",
+            expandedChildPersonIds = emptySet(),
+            expandedPartnershipPersonIds = collapsed.partnershipPersonIds,
+            expandedChildFamilyKeys = collapsed.childFamilyKeys,
+            relationships = relationships
+        )
+        assertTrue("parent" in reopened.visiblePersonIds)
+        assertFalse("grandparent" in reopened.visiblePersonIds)
+    }
+
+    @Test
+    fun `collapsed side branch forgets the hidden partner ancestry`() {
+        val relationships = listOf(
+            spouse("person", "partner"),
+            parentChild("partner-parent", "partner")
+        )
+        val before = ProgressiveLineageExpansionState(
+            parentPersonIds = setOf("partner"),
+            partnershipPersonIds = setOf("person")
+        )
+        val collapsed = pruneHiddenLineageExpansions(
+            beforeBaseVisiblePersonIds = setOf("person"),
+            before = before,
+            afterRootToggle = before.copy(partnershipPersonIds = emptySet()),
+            relationships = relationships
+        )
+
+        assertFalse("partner" in collapsed.parentPersonIds)
+        val reopened = planProgressiveLineage(
+            baseVisiblePersonIds = setOf("person"),
+            expandedParentPersonIds = collapsed.parentPersonIds,
+            expandedChildPersonIds = emptySet(),
+            expandedPartnershipPersonIds = setOf("person"),
+            expandedChildFamilyKeys = collapsed.childFamilyKeys,
+            relationships = relationships
+        )
+        assertTrue("partner" in reopened.visiblePersonIds)
+        assertFalse("partner-parent" in reopened.visiblePersonIds)
+    }
+
+    @Test
     fun `collapsing a branch removes its family while preserving the base graph`() {
         val plan = planProgressiveLineage(
             baseVisiblePersonIds = initialVisible,

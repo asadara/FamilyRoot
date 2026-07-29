@@ -1105,9 +1105,9 @@ internal fun recordedChildrenForParentGroup(
     index: LineageRelationshipIndex
 ): List<String> {
     if (parentPersonIds.isEmpty()) return emptyList()
-    return index.relationships
+    val firstParentId = parentPersonIds.first()
+    return index.childRelationships(firstParentId)
         .asSequence()
-        .filter { it.isLineageParentChild() }
         .map { it.toPersonId }
         .distinct()
         .filter { childId -> parentPersonIds in recordedParentGroups(childId, index) }
