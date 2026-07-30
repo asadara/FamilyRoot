@@ -100,6 +100,11 @@ import java.util.Calendar
 
 private data class PointDp(val x: Dp, val y: Dp)
 
+data class GraphPreferredPosition(
+    val centerX: Float,
+    val centerY: Float
+)
+
 private data class GraphViewportTransform(
     val scale: Float = 1f,
     val offsetX: Float = 0f,
@@ -340,11 +345,14 @@ fun GraphScreen(
     resetViewRequest: Int = 0,
     revealPersonId: String? = null,
     revealPersonRequest: Int = 0,
+    preferredUnconnectedPositions: Map<String, GraphPreferredPosition> = emptyMap(),
+    autoExpandChildFamilyParentIds: Set<String>? = null,
+    autoExpandChildFamilyRequest: Int = 0,
     onSelectPerson: (String) -> Unit,
     onInspectPerson: (String) -> Unit = {},
     onFocusPerson: (String) -> Unit = {},
     canEditRelationships: Boolean = true,
-    onAddPersonRequest: () -> Unit = {},
+    onAddPersonRequest: (GraphPreferredPosition?) -> Unit = {},
     onQuickAddRequest: (GraphQuickAddRequest) -> Unit = {},
     onConnectPersons: (String, String) -> Unit = { _, _ -> },
     onClearSelection: () -> Unit,
@@ -407,6 +415,13 @@ fun GraphScreen(
     val relationshipIndex = remember(allRelationships) {
         LineageRelationshipIndex.from(allRelationships)
     }
+    LaunchedEffect(autoExpandChildFamilyRequest, centerPersonId) {
+        val parentIds = autoExpandChildFamilyParentIds.orEmpty()
+        if (autoExpandChildFamilyRequest > 0 && parentIds.isNotEmpty()) {
+            expandedChildFamilyKeys =
+                expandedChildFamilyKeys + childFamilyBranchKey(parentIds)
+        }
+    }
 
     val baseLayout by remember(
         centerPersonId,
@@ -450,7 +465,8 @@ fun GraphScreen(
         relationshipPath,
         showRelationshipPathInGraph,
         selectedPersonId,
-        inspectedPersonId
+        inspectedPersonId,
+        preferredUnconnectedPositions
     ) {
         derivedStateOf {
             val progressiveLayout = augmentLayoutWithProgressiveLineage(
@@ -491,7 +507,8 @@ fun GraphScreen(
                 tileH = tileH,
                 siblingGapX = siblingGapX,
                 rankGapY = rankGapY,
-                margin = margin
+                margin = margin,
+                preferredPositions = preferredUnconnectedPositions
             )
             attachFocusedCareRelationships(
                 base = completeLayout,
@@ -795,13 +812,9 @@ fun GraphScreen(
     ) {
         val selectedId = selectedPersonId ?: return@remember emptyList()
         val tile = tiles.firstOrNull { it.id == selectedId } ?: return@remember emptyList()
-        val node = layout.nodes.firstOrNull { graphNode ->
-            graphNode.tiles().any { it.id == selectedId }
-        } ?: return@remember emptyList()
         val anchorName = persons.firstOrNull { it.personId == selectedId }?.fullName
             ?: tile.label
         val parentIds = relationshipIndex.recordedParentPersonIds(selectedId)
-        val childFamilyIds = relationshipIndex.recordedChildFamilyPersonIds(selectedId)
         val partnerIds = relationshipIndex.recordedPartnershipPersonIds(selectedId)
         buildList {
             if (parentIds.isEmpty()) {
@@ -812,37 +825,45 @@ fun GraphScreen(
                     )
                 )
             }
-            if (childFamilyIds.isEmpty()) {
-                val visiblePersonIds = tiles.mapTo(mutableSetOf()) { it.id }
-                val coParentId = (node as? CoupleNode)?.let { couple ->
-                    if (couple.leftId == selectedId) couple.rightId else couple.leftId
-                } ?: latestCurrentPartnership(selectedId, allRelationships)
-                    ?.otherPersonId(selectedId)
-                    ?.takeIf { it in visiblePersonIds }
-                val coParentName = coParentId?.let { id ->
-                    persons.firstOrNull { it.personId == id }?.fullName
-                }
-                val coParentRect = coParentId?.let { partnerId ->
-                    tiles.firstOrNull { it.id == partnerId }?.rect
-                }
-                val childControlPoint = if (coParentRect != null) {
-                    PointDp(
-                        x = (tile.rect.center().x + coParentRect.center().x) / 2f,
-                        y = maxOf(tile.rect.bottom, coParentRect.bottom) + 22.dp
+            val visiblePersonIds = tiles.mapTo(mutableSetOf()) { it.id }
+            val visiblePartnerIds = partnerIds.filter { it in visiblePersonIds }
+            if (visiblePartnerIds.isNotEmpty()) {
+                visiblePartnerIds.forEach { coParentId ->
+                    val coParentName = persons
+                        .firstOrNull { it.personId == coParentId }
+                        ?.fullName
+                    val coParentRect = tiles.first { it.id == coParentId }.rect
+                    val ringX = (tile.rect.center().x + coParentRect.center().x) / 2f
+                    val ringOffset = if (coParentRect.center().x < tile.rect.center().x) {
+                        (-32).dp
+                    } else {
+                        32.dp
+                    }
+                    add(
+                        QuickAddControl(
+                            GraphQuickAddRequest(
+                                anchorPersonId = selectedId,
+                                anchorName = anchorName,
+                                kind = QuickRelationKind.CHILD,
+                                coParentId = coParentId,
+                                coParentName = coParentName
+                            ),
+                            PointDp(
+                                x = ringX + ringOffset,
+                                y = maxOf(tile.rect.bottom, coParentRect.bottom) + 22.dp
+                            )
+                        )
                     )
-                } else {
-                    PointDp(tile.rect.bottomCenter().x, tile.rect.bottom + 22.dp)
                 }
+            } else if (partnerIds.isEmpty()) {
                 add(
                     QuickAddControl(
                         GraphQuickAddRequest(
                             anchorPersonId = selectedId,
                             anchorName = anchorName,
-                            kind = QuickRelationKind.CHILD,
-                            coParentId = coParentId,
-                            coParentName = coParentName
+                            kind = QuickRelationKind.CHILD
                         ),
-                        childControlPoint
+                        PointDp(tile.rect.bottomCenter().x + 32.dp, tile.rect.bottom + 22.dp)
                     )
                 )
             }
@@ -1095,7 +1116,14 @@ fun GraphScreen(
                                 val bottom = with(density) { tile.rect.bottom.toPx() }
                                 world.x in left..right && world.y in top..bottom
                             }
-                            if (hit == null) onAddPersonRequest()
+                            if (hit == null) {
+                                onAddPersonRequest(
+                                    GraphPreferredPosition(
+                                        centerX = with(density) { world.x.toDp().value },
+                                        centerY = with(density) { world.y.toDp().value }
+                                    )
+                                )
+                            }
                         },
                         onDoubleTap = { tap ->
                             val transform = transformState.value
@@ -1237,8 +1265,17 @@ fun GraphScreen(
                 viewportInitialized = true
             }
 
-            LaunchedEffect(revealPersonRequest, viewportWidthPx, viewportHeightPx) {
-                if (revealPersonRequest <= 0 || revealPersonId == null) {
+            var handledRevealPersonRequest by remember { mutableStateOf(0) }
+            LaunchedEffect(
+                revealPersonRequest,
+                tiles,
+                viewportWidthPx,
+                viewportHeightPx
+            ) {
+                if (
+                    revealPersonRequest <= handledRevealPersonRequest ||
+                    revealPersonId == null
+                ) {
                     return@LaunchedEffect
                 }
                 val tile = tiles.firstOrNull { it.id == revealPersonId }
@@ -1252,6 +1289,7 @@ fun GraphScreen(
                     offsetX = viewportWidthPx / 2f - tileCenter.x * transform.scale,
                     offsetY = viewportHeightPx / 2f - tileCenter.y * transform.scale
                 )
+                handledRevealPersonRequest = revealPersonRequest
                 viewportInitialized = true
             }
 
@@ -1863,7 +1901,16 @@ fun GraphScreen(
                             .size(40.dp)
                             .offset(control.point.x - 20.dp, control.point.y - 20.dp)
                             .testTag(
-                                "quick-add-${control.request.kind.name.lowercase()}-${control.request.anchorPersonId}"
+                                buildString {
+                                    append("quick-add-")
+                                    append(control.request.kind.name.lowercase())
+                                    append("-")
+                                    append(control.request.anchorPersonId)
+                                    control.request.coParentId?.let {
+                                        append("-")
+                                        append(it)
+                                    }
+                                }
                             )
                             .clickable { onQuickAddRequest(control.request) }
                             .semantics { contentDescription = "Tambah $relation" }
@@ -1880,7 +1927,16 @@ fun GraphScreen(
                             .size(40.dp)
                             .offset(control.point.x - 20.dp, control.point.y - 20.dp)
                             .testTag(
-                                "locked-${control.request.kind.name.lowercase()}-${control.request.anchorPersonId}"
+                                buildString {
+                                    append("locked-")
+                                    append(control.request.kind.name.lowercase())
+                                    append("-")
+                                    append(control.request.anchorPersonId)
+                                    control.request.coParentId?.let {
+                                        append("-")
+                                        append(it)
+                                    }
+                                }
                             )
                             .semantics {
                                 contentDescription =
@@ -2031,7 +2087,7 @@ fun GraphScreen(
 
             if (canEditRelationships && inspectedPerson == null) {
                 ExtendedFloatingActionButton(
-                    onClick = onAddPersonRequest,
+                    onClick = { onAddPersonRequest(null) },
                     icon = {
                         Text(
                             "+",
@@ -3781,7 +3837,8 @@ private fun augmentLayoutWithUnconnectedPersons(
     tileH: Dp,
     siblingGapX: Dp,
     rankGapY: Dp,
-    margin: Dp
+    margin: Dp,
+    preferredPositions: Map<String, GraphPreferredPosition> = emptyMap()
 ): GraphLayout {
     val visibleIds = base.nodes.flatMap(GraphNode::tiles).mapTo(mutableSetOf()) { it.id }
     val unconnectedIds = unconnectedPersonIds(persons, relationships, visibleIds)
@@ -3793,15 +3850,62 @@ private fun augmentLayoutWithUnconnectedPersons(
     val columns = 4
     val left = base.nodes.minOf { it.bounds().left.value }
     val top = base.nodes.maxOf { it.bounds().bottom.value } + rankGapY.value + 44f
-    val nodes = unconnected.mapIndexed { index, person ->
-        val column = index % columns
-        val row = index / columns
+    val occupied = base.nodes
+        .flatMap(GraphNode::tiles)
+        .mapTo(mutableListOf()) { tile ->
+            LineagePlacementRect(
+                x = tile.rect.left.value,
+                y = tile.rect.top.value,
+                width = tile.rect.w.value,
+                height = tile.rect.h.value
+            )
+        }
+    val placements = linkedMapOf<String, LineagePlacementRect>()
+    val preferred = unconnected.filter { preferredPositions.containsKey(it.personId) }
+    preferred.forEach { person ->
+        val desired = requireNotNull(preferredPositions[person.personId])
+        val placement = nearestAvailableGraphCardRect(
+            preferred = desired,
+            occupied = occupied,
+            tileWidth = tileW.value,
+            tileHeight = tileH.value,
+            horizontalStep = tileW.value + siblingGapX.value,
+            verticalStep = tileH.value + rankGapY.value,
+            margin = margin.value
+        )
+        placements[person.personId] = placement
+        occupied += placement
+    }
+    unconnected
+        .filterNot { preferredPositions.containsKey(it.personId) }
+        .forEachIndexed { index, person ->
+            val column = index % columns
+            val row = index / columns
+            val placement = nearestAvailableGraphCardRect(
+                preferred = GraphPreferredPosition(
+                    centerX = left + column * (tileW.value + siblingGapX.value) +
+                        tileW.value / 2f,
+                    centerY = top + row * (tileH.value + rankGapY.value) +
+                        tileH.value / 2f
+                ),
+                occupied = occupied,
+                tileWidth = tileW.value,
+                tileHeight = tileH.value,
+                horizontalStep = tileW.value + siblingGapX.value,
+                verticalStep = tileH.value + rankGapY.value,
+                margin = margin.value
+            )
+            placements[person.personId] = placement
+            occupied += placement
+        }
+    val nodes = unconnected.map { person ->
+        val placement = placements.getValue(person.personId)
         personNode(
             id = person.personId,
             label = displayName(person.personId),
             role = "UNCONNECTED",
-            x = (left + column * (tileW.value + siblingGapX.value)).dp,
-            y = (top + row * (tileH.value + rankGapY.value)).dp,
+            x = placement.left.dp,
+            y = placement.top.dp,
             tileW = tileW,
             tileH = tileH
         )
@@ -3813,6 +3917,64 @@ private fun augmentLayoutWithUnconnectedPersons(
         nodes = combined,
         width = maxOf(base.width, maxX.dp + margin),
         height = maxOf(base.height, maxY.dp + margin)
+    )
+}
+
+internal fun nearestAvailableGraphCardRect(
+    preferred: GraphPreferredPosition,
+    occupied: List<LineagePlacementRect>,
+    tileWidth: Float,
+    tileHeight: Float,
+    horizontalStep: Float,
+    verticalStep: Float,
+    margin: Float
+): LineagePlacementRect {
+    fun candidate(columnOffset: Int, rowOffset: Int): LineagePlacementRect {
+        val centerX = preferred.centerX + columnOffset * horizontalStep
+        val centerY = preferred.centerY + rowOffset * verticalStep
+        return LineagePlacementRect(
+            x = (centerX - tileWidth / 2f).coerceAtLeast(margin),
+            y = (centerY - tileHeight / 2f).coerceAtLeast(margin),
+            width = tileWidth,
+            height = tileHeight
+        )
+    }
+
+    for (radius in 0..64) {
+        val offsets = if (radius == 0) {
+            listOf(0 to 0)
+        } else {
+            buildList {
+                for (row in -radius..radius) {
+                    for (column in -radius..radius) {
+                        if (kotlin.math.abs(column) == radius || kotlin.math.abs(row) == radius) {
+                            add(column to row)
+                        }
+                    }
+                }
+            }.sortedWith(
+                compareBy<Pair<Int, Int>> { (column, row) ->
+                    column * column + row * row
+                }.thenBy { (_, row) -> kotlin.math.abs(row) }
+                    .thenBy { (column, _) -> kotlin.math.abs(column) }
+                    .thenBy { (_, row) -> row }
+                    .thenBy { (column, _) -> column }
+            )
+        }
+        offsets.forEach { (column, row) ->
+            val candidate = candidate(column, row)
+            if (occupied.none { it.overlaps(candidate, padding = 8f) }) {
+                return candidate
+            }
+        }
+    }
+
+    val fallbackTop = occupied.maxOfOrNull { it.bottom }?.plus(verticalStep) ?: margin
+    return LineagePlacementRect(
+        x = margin,
+        y = fallbackTop,
+        width = tileWidth,
+        height = tileHeight
     )
 }
 

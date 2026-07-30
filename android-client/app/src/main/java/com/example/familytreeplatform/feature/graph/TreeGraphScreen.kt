@@ -27,6 +27,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.familytreeplatform.GraphScreen
 import com.example.familytreeplatform.GraphExportSnapshot
+import com.example.familytreeplatform.GraphPreferredPosition
 import com.example.familytreeplatform.R
 import com.example.familytreeplatform.export.FamilyGraphExporter
 import com.example.familytreeplatform.navigation.GraphShellAction
@@ -59,7 +61,15 @@ fun TreeGraphScreen(
     var revealPersonRequest by rememberSaveable { mutableIntStateOf(0) }
     var revealPersonId by rememberSaveable { mutableStateOf<String?>(null) }
     var quickAddRequest by remember { mutableStateOf<GraphQuickAddRequest?>(null) }
+    var autoExpandChildFamilyParentIds by remember { mutableStateOf<Set<String>?>(null) }
+    var autoExpandChildFamilyRequest by rememberSaveable { mutableIntStateOf(0) }
     var addPersonDialogVisible by rememberSaveable { mutableStateOf(false) }
+    var pendingStandalonePosition by remember {
+        mutableStateOf<GraphPreferredPosition?>(null)
+    }
+    val preferredUnconnectedPositions = remember {
+        mutableStateMapOf<String, GraphPreferredPosition>()
+    }
     var connectionRequest by remember { mutableStateOf<GraphConnectionRequest?>(null) }
     var integrityDialogVisible by rememberSaveable { mutableStateOf(false) }
     var pendingIntegrityDeletion by remember {
@@ -103,8 +113,26 @@ fun TreeGraphScreen(
     }
 
     LaunchedEffect(state.quickAddCompletedPersonId) {
-        if (state.quickAddCompletedPersonId != null) {
+        val completedId = state.quickAddCompletedPersonId
+        if (completedId != null) {
+            val completedRequest = quickAddRequest
+            if (completedRequest?.kind == QuickRelationKind.CHILD) {
+                autoExpandChildFamilyParentIds = setOfNotNull(
+                    completedRequest.anchorPersonId,
+                    completedRequest.coParentId
+                )
+                autoExpandChildFamilyRequest++
+                revealPersonId = completedId
+                revealPersonRequest++
+            }
             quickAddRequest = null
+            snackbarHostState.showSnackbar(
+                if (completedRequest?.kind == QuickRelationKind.CHILD) {
+                    "Anak berhasil ditambahkan ke pasangan yang dipilih."
+                } else {
+                    "Person dan hubungan keluarga berhasil ditambahkan."
+                }
+            )
             viewModel.clearQuickAddFeedback()
         }
     }
@@ -113,12 +141,21 @@ fun TreeGraphScreen(
         val completedId = state.personCreateCompletedId
         if (completedId != null && state.persons.any { it.personId == completedId }) {
             addPersonDialogVisible = false
+            pendingStandalonePosition?.let { preferredPosition ->
+                preferredUnconnectedPositions[completedId] = preferredPosition
+            }
+            val usedPreferredPosition = pendingStandalonePosition != null
+            pendingStandalonePosition = null
             revealPersonId = completedId
             revealPersonRequest++
-            viewModel.clearPersonCreateFeedback()
             snackbarHostState.showSnackbar(
-                "Person berhasil ditambahkan. Card tampil di bagian Belum terhubung."
+                if (usedPreferredPosition) {
+                    "Person berhasil ditambahkan di area yang dipilih."
+                } else {
+                    "Person berhasil ditambahkan. Card tampil di bagian Belum terhubung."
+                }
             )
+            viewModel.clearPersonCreateFeedback()
         }
     }
 
@@ -176,11 +213,15 @@ fun TreeGraphScreen(
                     resetViewRequest = resetViewRequest,
                     revealPersonId = revealPersonId,
                     revealPersonRequest = revealPersonRequest,
+                    preferredUnconnectedPositions = preferredUnconnectedPositions,
+                    autoExpandChildFamilyParentIds = autoExpandChildFamilyParentIds,
+                    autoExpandChildFamilyRequest = autoExpandChildFamilyRequest,
                     onSelectPerson = viewModel::selectPerson,
                     onInspectPerson = viewModel::inspectPerson,
                     onFocusPerson = viewModel::focusPerson,
                     canEditRelationships = canEditRelationships,
-                    onAddPersonRequest = {
+                    onAddPersonRequest = { preferredPosition ->
+                        pendingStandalonePosition = preferredPosition
                         viewModel.beginPersonCreate()
                         addPersonDialogVisible = true
                     },
@@ -234,6 +275,7 @@ fun TreeGraphScreen(
                 error = state.personCreateError,
                 onDismiss = {
                     addPersonDialogVisible = false
+                    pendingStandalonePosition = null
                     viewModel.clearPersonCreateFeedback()
                 },
                 onSave = viewModel::createStandalonePerson

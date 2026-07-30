@@ -514,6 +514,12 @@ private fun refineFamilyBlockPlacements(
                     }
             }
             val familyAxisX = currentFamilyGroup?.sourceCenterX
+                ?: originGroups
+                    .takeIf { it.size > 1 }
+                    ?.let { groups ->
+                        (groups.first().sourceCenterX + groups.last().sourceCenterX) / 2f
+                    }
+                ?: originGroups.firstOrNull()?.sourceCenterX
                 ?: componentBounds(setOf(parentId)).centerX
             fun groupComponents(group: OriginGroup): Set<String> =
                 group.children.flatMapTo(linkedSetOf()) { it.second }

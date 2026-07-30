@@ -350,6 +350,126 @@ class ComplexLineageTest {
     }
 
     @Test
+    fun `childless current partner does not merge two historical child corridors`() {
+        val relationships = listOf(
+            spouse(
+                "nn-cangkring",
+                "nn",
+                "cangkring",
+                "WIDOWED",
+                "1925-01-01",
+                "1935-01-01"
+            ),
+            spouse(
+                "sikem-cangkring",
+                "sikem",
+                "cangkring",
+                "WIDOWED",
+                "1938-01-01",
+                "1950-01-01"
+            ),
+            spouse("sikem-manto", "sikem", "manto", "MARRIED", "1952-01-01"),
+            parentChild("nn-karto", "nn", "karto-setiko", "BIOLOGICAL"),
+            parentChild("cangkring-karto", "cangkring", "karto-setiko", "BIOLOGICAL"),
+            parentChild("sikem-kalinem", "sikem", "kalinem", "BIOLOGICAL"),
+            parentChild("cangkring-kalinem", "cangkring", "kalinem", "BIOLOGICAL"),
+            parentChild("sikem-kasinem", "sikem", "kasinem", "BIOLOGICAL"),
+            parentChild("cangkring-kasinem", "cangkring", "kasinem", "BIOLOGICAL"),
+            parentChild("sikem-lasiyem", "sikem", "lasiyem", "BIOLOGICAL"),
+            parentChild("cangkring-lasiyem", "cangkring", "lasiyem", "BIOLOGICAL")
+        )
+        val people = relationships
+            .flatMapTo(linkedSetOf()) { listOf(it.fromPersonId, it.toPersonId) }
+        val positions = planProgressivePlacements(
+            basePositions = mapOf(
+                "cangkring" to LineagePlacementRect(0f, 0f, 96f, 108f)
+            ),
+            visiblePersonIds = people,
+            visibleRelationships = relationships,
+            allRelationships = relationships,
+            tileWidth = 96f,
+            tileHeight = 108f,
+            siblingGap = 28f,
+            partnershipGap = 28f,
+            rankGap = 44f,
+            fallbackY = 0f
+        )
+
+        val nnJunction = (
+            positions.getValue("nn").centerX +
+                positions.getValue("cangkring").centerX
+            ) / 2f
+        val sikemJunction = (
+            positions.getValue("sikem").centerX +
+                positions.getValue("cangkring").centerX
+            ) / 2f
+        assertTrue(nnJunction < sikemJunction)
+        val nnChild = positions.getValue("karto-setiko")
+        val sikemChildren = listOf("kalinem", "kasinem", "lasiyem")
+            .map(positions::getValue)
+        assertTrue(nnChild.right < sikemChildren.minOf { it.left })
+        assertEquals(nnJunction, nnChild.centerX, 0.01f)
+        assertEquals(sikemJunction, sikemChildren.minOf { it.centerX }, 0.01f)
+        positions.values.forEachIndexed { index, firstRect ->
+            positions.values.drop(index + 1).forEach { secondRect ->
+                assertFalse(firstRect.overlaps(secondRect, padding = 0f))
+            }
+        }
+    }
+
+    @Test
+    fun `sadinem and reso semito keep four children on one centered corridor`() {
+        val relationships = listOf(
+            spouse("sadinem-reso", "sadinem", "reso-semito", "MARRIED", "1960-01-01"),
+            parentChild("sadinem-pangat", "sadinem", "pangat", "BIOLOGICAL"),
+            parentChild("reso-pangat", "reso-semito", "pangat", "BIOLOGICAL"),
+            parentChild("sadinem-pardi", "sadinem", "pardi", "BIOLOGICAL"),
+            parentChild("reso-pardi", "reso-semito", "pardi", "BIOLOGICAL"),
+            parentChild("sadinem-parti", "sadinem", "parti", "BIOLOGICAL"),
+            parentChild("reso-parti", "reso-semito", "parti", "BIOLOGICAL"),
+            parentChild("sadinem-ruki", "sadinem", "ruki", "BIOLOGICAL"),
+            parentChild("reso-ruki", "reso-semito", "ruki", "BIOLOGICAL")
+        )
+        val people = relationships
+            .flatMapTo(linkedSetOf()) { listOf(it.fromPersonId, it.toPersonId) }
+        val positions = planProgressivePlacements(
+            basePositions = mapOf(
+                "sadinem" to LineagePlacementRect(0f, 0f, 96f, 108f)
+            ),
+            visiblePersonIds = people,
+            visibleRelationships = relationships,
+            allRelationships = relationships,
+            tileWidth = 96f,
+            tileHeight = 108f,
+            siblingGap = 28f,
+            partnershipGap = 28f,
+            rankGap = 44f,
+            fallbackY = 0f
+        )
+
+        val junctionX = (
+            positions.getValue("sadinem").centerX +
+                positions.getValue("reso-semito").centerX
+            ) / 2f
+        val children = listOf("pangat", "pardi", "parti", "ruki")
+            .map(positions::getValue)
+            .sortedBy { it.centerX }
+        assertEquals(
+            junctionX,
+            (children.first().centerX + children.last().centerX) / 2f,
+            0.01f
+        )
+        children.zipWithNext().forEach { (left, right) ->
+            assertEquals(28f, right.left - left.right, 0.01f)
+        }
+        positions.values.forEachIndexed { index, firstRect ->
+            positions.values.drop(index + 1).forEach { secondRect ->
+                assertFalse(firstRect.overlaps(secondRect, padding = 0f))
+            }
+        }
+    }
+
+    @Test
     fun `partnership expansion reveals every recorded partner without inferring children`() {
         val relationships = listOf(
             spouse("old", "person", "old-partner", "DIVORCED", "2000-01-01", "2007-01-01"),

@@ -3,6 +3,7 @@ package com.example.familytreeplatform
 import com.example.familytreeplatform.models.ExportRelationship
 import com.example.familytreeplatform.models.PersonListItem
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class GraphRelationshipLayoutTest {
@@ -71,6 +72,40 @@ class GraphRelationshipLayoutTest {
             listOf("first-recorded", "later-recorded"),
             findSiblingIds("center", relationships, undatedPeople)
         )
+    }
+
+    @Test
+    fun `long press position becomes the center of an unconnected card`() {
+        val placement = nearestAvailableGraphCardRect(
+            preferred = GraphPreferredPosition(centerX = 420f, centerY = 300f),
+            occupied = emptyList(),
+            tileWidth = 96f,
+            tileHeight = 108f,
+            horizontalStep = 124f,
+            verticalStep = 152f,
+            margin = 80f
+        )
+
+        assertEquals(420f, placement.centerX, 0.01f)
+        assertEquals(300f, placement.y + placement.height / 2f, 0.01f)
+    }
+
+    @Test
+    fun `long press position moves to nearest free slot when a card occupies it`() {
+        val occupied = LineagePlacementRect(372f, 246f, 96f, 108f)
+        val placement = nearestAvailableGraphCardRect(
+            preferred = GraphPreferredPosition(centerX = 420f, centerY = 300f),
+            occupied = listOf(occupied),
+            tileWidth = 96f,
+            tileHeight = 108f,
+            horizontalStep = 124f,
+            verticalStep = 152f,
+            margin = 80f
+        )
+
+        assertFalse(occupied.overlaps(placement, padding = 8f))
+        assertEquals(420f, placement.centerX, 124.01f)
+        assertEquals(300f, placement.y + placement.height / 2f, 152.01f)
     }
 
     private fun person(id: String, name: String, birthDate: String) = PersonListItem(
