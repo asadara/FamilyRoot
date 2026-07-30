@@ -26,6 +26,7 @@ import com.example.familytreeplatform.models.RelationItem
 import com.example.familytreeplatform.models.RelationsResponse
 import com.example.familytreeplatform.ui.theme.FamilyTreePlatformTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -173,6 +174,79 @@ class GraphCardInteractionTest {
 
         assertTrue(cardCenterX("Budi") > cardCenterX("Siti"))
         assertTrue(cardCenterX("Ayah Budi") > cardCenterX("Ayah Siti"))
+    }
+
+    @Test
+    fun partnershipSwitchDoesNotOverlapPartnershipExpansionControl() {
+        val relationships = listOf(
+            ExportRelationship(
+                relationshipId = "budi-previous",
+                type = "SPOUSE",
+                fromPersonId = "budi",
+                toPersonId = "previous",
+                meta = "DIVORCED",
+                startDate = "1990-01-01",
+                endDate = "1998-01-01",
+                createdAt = "1990-01-01"
+            ),
+            ExportRelationship(
+                relationshipId = "budi-current",
+                type = "SPOUSE",
+                fromPersonId = "budi",
+                toPersonId = "current",
+                meta = "MARRIED",
+                startDate = "2000-01-01",
+                createdAt = "2000-01-01"
+            )
+        )
+        composeRule.setContent {
+            FamilyTreePlatformTheme(dynamicColor = false) {
+                GraphScreen(
+                    centerPersonId = "budi",
+                    selectedPersonId = "budi",
+                    persons = listOf(
+                        person("budi", "Budi"),
+                        person("previous", "Pasangan terdahulu"),
+                        person("current", "Pasangan saat ini")
+                    ),
+                    relations = RelationsResponse(personId = "budi"),
+                    allRelationships = relationships,
+                    onSelectPerson = {},
+                    onClearSelection = {},
+                    onOpenPerson = {},
+                    onBack = {}
+                )
+            }
+        }
+
+        composeRule.waitForIdle()
+        val switchBounds = composeRule
+            .onNodeWithContentDescription("Tukar posisi Budi dan Pasangan saat ini")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        val expansionBounds = composeRule
+            .onNodeWithTag("lineage-partnerships-budi")
+            .fetchSemanticsNode()
+            .boundsInRoot
+
+        assertFalse(switchBounds.overlaps(expansionBounds))
+
+        composeRule.onNodeWithTag("lineage-partnerships-budi").performClick()
+        composeRule.waitForIdle()
+        val expandedControlBounds = composeRule
+            .onNodeWithTag("lineage-partnerships-budi")
+            .fetchSemanticsNode()
+            .boundsInRoot
+        listOf(
+            "Tukar posisi Budi dan Pasangan saat ini",
+            "Tukar posisi Budi dan Pasangan terdahulu"
+        ).forEach { description ->
+            val expandedSwitchBounds = composeRule
+                .onNodeWithContentDescription(description)
+                .fetchSemanticsNode()
+                .boundsInRoot
+            assertFalse(expandedSwitchBounds.overlaps(expandedControlBounds))
+        }
     }
 
     @Test

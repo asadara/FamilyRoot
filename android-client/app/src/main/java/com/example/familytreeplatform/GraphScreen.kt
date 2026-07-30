@@ -773,14 +773,31 @@ fun GraphScreen(
                         } else {
                             1
                         }
+                        val visiblePartnershipRects = buildList {
+                            add(tile.rect)
+                            partnershipPersonIds.forEach { partnerId ->
+                                tiles.firstOrNull { it.id == partnerId }
+                                    ?.rect
+                                    ?.let(::add)
+                            }
+                        }
+                        val partnershipBlockLeft =
+                            visiblePartnershipRects.minOf { it.left }
+                        val partnershipBlockRight =
+                            visiblePartnershipRects.maxOf { it.right }
+                        val partnershipBlockTop =
+                            visiblePartnershipRects.minOf { it.top }
                         add(
                             BranchControl(
                                 personId = tile.id,
                                 direction = BranchDirection.PARTNERSHIPS,
                                 point = PointDp(
-                                    if (horizontalSide < 0) tile.rect.left - 22.dp
-                                    else tile.rect.right + 22.dp,
-                                    tile.rect.top + 22.dp
+                                    if (horizontalSide < 0) {
+                                        partnershipBlockLeft - 22.dp
+                                    } else {
+                                        partnershipBlockRight + 22.dp
+                                    },
+                                    partnershipBlockTop - 22.dp
                                 ),
                                 expanded = tile.id in expandedPartnershipPersonIds,
                                 horizontalSide = horizontalSide

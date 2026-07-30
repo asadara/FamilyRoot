@@ -911,6 +911,82 @@ class ComplexLineageTest {
         )
     }
 
+    @Test
+    fun `dense seven generation family stays collision free within the phase budget`() {
+        val relationships = mutableListOf<ExportRelationship>()
+        val people = linkedSetOf("root-a", "root-b")
+        relationships += spouse(
+            "root-partnership",
+            "root-a",
+            "root-b",
+            "MARRIED",
+            "1940-01-01"
+        )
+        var generationCouples = listOf("root-a" to "root-b")
+        repeat(6) { generation ->
+            val nextGeneration = mutableListOf<Pair<String, String>>()
+            generationCouples.forEachIndexed { familyIndex, (firstParent, secondParent) ->
+                repeat(3) { childIndex ->
+                    val child = "g${generation + 1}-f$familyIndex-c$childIndex"
+                    val partner = "$child-partner"
+                    people += child
+                    people += partner
+                    relationships += parentChild(
+                        "$firstParent-$child",
+                        firstParent,
+                        child,
+                        "BIOLOGICAL"
+                    )
+                    relationships += parentChild(
+                        "$secondParent-$child",
+                        secondParent,
+                        child,
+                        "BIOLOGICAL"
+                    )
+                    relationships += spouse(
+                        "$child-$partner",
+                        child,
+                        partner,
+                        "MARRIED",
+                        "${1960 + generation * 20}-01-01"
+                    )
+                    nextGeneration += child to partner
+                }
+            }
+            generationCouples = nextGeneration
+        }
+
+        lateinit var placements: Map<String, LineagePlacementRect>
+        val elapsed = measureTimeMillis {
+            placements = planProgressivePlacements(
+                basePositions = mapOf(
+                    "root-a" to LineagePlacementRect(0f, 0f, 96f, 108f),
+                    "root-b" to LineagePlacementRect(124f, 0f, 96f, 108f)
+                ),
+                visiblePersonIds = people,
+                visibleRelationships = relationships,
+                allRelationships = relationships,
+                tileWidth = 96f,
+                tileHeight = 108f,
+                siblingGap = 28f,
+                partnershipGap = 28f,
+                rankGap = 44f,
+                fallbackY = 0f
+            )
+        }
+
+        assertEquals(2_186, placements.size)
+        assertTrue("Dense placement took ${elapsed}ms", elapsed <= 5_000L)
+        placements.values
+            .groupBy { it.y }
+            .values
+            .forEach { generationRects ->
+                generationRects.sortedBy { it.left }.zipWithNext().forEach { (left, right) ->
+                    assertFalse(left.overlaps(right, padding = 0f))
+                }
+            }
+    }
+
     private fun parentChild(
         id: String,
         parentId: String,
