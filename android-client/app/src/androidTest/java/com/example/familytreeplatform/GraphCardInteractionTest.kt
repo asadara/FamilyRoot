@@ -28,6 +28,7 @@ import com.example.familytreeplatform.ui.theme.FamilyTreePlatformTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -103,6 +104,75 @@ class GraphCardInteractionTest {
         composeRule.onNodeWithContentDescription("Budi Santoso")
             .performTouchInput { doubleClick(center) }
         composeRule.onNodeWithText("Lihat profil lengkap").assertIsDisplayed()
+    }
+
+    @Test
+    fun partnershipSwitchMovesBothCardsToOppositeSides() {
+        val relationships = listOf(
+            ExportRelationship(
+                relationshipId = "budi-siti",
+                type = "SPOUSE",
+                fromPersonId = "budi",
+                toPersonId = "siti",
+                meta = "MARRIED",
+                startDate = "2000-01-01",
+                createdAt = "2000-01-01"
+            ),
+            ExportRelationship(
+                relationshipId = "father-budi-child",
+                type = "PARENT_CHILD",
+                fromPersonId = "father-budi",
+                toPersonId = "budi",
+                meta = "BIOLOGICAL",
+                createdAt = "1975-01-01"
+            ),
+            ExportRelationship(
+                relationshipId = "father-siti-child",
+                type = "PARENT_CHILD",
+                fromPersonId = "father-siti",
+                toPersonId = "siti",
+                meta = "BIOLOGICAL",
+                createdAt = "1977-01-01"
+            )
+        )
+        composeRule.setContent {
+            FamilyTreePlatformTheme(dynamicColor = false) {
+                GraphScreen(
+                    centerPersonId = "budi",
+                    selectedPersonId = "budi",
+                    persons = listOf(
+                        person("budi", "Budi"),
+                        person("siti", "Siti"),
+                        person("father-budi", "Ayah Budi"),
+                        person("father-siti", "Ayah Siti")
+                    ),
+                    relations = RelationsResponse(personId = "budi"),
+                    allRelationships = relationships,
+                    onSelectPerson = {},
+                    onClearSelection = {},
+                    onOpenPerson = {},
+                    onBack = {}
+                )
+            }
+        }
+
+        fun cardCenterX(name: String): Float = composeRule
+            .onNodeWithContentDescription(name)
+            .fetchSemanticsNode()
+            .boundsInRoot
+            .center
+            .x
+
+        composeRule.waitForIdle()
+        assertTrue(cardCenterX("Budi") < cardCenterX("Siti"))
+        assertTrue(cardCenterX("Ayah Budi") < cardCenterX("Ayah Siti"))
+
+        composeRule.onNodeWithContentDescription("Tukar posisi Budi dan Siti")
+            .performClick()
+        composeRule.waitForIdle()
+
+        assertTrue(cardCenterX("Budi") > cardCenterX("Siti"))
+        assertTrue(cardCenterX("Ayah Budi") > cardCenterX("Ayah Siti"))
     }
 
     @Test

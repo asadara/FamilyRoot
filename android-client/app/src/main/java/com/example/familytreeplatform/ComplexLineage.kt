@@ -3,6 +3,13 @@ package com.example.familytreeplatform
 import com.example.familytreeplatform.models.ExportRelationship
 import kotlin.math.floor
 
+private const val PartnershipPairKeySeparator = "\u001E"
+
+internal fun partnershipPairKey(firstPersonId: String, secondPersonId: String): String =
+    listOf(firstPersonId, secondPersonId)
+        .sorted()
+        .joinToString(PartnershipPairKeySeparator)
+
 /**
  * Read-only index over relationships already delivered for the active Family Space.
  * Keeping this index local to the graph prevents repeated full-list scans while the
@@ -182,7 +189,8 @@ internal fun planProgressivePlacements(
     siblingGap: Float,
     partnershipGap: Float,
     rankGap: Float,
-    fallbackY: Float
+    fallbackY: Float,
+    swappedPartnershipKeys: Set<String> = emptySet()
 ): Map<String, LineagePlacementRect> {
     if (basePositions.isEmpty() || visiblePersonIds.isEmpty()) return basePositions
     val horizontalStep = tileWidth + siblingGap
@@ -203,7 +211,8 @@ internal fun planProgressivePlacements(
             relationshipIndex = relationshipIndex,
             tileWidth = tileWidth,
             tileHeight = tileHeight,
-            partnershipStep = partnershipStep
+            partnershipStep = partnershipStep,
+            swappedPartnershipKeys = swappedPartnershipKeys
         )
     }
     val primaryUnitId = units.values
@@ -901,7 +910,8 @@ private fun buildAtomicPlacementUnit(
     relationshipIndex: LineageRelationshipIndex,
     tileWidth: Float,
     tileHeight: Float,
-    partnershipStep: Float
+    partnershipStep: Float,
+    swappedPartnershipKeys: Set<String>
 ): AtomicPlacementUnit {
     val componentPartnerships = partnerships.filter {
         it.fromPersonId in personIds && it.toPersonId in personIds
@@ -973,6 +983,14 @@ private fun buildAtomicPlacementUnit(
                             relativeSlot = kotlin.math.abs(relativeSlot) * outwardDirection
                         }
                     }
+                }
+                if (
+                    partnershipPairKey(
+                        relationship.fromPersonId,
+                        relationship.toPersonId
+                    ) in swappedPartnershipKeys
+                ) {
+                    relativeSlot = -relativeSlot
                 }
                 var slot = knownSlot + relativeSlot
                 val direction = slot.compareTo(knownSlot)

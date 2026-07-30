@@ -8,6 +8,24 @@ import org.junit.Test
 
 class GraphRelationshipLayoutTest {
     @Test
+    fun `partnership swap reverses only the selected pair`() {
+        val selectedPair = partnershipPairKey("budi", "siti")
+
+        assertEquals(
+            "budi" to "siti",
+            orientedPartnershipPair("budi", "siti", emptySet())
+        )
+        assertEquals(
+            "siti" to "budi",
+            orientedPartnershipPair("budi", "siti", setOf(selectedPair))
+        )
+        assertEquals(
+            "aji" to "anisa",
+            orientedPartnershipPair("aji", "anisa", setOf(selectedPair))
+        )
+    }
+
+    @Test
     fun `workspace card prioritizes family nickname over first word`() {
         assertEquals(
             "Bude Ani",

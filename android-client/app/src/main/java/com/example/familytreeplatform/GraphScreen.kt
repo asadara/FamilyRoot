@@ -315,6 +315,13 @@ private data class QuickAddControl(
     val point: PointDp
 )
 
+private data class PartnershipSwapControl(
+    val pairKey: String,
+    val firstPersonId: String,
+    val secondPersonId: String,
+    val point: PointDp
+)
+
 private data class ChildRender(
     val id: String,
     val label: String,
@@ -412,6 +419,9 @@ fun GraphScreen(
         centerPersonId,
         stateSaver = PersonIdSetSaver
     ) { mutableStateOf(emptySet()) }
+    var swappedPartnershipKeys by rememberSaveable(
+        stateSaver = PersonIdSetSaver
+    ) { mutableStateOf(emptySet()) }
     val relationshipIndex = remember(allRelationships) {
         LineageRelationshipIndex.from(allRelationships)
     }
@@ -429,7 +439,8 @@ fun GraphScreen(
         relations,
         allRelationships,
         childrenCollapsed,
-        parentsCollapsed
+        parentsCollapsed,
+        swappedPartnershipKeys
     ) {
         derivedStateOf {
             buildCoupleGraphLayout(
@@ -446,7 +457,8 @@ fun GraphScreen(
                 spouseGapX = spouseGapX,
                 siblingGapX = siblingGapX,
                 rankGapY = rankGapY,
-                margin = margin
+                margin = margin,
+                swappedPartnershipKeys = swappedPartnershipKeys
             )
         }
     }
@@ -462,6 +474,7 @@ fun GraphScreen(
         expandedParentPersonIds,
         expandedChildFamilyKeys,
         expandedPartnershipPersonIds,
+        swappedPartnershipKeys,
         relationshipPath,
         showRelationshipPathInGraph,
         selectedPersonId,
@@ -481,7 +494,8 @@ fun GraphScreen(
                 spouseGapX = spouseGapX,
                 siblingGapX = siblingGapX,
                 rankGapY = rankGapY,
-                margin = margin
+                margin = margin,
+                swappedPartnershipKeys = swappedPartnershipKeys
             )
             val connectedLayout = if (showRelationshipPathInGraph && relationshipPath?.found == true) {
                 augmentLayoutWithRelationshipPath(
@@ -591,6 +605,43 @@ fun GraphScreen(
     }
     val tiles = remember(layout, generationVisiblePersonIds) {
         layout.nodes.flatMap { it.tiles() }.filter { it.id in generationVisiblePersonIds }
+    }
+    val partnershipSwapControls = remember(tiles, allRelationships) {
+        val tilesById = tiles.associateBy { it.id }
+        allRelationships
+            .asSequence()
+            .filter { it.type == "SPOUSE" }
+            .distinctBy {
+                partnershipPairKey(it.fromPersonId, it.toPersonId)
+            }
+            .mapNotNull { relationship ->
+                val firstTile = tilesById[relationship.fromPersonId]
+                    ?: return@mapNotNull null
+                val secondTile = tilesById[relationship.toPersonId]
+                    ?: return@mapNotNull null
+                val firstCenter = firstTile.rect.center()
+                val secondCenter = secondTile.rect.center()
+                PartnershipSwapControl(
+                    pairKey = partnershipPairKey(
+                        relationship.fromPersonId,
+                        relationship.toPersonId
+                    ),
+                    firstPersonId = relationship.fromPersonId,
+                    secondPersonId = relationship.toPersonId,
+                    point = PointDp(
+                        x = (firstCenter.x + secondCenter.x) / 2f,
+                        y = (firstCenter.y + secondCenter.y) / 2f - 28.dp
+                    )
+                )
+            }
+            .toList()
+    }
+    val swapPartnership: (String) -> Unit = { pairKey ->
+        swappedPartnershipKeys = if (pairKey in swappedPartnershipKeys) {
+            swappedPartnershipKeys - pairKey
+        } else {
+            swappedPartnershipKeys + pairKey
+        }
     }
     val linkHandleTile = tiles.firstOrNull { it.id == selectedPersonId }
     val linkHandlePoint = linkHandleTile?.let { tile ->
@@ -912,7 +963,8 @@ fun GraphScreen(
         spouseGapX = spouseGapX,
         siblingGapX = siblingGapX,
         rankGapY = rankGapY,
-        margin = margin
+        margin = margin,
+        swappedPartnershipKeys = swappedPartnershipKeys
     ).nodes.flatMap(GraphNode::tiles).mapTo(linkedSetOf()) { it.id }
 
     val toggleCenterParents: () -> Unit = {
@@ -1824,6 +1876,43 @@ fun GraphScreen(
                         )
                     }
                 }
+
+                partnershipSwapControls
+                    .filter {
+                        selectedPersonId == it.firstPersonId ||
+                            selectedPersonId == it.secondPersonId
+                    }
+                    .filter { pointIsRendered(it.point) }
+                    .forEach { control ->
+                        Surface(
+                            shape = CircleShape,
+                            color = controlSurfaceColor,
+                            border = BorderStroke(1.dp, controlOutlineColor),
+                            tonalElevation = 2.dp,
+                            modifier = Modifier
+                                .size(30.dp)
+                                .offset(control.point.x - 15.dp, control.point.y - 15.dp)
+                                .testTag("swap-partnership-${control.pairKey.hashCode()}")
+                                .clickable { swapPartnership(control.pairKey) }
+                                .semantics {
+                                    contentDescription =
+                                        "Tukar posisi ${displayName(control.firstPersonId)} " +
+                                        "dan ${displayName(control.secondPersonId)}"
+                                }
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Text(
+                                    text = "\u21C4",
+                                    color = controlOutlineColor,
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
 
                 branchControls.filter { pointIsRendered(it.point) }.forEach { control ->
                     val action = if (control.expanded) "Tutup" else "Buka"
@@ -3107,10 +3196,22 @@ private data class RowItem(
     val labelA: String,
     val labelB: String? = null,
     val role: String = "CHILD",
+    val primaryPersonId: String? = null,
     val width: Float
 )
 
 private data class PlacedItem(val item: RowItem, val x: Float)
+
+internal fun orientedPartnershipPair(
+    firstPersonId: String,
+    secondPersonId: String,
+    swappedPartnershipKeys: Set<String>
+): Pair<String, String> =
+    if (partnershipPairKey(firstPersonId, secondPersonId) in swappedPartnershipKeys) {
+        secondPersonId to firstPersonId
+    } else {
+        firstPersonId to secondPersonId
+    }
 
 private fun layoutRow(items: List<RowItem>, centerX: Float, gap: Float): List<PlacedItem> {
     if (items.isEmpty()) return emptyList()
@@ -3151,18 +3252,24 @@ private fun buildCoupleGraphLayout(
     spouseGapX: Dp,
     siblingGapX: Dp,
     rankGapY: Dp,
-    margin: Dp
+    margin: Dp,
+    swappedPartnershipKeys: Set<String>
 ): GraphLayout {
     val activeSpouseId = findActiveSpouseId(centerPersonId, relations, allRelationships)
     val centerNode = if (activeSpouseId != null) {
+        val (leftPersonId, rightPersonId) = orientedPartnershipPair(
+            centerPersonId,
+            activeSpouseId,
+            swappedPartnershipKeys
+        )
         coupleNode(
-            leftId = centerPersonId,
-            rightId = activeSpouseId,
-            leftLabel = displayName(centerPersonId),
-            rightLabel = displayName(activeSpouseId),
+            leftId = leftPersonId,
+            rightId = rightPersonId,
+            leftLabel = displayName(leftPersonId),
+            rightLabel = displayName(rightPersonId),
             role = "CENTER",
-            leftRole = "CENTER",
-            rightRole = "SPOUSE",
+            leftRole = if (leftPersonId == centerPersonId) "CENTER" else "SPOUSE",
+            rightRole = if (rightPersonId == centerPersonId) "CENTER" else "SPOUSE",
             x = (-((tileW.value * 2f + spouseGapX.value) / 2f)).dp,
             y = 0.dp,
             tileW = tileW,
@@ -3182,6 +3289,9 @@ private fun buildCoupleGraphLayout(
     }
 
     val centerMemberIds = setOfNotNull(centerPersonId, activeSpouseId)
+    val centerMemberHorizontalOrder = centerNode.tiles()
+        .mapIndexed { index, tile -> tile.id to index }
+        .toMap()
     val parentRelationships = if (allRelationships.isNotEmpty()) {
         allRelationships.filter {
             it.isLineageParentChild() && it.toPersonId in centerMemberIds
@@ -3202,11 +3312,7 @@ private fun buildCoupleGraphLayout(
     }
     val parentIds = parentRelationships
         .sortedBy { relationship ->
-            when (relationship.toPersonId) {
-                centerPersonId -> 0
-                activeSpouseId -> 1
-                else -> 2
-            }
+            centerMemberHorizontalOrder[relationship.toPersonId] ?: Int.MAX_VALUE
         }
         .map { it.fromPersonId }
         .distinct()
@@ -3224,7 +3330,8 @@ private fun buildCoupleGraphLayout(
         displayName = displayName,
         tileW = tileW,
         spouseGapX = spouseGapX,
-        singleParentChildByParent = singleParentChildByParent
+        singleParentChildByParent = singleParentChildByParent,
+        swappedPartnershipKeys = swappedPartnershipKeys
     )
     val parentPlaced = layoutRow(parentItems, centerX = 0f, gap = siblingGapX.value)
     val parentNodes = parentPlaced.map { placed ->
@@ -3318,13 +3425,19 @@ private fun buildCoupleGraphLayout(
 
     val childItems = completeTree.children.map { child ->
         if (child.spouseId != null) {
+            val (leftPersonId, rightPersonId) = orientedPartnershipPair(
+                child.id,
+                child.spouseId,
+                swappedPartnershipKeys
+            )
             RowItem(
                 kind = RowKind.COUPLE,
-                idA = child.id,
-                idB = child.spouseId,
-                labelA = child.label,
-                labelB = child.spouseLabel,
+                idA = leftPersonId,
+                idB = rightPersonId,
+                labelA = displayName(leftPersonId),
+                labelB = displayName(rightPersonId),
                 role = child.role,
+                primaryPersonId = child.id,
                 width = tileW.value * 2f + spouseGapX.value
             )
         } else {
@@ -3333,6 +3446,7 @@ private fun buildCoupleGraphLayout(
                 idA = child.id,
                 labelA = child.label,
                 role = child.role,
+                primaryPersonId = child.id,
                 width = tileW.value
             )
         }
@@ -3355,8 +3469,16 @@ private fun buildCoupleGraphLayout(
                 leftLabel = placed.item.labelA,
                 rightLabel = placed.item.labelB ?: "",
                 role = "CHILD",
-                leftRole = "CHILD",
-                rightRole = "SPOUSE",
+                leftRole = if (placed.item.idA == placed.item.primaryPersonId) {
+                    "CHILD"
+                } else {
+                    "SPOUSE"
+                },
+                rightRole = if (placed.item.idB == placed.item.primaryPersonId) {
+                    "CHILD"
+                } else {
+                    "SPOUSE"
+                },
                 x = placed.x.dp,
                 y = childrenY,
                 tileW = tileW,
@@ -3462,7 +3584,8 @@ private fun augmentLayoutWithProgressiveLineage(
     spouseGapX: Dp,
     siblingGapX: Dp,
     rankGapY: Dp,
-    margin: Dp
+    margin: Dp,
+    swappedPartnershipKeys: Set<String>
 ): GraphLayout {
     if (relationships.isEmpty()) return base
 
@@ -3497,7 +3620,8 @@ private fun augmentLayoutWithProgressiveLineage(
         siblingGap = siblingGapX.value,
         partnershipGap = spouseGapX.value,
         rankGap = rankGapY.value,
-        fallbackY = base.center.bounds().y.value
+        fallbackY = base.center.bounds().y.value,
+        swappedPartnershipKeys = swappedPartnershipKeys
     )
     val positions = plannedPositions.mapValues { (_, rect) ->
         RectDp(rect.x.dp, rect.y.dp, rect.width.dp, rect.height.dp)
@@ -4051,7 +4175,8 @@ private fun buildParentRowItems(
     displayName: (String) -> String,
     tileW: Dp,
     spouseGapX: Dp,
-    singleParentChildByParent: Map<String, String> = emptyMap()
+    singleParentChildByParent: Map<String, String> = emptyMap(),
+    swappedPartnershipKeys: Set<String> = emptySet()
 ): List<RowItem> {
     val remaining = parentIds.toMutableList()
     val items = mutableListOf<RowItem>()
@@ -4062,12 +4187,17 @@ private fun buildParentRowItems(
         }
         if (spouseId != null) {
             remaining.remove(spouseId)
+            val (leftPersonId, rightPersonId) = orientedPartnershipPair(
+                personId,
+                spouseId,
+                swappedPartnershipKeys
+            )
             items += RowItem(
                 kind = RowKind.COUPLE,
-                idA = personId,
-                idB = spouseId,
-                labelA = displayName(personId),
-                labelB = displayName(spouseId),
+                idA = leftPersonId,
+                idB = rightPersonId,
+                labelA = displayName(leftPersonId),
+                labelB = displayName(rightPersonId),
                 width = tileW.value * 2f + spouseGapX.value
             )
         } else if (personId in singleParentChildByParent) {

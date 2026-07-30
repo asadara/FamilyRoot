@@ -46,6 +46,71 @@ class ComplexLineageTest {
     }
 
     @Test
+    fun `swapping a couple carries each ancestry block to the same side`() {
+        val relationships = listOf(
+            spouse("budi-siti", "budi", "siti", "MARRIED", "2000-01-01"),
+            spouse("budi-parents", "father-budi", "mother-budi", "MARRIED", "1970-01-01"),
+            spouse("siti-parents", "father-siti", "mother-siti", "MARRIED", "1972-01-01"),
+            parentChild("father-budi-child", "father-budi", "budi", "BIOLOGICAL"),
+            parentChild("mother-budi-child", "mother-budi", "budi", "BIOLOGICAL"),
+            parentChild("father-siti-child", "father-siti", "siti", "BIOLOGICAL"),
+            parentChild("mother-siti-child", "mother-siti", "siti", "BIOLOGICAL")
+        )
+        val visible = relationships
+            .flatMapTo(linkedSetOf()) { listOf(it.fromPersonId, it.toPersonId) }
+
+        fun place(swapped: Boolean): Map<String, LineagePlacementRect> {
+            val pairKey = partnershipPairKey("budi", "siti")
+            val (leftId, rightId) = orientedPartnershipPair(
+                "budi",
+                "siti",
+                if (swapped) setOf(pairKey) else emptySet()
+            )
+            return planProgressivePlacements(
+                basePositions = mapOf(
+                    leftId to LineagePlacementRect(0f, 152f, 96f, 108f),
+                    rightId to LineagePlacementRect(124f, 152f, 96f, 108f)
+                ),
+                visiblePersonIds = visible,
+                visibleRelationships = relationships,
+                allRelationships = relationships,
+                tileWidth = 96f,
+                tileHeight = 108f,
+                siblingGap = 28f,
+                partnershipGap = 28f,
+                rankGap = 44f,
+                fallbackY = 152f,
+                swappedPartnershipKeys = if (swapped) setOf(pairKey) else emptySet()
+            )
+        }
+
+        fun ancestryCenter(
+            placements: Map<String, LineagePlacementRect>,
+            firstParentId: String,
+            secondParentId: String
+        ): Float = (
+            placements.getValue(firstParentId).centerX +
+                placements.getValue(secondParentId).centerX
+            ) / 2f
+
+        val normal = place(swapped = false)
+        assertTrue(
+            ancestryCenter(normal, "father-budi", "mother-budi") <
+                ancestryCenter(normal, "father-siti", "mother-siti")
+        )
+        val swapped = place(swapped = true)
+        assertTrue(
+            ancestryCenter(swapped, "father-budi", "mother-budi") >
+                ancestryCenter(swapped, "father-siti", "mother-siti")
+        )
+        swapped.values.forEachIndexed { index, firstRect ->
+            swapped.values.drop(index + 1).forEach { secondRect ->
+                assertFalse(firstRect.overlaps(secondRect, padding = 0f))
+            }
+        }
+    }
+
+    @Test
     fun `historical placement is deterministic chronological and collision free`() {
         val relationships = listOf(
             spouse("current", "person", "current-partner", "MARRIED", "2020-01-01"),
