@@ -804,6 +804,7 @@ class PersonRepository(
                         ?.forEach { sourceDao.deleteByPerson(it) }
                     personDao?.replaceSpace(spaceId, list.map { it.toEntity(spaceId) })
                     reapplyQueuedMutations(spaceId)
+                    cleanupOrphanedOptimisticCache(spaceId)
                     val mergedLocal = personDao
                         ?.listBySpace(spaceId)
                         ?.map { entity -> entity.toModel() }
@@ -1124,12 +1125,15 @@ class PersonRepository(
             return SyncBatchResult.RETRY
         }
         dao.resetInterrupted(System.currentTimeMillis())
-        for (queuedMutation in dao.listReady()) {
+        val ready = dao.listReady()
+        val touchedSpaceIds = ready.mapTo(linkedSetOf()) { it.spaceId }
+        for (queuedMutation in ready) {
             val mutation = dao.getById(queuedMutation.mutationId) ?: continue
             if (mutation.status != OfflineMutationStatus.PENDING) continue
             val result = syncMutation(mutation)
             if (result == SyncBatchResult.RETRY) return result
         }
+        touchedSpaceIds.forEach { cleanupOrphanedOptimisticCache(it) }
         return SyncBatchResult.COMPLETE
     }
 
@@ -1575,6 +1579,7 @@ class PersonRepository(
                     relationshipDao?.replaceSynced(spaceId, syncedRelationships)
                     reconcileResolvedRelationshipMutations(spaceId, syncedRelationships)
                     reapplyQueuedMutations(spaceId)
+                    cleanupOrphanedOptimisticCache(spaceId)
                     Result.success(relationshipDao?.listBySpace(spaceId)?.map { it.toModel() } ?: relationships)
                 } ?: Result.failure(Exception("Empty response"))
             } else {
@@ -2314,7 +2319,20 @@ class PersonRepository(
         val queueDao = mutationDao ?: return
         queueDao.listForSpace(spaceId)
             .filter { it.status != OfflineMutationStatus.FAILED }
-            .forEach { mutation -> reapplyMutation(mutation) }
+            .forEach { snapshot ->
+                queueDao.getById(snapshot.mutationId)
+                    ?.takeIf { it.status != OfflineMutationStatus.FAILED }
+                    ?.let { current -> reapplyMutation(current) }
+            }
+    }
+
+    private suspend fun cleanupOrphanedOptimisticCache(spaceId: String) {
+        val room = database ?: return
+        room.withTransaction {
+            relationshipDao?.deleteOrphanedPending(spaceId)
+            sourceDao?.deleteOrphanedPending(spaceId)
+            personDao?.deleteOrphanedLocalPersons(spaceId)
+        }
     }
 
     private suspend fun reapplyMutation(mutation: OfflineMutationEntity) {

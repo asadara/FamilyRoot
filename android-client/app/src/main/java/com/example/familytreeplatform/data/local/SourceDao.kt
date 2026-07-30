@@ -30,6 +30,17 @@ interface SourceDao {
     @Query("DELETE FROM sources WHERE pendingMutationId = :mutationId")
     suspend fun deleteByMutation(mutationId: String)
 
+    @Query(
+        """DELETE FROM sources
+            WHERE spaceId = :spaceId
+              AND pendingMutationId IS NOT NULL
+              AND NOT EXISTS (
+                SELECT 1 FROM offline_mutations
+                WHERE offline_mutations.mutationId = sources.pendingMutationId
+              )"""
+    )
+    suspend fun deleteOrphanedPending(spaceId: String)
+
     @Query("DELETE FROM sources WHERE personId = :personId")
     suspend fun deleteByPerson(personId: String)
 

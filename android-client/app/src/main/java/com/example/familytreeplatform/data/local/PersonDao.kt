@@ -36,6 +36,18 @@ interface PersonDao {
     @Query("DELETE FROM persons WHERE personId = :personId")
     suspend fun deleteById(personId: String)
 
+    @Query(
+        """DELETE FROM persons
+            WHERE spaceId = :spaceId
+              AND personId LIKE 'local-person-%'
+              AND NOT EXISTS (
+                SELECT 1 FROM offline_mutations
+                WHERE offline_mutations.personId = persons.personId
+                  AND offline_mutations.mutationType = 'CREATE_PERSON'
+              )"""
+    )
+    suspend fun deleteOrphanedLocalPersons(spaceId: String)
+
     @Query("UPDATE persons SET lifeStatus = :lifeStatus, deceasedAt = :deceasedAt WHERE personId = :personId")
     suspend fun updateLifeStatusLocally(personId: String, lifeStatus: String, deceasedAt: String?)
 
