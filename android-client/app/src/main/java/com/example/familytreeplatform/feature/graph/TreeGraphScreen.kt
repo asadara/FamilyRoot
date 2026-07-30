@@ -27,9 +27,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -43,6 +43,26 @@ import com.example.familytreeplatform.GraphPreferredPosition
 import com.example.familytreeplatform.R
 import com.example.familytreeplatform.export.FamilyGraphExporter
 import com.example.familytreeplatform.navigation.GraphShellAction
+
+private val PreferredPositionMapSaver =
+    listSaver<Map<String, GraphPreferredPosition>, Any>(
+        save = { positions ->
+            positions.entries
+                .sortedBy { it.key }
+                .flatMap { (personId, position) ->
+                    listOf(personId, position.centerX, position.centerY)
+                }
+        },
+        restore = { saved ->
+            saved.chunked(3).associate { entry ->
+                val personId = entry[0] as String
+                personId to GraphPreferredPosition(
+                    centerX = (entry[1] as Number).toFloat(),
+                    centerY = (entry[2] as Number).toFloat()
+                )
+            }
+        }
+    )
 
 @Composable
 fun TreeGraphScreen(
@@ -64,11 +84,12 @@ fun TreeGraphScreen(
     var autoExpandChildFamilyParentIds by remember { mutableStateOf<Set<String>?>(null) }
     var autoExpandChildFamilyRequest by rememberSaveable { mutableIntStateOf(0) }
     var addPersonDialogVisible by rememberSaveable { mutableStateOf(false) }
-    var pendingStandalonePosition by remember {
-        mutableStateOf<GraphPreferredPosition?>(null)
-    }
-    val preferredUnconnectedPositions = remember {
-        mutableStateMapOf<String, GraphPreferredPosition>()
+    var pendingStandalonePositionX by rememberSaveable { mutableStateOf<Float?>(null) }
+    var pendingStandalonePositionY by rememberSaveable { mutableStateOf<Float?>(null) }
+    var preferredUnconnectedPositions by rememberSaveable(
+        stateSaver = PreferredPositionMapSaver
+    ) {
+        mutableStateOf(emptyMap())
     }
     var connectionRequest by remember { mutableStateOf<GraphConnectionRequest?>(null) }
     var integrityDialogVisible by rememberSaveable { mutableStateOf(false) }
@@ -141,11 +162,18 @@ fun TreeGraphScreen(
         val completedId = state.personCreateCompletedId
         if (completedId != null && state.persons.any { it.personId == completedId }) {
             addPersonDialogVisible = false
-            pendingStandalonePosition?.let { preferredPosition ->
-                preferredUnconnectedPositions[completedId] = preferredPosition
+            val pendingPosition = pendingStandalonePositionX?.let { centerX ->
+                pendingStandalonePositionY?.let { centerY ->
+                    GraphPreferredPosition(centerX, centerY)
+                }
             }
-            val usedPreferredPosition = pendingStandalonePosition != null
-            pendingStandalonePosition = null
+            pendingPosition?.let { preferredPosition ->
+                preferredUnconnectedPositions =
+                    preferredUnconnectedPositions + (completedId to preferredPosition)
+            }
+            val usedPreferredPosition = pendingPosition != null
+            pendingStandalonePositionX = null
+            pendingStandalonePositionY = null
             revealPersonId = completedId
             revealPersonRequest++
             snackbarHostState.showSnackbar(
@@ -221,7 +249,8 @@ fun TreeGraphScreen(
                     onFocusPerson = viewModel::focusPerson,
                     canEditRelationships = canEditRelationships,
                     onAddPersonRequest = { preferredPosition ->
-                        pendingStandalonePosition = preferredPosition
+                        pendingStandalonePositionX = preferredPosition?.centerX
+                        pendingStandalonePositionY = preferredPosition?.centerY
                         viewModel.beginPersonCreate()
                         addPersonDialogVisible = true
                     },
@@ -275,7 +304,8 @@ fun TreeGraphScreen(
                 error = state.personCreateError,
                 onDismiss = {
                     addPersonDialogVisible = false
-                    pendingStandalonePosition = null
+                    pendingStandalonePositionX = null
+                    pendingStandalonePositionY = null
                     viewModel.clearPersonCreateFeedback()
                 },
                 onSave = viewModel::createStandalonePerson
