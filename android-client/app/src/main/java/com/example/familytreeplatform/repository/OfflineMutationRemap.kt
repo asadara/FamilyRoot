@@ -1,5 +1,6 @@
 package com.example.familytreeplatform.repository
 
+import com.example.familytreeplatform.data.local.CachedRelationshipEntity
 import com.example.familytreeplatform.data.local.OfflineMutationEntity
 import com.example.familytreeplatform.data.local.OfflineMutationType
 import com.example.familytreeplatform.models.DeleteRelationshipMutationPayload
@@ -43,6 +44,61 @@ internal fun OfflineMutationEntity.referencesPerson(personId: String): Boolean =
             } == true
             else -> false
         }
+
+internal fun OfflineMutationEntity.hasUnresolvedLocalPersonReference(): Boolean =
+    when (mutationType) {
+        OfflineMutationType.ADD_PARENT_CHILD -> runCatching {
+            Gson().fromJson(payloadJson, ParentChildMutationPayload::class.java)
+        }.getOrNull()?.let { payload ->
+            payload.parentId.isLocalPersonReference() ||
+                payload.childId.isLocalPersonReference()
+        } == true
+        OfflineMutationType.ADD_SPOUSE -> runCatching {
+            Gson().fromJson(payloadJson, SpouseMutationPayload::class.java)
+        }.getOrNull()?.let { payload ->
+            payload.personAId.isLocalPersonReference() ||
+                payload.personBId.isLocalPersonReference()
+        } == true
+        else -> false
+    }
+
+internal fun OfflineMutationEntity.isResolvedBy(
+    relationships: List<CachedRelationshipEntity>
+): Boolean = when (mutationType) {
+    OfflineMutationType.ADD_PARENT_CHILD -> runCatching {
+        Gson().fromJson(payloadJson, ParentChildMutationPayload::class.java)
+    }.getOrNull()?.let { payload ->
+        relationships.any { relationship ->
+            relationship.pendingMutationId == null &&
+                relationship.type == "PARENT_CHILD" &&
+                relationship.fromPersonId == payload.parentId &&
+                relationship.toPersonId == payload.childId &&
+                relationship.meta == payload.meta &&
+                relationship.startDate == payload.startDate &&
+                relationship.endDate == payload.endDate &&
+                relationship.careContext.normalizedContext() ==
+                payload.careContext.normalizedContext()
+        }
+    } == true
+    OfflineMutationType.ADD_SPOUSE -> runCatching {
+        Gson().fromJson(payloadJson, SpouseMutationPayload::class.java)
+    }.getOrNull()?.let { payload ->
+        relationships.any { relationship ->
+            relationship.pendingMutationId == null &&
+                relationship.type == "SPOUSE" &&
+                setOf(relationship.fromPersonId, relationship.toPersonId) ==
+                setOf(payload.personAId, payload.personBId) &&
+                relationship.meta == payload.meta &&
+                relationship.startDate == payload.startDate &&
+                relationship.endDate == payload.endDate
+        }
+    } == true
+    else -> false
+}
+
+private fun String.isLocalPersonReference(): Boolean = startsWith("local-person-")
+
+private fun String?.normalizedContext(): String? = this?.trim()?.ifBlank { null }
 
 internal fun remapMutationPayload(
     mutationType: String,

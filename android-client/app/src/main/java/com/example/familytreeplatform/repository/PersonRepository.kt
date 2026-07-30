@@ -167,6 +167,7 @@ class PersonRepository(
     private val compatibilityStateFlow = MutableStateFlow(AppCompatibilityState())
     val compatibilityState: Flow<AppCompatibilityState> = compatibilityStateFlow
     private val compatibilityMutex = Mutex()
+    private val offlineSyncMutex = Mutex()
     private var lastCompatibilityCheckAt = 0L
 
     private companion object {
@@ -1110,7 +1111,7 @@ class PersonRepository(
         mutation
     }
 
-    suspend fun syncPendingMutations(): SyncBatchResult {
+    suspend fun syncPendingMutations(): SyncBatchResult = offlineSyncMutex.withLock {
         val dao = mutationDao ?: return SyncBatchResult.COMPLETE
         if (SessionStore.accessToken.value.isNullOrBlank() && !ensureAccessToken()) {
             return SyncBatchResult.RETRY
@@ -1563,7 +1564,9 @@ class PersonRepository(
             val response = apiService.listRelationships(spaceId)
             if (response.isSuccessful) {
                 response.body()?.let { relationships ->
-                    relationshipDao?.replaceSynced(spaceId, relationships.map { it.toEntity(spaceId) })
+                    val syncedRelationships = relationships.map { it.toEntity(spaceId) }
+                    relationshipDao?.replaceSynced(spaceId, syncedRelationships)
+                    reconcileResolvedRelationshipMutations(spaceId, syncedRelationships)
                     reapplyQueuedMutations(spaceId)
                     Result.success(relationshipDao?.listBySpace(spaceId)?.map { it.toModel() } ?: relationships)
                 } ?: Result.failure(Exception("Empty response"))
@@ -2024,6 +2027,19 @@ class PersonRepository(
         if (mutation.mutationType == OfflineMutationType.DELETE_RELATIONSHIP) {
             return syncDeleteRelationshipMutation(mutation)
         }
+        if (mutation.isResolvedBy(relationsDao.listBySpace(mutation.spaceId))) {
+            removeResolvedRelationshipMutation(mutation)
+            return SyncBatchResult.COMPLETE
+        }
+        if (mutation.hasUnresolvedLocalPersonReference()) {
+            queueDao.markStatus(
+                mutation.mutationId,
+                OfflineMutationStatus.PENDING,
+                "Menunggu person baru selesai disinkronkan.",
+                System.currentTimeMillis()
+            )
+            return SyncBatchResult.RETRY
+        }
         return try {
             val synced: CachedRelationshipEntity? = when (mutation.mutationType) {
                 OfflineMutationType.ADD_PARENT_CHILD -> {
@@ -2157,6 +2173,32 @@ class PersonRepository(
             System.currentTimeMillis()
         )
         return SyncBatchResult.COMPLETE
+    }
+
+    private suspend fun reconcileResolvedRelationshipMutations(
+        spaceId: String,
+        syncedRelationships: List<CachedRelationshipEntity>
+    ) {
+        mutationDao?.listForSpace(spaceId)
+            ?.filter { mutation -> mutation.isResolvedBy(syncedRelationships) }
+            ?.forEach { mutation -> removeResolvedRelationshipMutation(mutation) }
+    }
+
+    private suspend fun removeResolvedRelationshipMutation(
+        mutation: OfflineMutationEntity
+    ) {
+        val queueDao = mutationDao ?: return
+        val relationsDao = relationshipDao ?: return
+        val room = database
+        if (room == null) {
+            relationsDao.deleteByMutation(mutation.mutationId)
+            queueDao.delete(mutation.mutationId)
+            return
+        }
+        room.withTransaction {
+            relationsDao.deleteByMutation(mutation.mutationId)
+            queueDao.delete(mutation.mutationId)
+        }
     }
 
     private suspend fun reapplyQueuedMutations(spaceId: String) {

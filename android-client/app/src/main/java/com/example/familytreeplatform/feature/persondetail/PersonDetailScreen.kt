@@ -81,6 +81,8 @@ import com.example.familytreeplatform.models.SourceItem
 import coil.compose.SubcomposeAsyncImage
 import java.util.Calendar
 
+internal const val PERSON_DATE_MIN_YEAR = 1600
+
 @OptIn(ExperimentalMaterialApi::class)
 @Composable
 fun PersonDetailScreen(
@@ -1607,25 +1609,37 @@ private fun ProfileDateField(
     val context = LocalContext.current
     val openPicker = {
         val parts = value.split('-').mapNotNull(String::toIntOrNull)
-        val initial = Calendar.getInstance().apply {
-            if (parts.size == 3) set(parts[0], parts[1] - 1, parts[2])
-        }
-        DatePickerDialog(
+        val today = Calendar.getInstance()
+        val dialog = DatePickerDialog(
             context,
             { _, year, month, day ->
                 onValueChange("%04d-%02d-%02d".format(year, month + 1, day))
             },
-            initial.get(Calendar.YEAR),
-            initial.get(Calendar.MONTH),
-            initial.get(Calendar.DAY_OF_MONTH)
-        ).show()
+            today.get(Calendar.YEAR),
+            today.get(Calendar.MONTH),
+            today.get(Calendar.DAY_OF_MONTH)
+        )
+        dialog.datePicker.minDate = Calendar.getInstance().apply {
+            clear()
+            set(PERSON_DATE_MIN_YEAR, Calendar.JANUARY, 1)
+        }.timeInMillis
+        dialog.datePicker.maxDate = today.timeInMillis
+        if (parts.size == 3 && parts[0] in PERSON_DATE_MIN_YEAR..today.get(Calendar.YEAR)) {
+            dialog.datePicker.updateDate(parts[0], parts[1] - 1, parts[2])
+        }
+        dialog.show()
     }
     OutlinedTextField(
         value = value,
         onValueChange = {},
         readOnly = true,
         label = { Text(label) },
-        supportingText = { Text("Format tersimpan: tahun-bulan-tanggal.") },
+        supportingText = {
+            Text(
+                "Format tersimpan: tahun-bulan-tanggal. " +
+                    "Tanggal historis dapat dipilih sejak $PERSON_DATE_MIN_YEAR."
+            )
+        },
         trailingIcon = {
             if (enabled) {
                 Row {

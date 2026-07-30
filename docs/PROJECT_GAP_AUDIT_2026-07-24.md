@@ -209,6 +209,13 @@ dan membatalkan relasi lokal yang belum sync secara atomik. Keduanya memakai
 `clientMutationId` idempoten dan audit server. Room instrumentation pada perangkat
 serta continuity selection selama remap tetap menjadi acceptance final.
 
+Regresi Silsilah Semarang menutup race dependency create-person → relationship:
+unique work memakai `APPEND_OR_REPLACE`, satu repository hanya menjalankan satu batch,
+urutan timestamp yang sama mendahulukan `CREATE_PERSON`, dan relationship dengan ID
+`local-person-*` tidak dikirim. Refresh relationship juga merekonsiliasi mutation
+lama bila fakta ekuivalen sudah tersimpan di server, sehingga item gagal usang tidak
+terus ditawarkan untuk retry.
+
 Create source kini memakai cache Room privacy-aware dan `clientMutationId` idempoten.
 Catatan langsung tampil dengan label menunggu sinkronisasi, bertahan setelah process
 death, ikut diremap bersama Person lokal, dan diganti dengan hasil server tanpa

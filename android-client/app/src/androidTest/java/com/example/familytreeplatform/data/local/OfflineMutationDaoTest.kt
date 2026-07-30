@@ -125,4 +125,42 @@ class OfflineMutationDaoTest {
         dao.deleteBySpace("private-space")
         assertEquals(0, dao.countForSpace("private-space"))
     }
+
+    @Test
+    fun personCreationWinsTimestampTieBeforeDependentRelationship() = runBlocking {
+        val relationship = mutation(
+            mutationId = "a-relationship",
+            mutationType = OfflineMutationType.ADD_PARENT_CHILD
+        )
+        val person = mutation(
+            mutationId = "z-person",
+            mutationType = OfflineMutationType.CREATE_PERSON
+        )
+        dao.upsert(relationship)
+        dao.upsert(person)
+
+        assertEquals(
+            listOf(OfflineMutationType.CREATE_PERSON, OfflineMutationType.ADD_PARENT_CHILD),
+            dao.listReady().map(OfflineMutationEntity::mutationType)
+        )
+    }
+
+    private fun mutation(
+        mutationId: String,
+        mutationType: String
+    ) = OfflineMutationEntity(
+        mutationId = mutationId,
+        spaceId = "space-1",
+        personId = "person-1",
+        mutationType = mutationType,
+        payloadJson = "{}",
+        baseVersion = 0,
+        status = OfflineMutationStatus.PENDING,
+        attemptCount = 0,
+        lastError = null,
+        conflictVersion = null,
+        conflictPayloadJson = null,
+        createdAt = 10L,
+        updatedAt = 10L
+    )
 }

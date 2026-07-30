@@ -11,7 +11,14 @@ interface OfflineMutationDao {
     @Query("SELECT * FROM offline_mutations WHERE personId = :personId ORDER BY createdAt ASC")
     fun observeForPerson(personId: String): Flow<List<OfflineMutationEntity>>
 
-    @Query("SELECT * FROM offline_mutations WHERE status = 'PENDING' ORDER BY createdAt ASC LIMIT :limit")
+    @Query(
+        """SELECT * FROM offline_mutations
+            WHERE status = 'PENDING'
+            ORDER BY createdAt ASC,
+                CASE WHEN mutationType = 'CREATE_PERSON' THEN 0 ELSE 1 END ASC,
+                mutationId ASC
+            LIMIT :limit"""
+    )
     suspend fun listReady(limit: Int = 20): List<OfflineMutationEntity>
 
     @Query("SELECT * FROM offline_mutations WHERE spaceId = :spaceId")

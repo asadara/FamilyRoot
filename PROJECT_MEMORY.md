@@ -944,6 +944,13 @@ melanjutkan diskusi atau pekerjaan yang diminta pengguna.
 - Menu akun mempunyai `Ganti silsilah`; implementasinya hanya memanggil
   `SessionStore.clearActiveSpace()`, sehingga sesi login dipertahankan dan pemilih
   Family Space dibuka ulang melalui navigation target.
+- Insiden hubungan Silsilah Semarang ditutup di client: WorkManager tidak lagi
+  membatalkan worker aktif ketika mutation baru masuk, eksekusi queue diserialkan,
+  `CREATE_PERSON` didahulukan pada timestamp yang sama, relationship ber-ID lokal
+  ditahan, dan mutation lama dibersihkan ketika relationship ekuivalen sudah ada di
+  server.
+- Picker tanggal profil mendukung data historis sejak tahun 1600; avatar akun di
+  header memakai frame aksen dengan inisial sebagai fallback.
 - P2 incremental reflow, P3 dense partnership stress, dan P4 tablet performance
   gate tetap belum ditutup. Detail kanonik ada di
   `docs/GRAPH_LARGE_FAMILY_LAYOUT_PROPOSAL.md`.

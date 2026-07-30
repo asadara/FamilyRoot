@@ -4,9 +4,16 @@ import com.example.familytreeplatform.data.local.OfflineMutationStatus
 import com.example.familytreeplatform.data.local.OfflineMutationType
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PersonDetailScreenTest {
+    @Test
+    fun `historical date picker includes eighteenth century ancestors`() {
+        assertEquals(1600, PERSON_DATE_MIN_YEAR)
+        assertTrue(1770 >= PERSON_DATE_MIN_YEAR)
+    }
+
     @Test
     fun `profile helpers translate legacy backend values`() {
         assertEquals("BS", personProfileInitials("Budi Santoso"))
