@@ -932,3 +932,18 @@ Saat menerima `FAMILYROOT-MEMORY`, agen harus mengonfirmasi hal berikut sebelum 
 Jika semua sudah diverifikasi, agen cukup mengatakan konteks telah dipulihkan,
 menyebut commit/status aktual, merangkum perbedaan dari snapshot bila ada, lalu
 melanjutkan diskusi atau pekerjaan yang diminta pengguna.
+
+## 18. Update Layout Keluarga Besar dan Navigasi (30 Juli 2026)
+
+- P1 proposal layout keluarga besar telah diimplementasikan sebagai pass final
+  reservasi birth-family block. Packing berjalan bottom-up, hanya mengubah X, dan
+  mempertahankan satu level garis horizontal per gap generasi.
+- Blok dengan descendant yang bertemu kembali digabung sebelum dipindahkan agar
+  invariant satu card per person tidak dilanggar.
+- Minimap dapat ditutup dari workspace dan dipanggil kembali melalui menu `Alat`.
+- Menu akun mempunyai `Ganti silsilah`; implementasinya hanya memanggil
+  `SessionStore.clearActiveSpace()`, sehingga sesi login dipertahankan dan pemilih
+  Family Space dibuka ulang melalui navigation target.
+- P2 incremental reflow, P3 dense partnership stress, dan P4 tablet performance
+  gate tetap belum ditutup. Detail kanonik ada di
+  `docs/GRAPH_LARGE_FAMILY_LAYOUT_PROPOSAL.md`.

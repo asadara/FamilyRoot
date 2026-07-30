@@ -362,8 +362,15 @@ internal fun planProgressivePlacements(
         horizontalStep = horizontalStep,
         siblingGap = siblingGap
     )
-    return compactSingleChildAncestry(
+    val compactedPlacements = compactSingleChildAncestry(
         placements = collisionResolvedPlacements,
+        components = components,
+        componentRelationships = componentRelationships,
+        primaryUnitId = primaryUnitId,
+        siblingGap = siblingGap
+    )
+    return reserveLineageFamilyBlocks(
+        placements = compactedPlacements,
         components = components,
         componentRelationships = componentRelationships,
         primaryUnitId = primaryUnitId,
@@ -863,6 +870,167 @@ private fun compactSingleChildAncestry(
 
         movingPersonIds.forEach { personId ->
             result[personId] = result.getValue(personId).shifted(bestDx)
+        }
+    }
+    return result
+}
+
+/**
+ * Reserves one horizontal interval for each disjoint visible birth-family block.
+ *
+ * Earlier passes optimize individual partnerships and sibling groups. On a fully
+ * expanded tree, two otherwise collision-free branches can still occupy the same
+ * lineage corridor. This final bottom-up pass treats a source partnership and all
+ * of its visible descendants as one movable block. Blocks on the same generation
+ * are pushed to the nearest free horizontal interval without changing their Y
+ * coordinates, so lineage lines remain on one level inside the generation gap.
+ *
+ * Blocks whose descendants meet again are merged before packing. This preserves
+ * the one-card-per-person invariant and avoids pulling a shared descendant in two
+ * directions.
+ */
+private fun reserveLineageFamilyBlocks(
+    placements: Map<String, LineagePlacementRect>,
+    components: PartnershipComponents,
+    componentRelationships: List<ComponentRelationship>,
+    primaryUnitId: String?,
+    siblingGap: Float
+): Map<String, LineagePlacementRect> {
+    if (componentRelationships.isEmpty() || placements.size > 800) return placements
+    val result = placements.toMutableMap()
+    val childrenBySource = componentRelationships
+        .groupBy { it.fromComponentId }
+        .mapValues { (_, connections) ->
+            connections.mapTo(linkedSetOf()) { it.toComponentId }
+        }
+
+    fun descendantsIncluding(sourceId: String): Set<String> {
+        val descendants = linkedSetOf<String>()
+        val queue = ArrayDeque<String>().apply { add(sourceId) }
+        while (queue.isNotEmpty()) {
+            val componentId = queue.removeFirst()
+            if (!descendants.add(componentId)) continue
+            childrenBySource[componentId].orEmpty().forEach(queue::addLast)
+        }
+        return descendants
+    }
+
+    fun personIds(componentIds: Set<String>): Set<String> =
+        componentIds.flatMapTo(linkedSetOf()) {
+            components.personIdsByComponent[it].orEmpty()
+        }.filterTo(linkedSetOf(), result::containsKey)
+
+    fun bounds(componentIds: Set<String>): LineagePlacementRect {
+        val rects = personIds(componentIds).map(result::getValue)
+        return LineagePlacementRect(
+            x = rects.minOf { it.left },
+            y = rects.minOf { it.top },
+            width = rects.maxOf { it.right } - rects.minOf { it.left },
+            height = rects.maxOf { it.bottom } - rects.minOf { it.top }
+        )
+    }
+
+    fun shift(componentIds: Set<String>, dx: Float) {
+        if (kotlin.math.abs(dx) < 0.01f) return
+        personIds(componentIds).forEach { personId ->
+            result[personId] = result.getValue(personId).shifted(dx)
+        }
+    }
+
+    data class FamilyBlock(
+        val sourceIds: Set<String>,
+        val componentIds: Set<String>
+    )
+
+    val blocksByGeneration = childrenBySource.keys
+        .mapNotNull { sourceId ->
+            val sourceRects = components.personIdsByComponent[sourceId]
+                .orEmpty()
+                .mapNotNull(result::get)
+            if (sourceRects.isEmpty()) null else {
+                val generationKey = kotlin.math.round(
+                    sourceRects.minOf { it.top } * 10f
+                ).toInt()
+                generationKey to FamilyBlock(
+                    sourceIds = setOf(sourceId),
+                    componentIds = descendantsIncluding(sourceId)
+                )
+            }
+        }
+        .groupBy({ it.first }, { it.second })
+
+    blocksByGeneration.keys.sortedDescending().forEach { generationKey ->
+        val merged = mutableListOf<FamilyBlock>()
+        blocksByGeneration.getValue(generationKey).forEach { block ->
+            val touchingIndexes = merged.indices.filter { index ->
+                merged[index].componentIds.any(block.componentIds::contains)
+            }
+            if (touchingIndexes.isEmpty()) {
+                merged += block
+            } else {
+                val touching = touchingIndexes.map(merged::get)
+                touchingIndexes.asReversed().forEach(merged::removeAt)
+                merged += FamilyBlock(
+                    sourceIds = touching
+                        .flatMapTo(linkedSetOf()) { it.sourceIds }
+                        .apply { addAll(block.sourceIds) },
+                    componentIds = touching
+                        .flatMapTo(linkedSetOf()) { it.componentIds }
+                        .apply { addAll(block.componentIds) }
+                )
+            }
+        }
+        if (merged.size < 2) return@forEach
+
+        fun sourceCenter(block: FamilyBlock): Float {
+            val sourceRects = personIds(block.sourceIds).map(result::getValue)
+            return sourceRects.map { it.centerX }.average().toFloat()
+        }
+        val ordered = merged.sortedWith(
+            compareBy<FamilyBlock>(::sourceCenter)
+                .thenBy { it.sourceIds.sorted().joinToString() }
+        )
+        val hasOverlap = ordered.zipWithNext().any { (left, right) ->
+            bounds(left.componentIds).right + siblingGap >
+                bounds(right.componentIds).left
+        }
+        if (!hasOverlap) return@forEach
+
+        val anchorIndex = ordered.indexOfFirst { primaryUnitId in it.componentIds }
+        if (anchorIndex >= 0) {
+            val anchorBounds = bounds(ordered[anchorIndex].componentIds)
+            var leftCursor = anchorBounds.left - siblingGap
+            ordered.subList(0, anchorIndex).asReversed().forEach { block ->
+                val current = bounds(block.componentIds)
+                if (current.right > leftCursor) {
+                    shift(block.componentIds, leftCursor - current.right)
+                }
+                leftCursor = bounds(block.componentIds).left - siblingGap
+            }
+            var rightCursor = anchorBounds.right + siblingGap
+            ordered.subList(anchorIndex + 1, ordered.size).forEach { block ->
+                val current = bounds(block.componentIds)
+                if (current.left < rightCursor) {
+                    shift(block.componentIds, rightCursor - current.left)
+                }
+                rightCursor = bounds(block.componentIds).right + siblingGap
+            }
+        } else {
+            val originalLeft = ordered.minOf { bounds(it.componentIds).left }
+            val originalRight = ordered.maxOf { bounds(it.componentIds).right }
+            var cursor = bounds(ordered.first().componentIds).right + siblingGap
+            ordered.drop(1).forEach { block ->
+                val current = bounds(block.componentIds)
+                if (current.left < cursor) {
+                    shift(block.componentIds, cursor - current.left)
+                }
+                cursor = bounds(block.componentIds).right + siblingGap
+            }
+            val packedLeft = ordered.minOf { bounds(it.componentIds).left }
+            val packedRight = ordered.maxOf { bounds(it.componentIds).right }
+            val centerCorrection =
+                (originalLeft + originalRight - packedLeft - packedRight) / 2f
+            ordered.forEach { shift(it.componentIds, centerCorrection) }
         }
     }
     return result

@@ -216,6 +216,10 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
             repository.listPersons(selectedSpaceId)
         }
     }
+    val switchSpace: () -> Unit = {
+        requestedSearchPersonId = null
+        SessionStore.clearActiveSpace()
+    }
 
     val openSearchResult: (String) -> Unit = { personId ->
         requestedSearchPersonId = personId
@@ -250,6 +254,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 syncFailedCount = syncFailedCount,
                 onSearchPerson = openSearchResult,
                 onOpenProfile = { navController.navigate(Routes.PROFILE) { launchSingleTop = true } },
+                onSwitchSpace = switchSpace,
                 onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
                 onSignOut = { scope.launch { repository.logout() } }
             ) { shellModifier ->
@@ -282,6 +287,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 syncFailedCount = syncFailedCount,
                 onSearchPerson = openSearchResult,
                 onOpenProfile = { navController.navigate(Routes.PROFILE) { launchSingleTop = true } },
+                onSwitchSpace = switchSpace,
                 onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
                 onSignOut = { scope.launch { repository.logout() } },
                 onGraphAction = { graphShellAction = it }
@@ -314,6 +320,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 syncFailedCount = syncFailedCount,
                 onSearchPerson = openSearchResult,
                 onOpenProfile = { navController.navigate(Routes.PROFILE) { launchSingleTop = true } },
+                onSwitchSpace = switchSpace,
                 onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
                 onSignOut = { scope.launch { repository.logout() } }
             ) { shellModifier ->
@@ -346,6 +353,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 syncFailedCount = syncFailedCount,
                 onSearchPerson = openSearchResult,
                 onOpenProfile = { navController.navigate(Routes.PROFILE) { launchSingleTop = true } },
+                onSwitchSpace = switchSpace,
                 onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) { launchSingleTop = true } },
                 onSignOut = { scope.launch { repository.logout() } }
             ) { shellModifier ->
@@ -372,6 +380,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 syncFailedCount = syncFailedCount,
                 onSearchPerson = openSearchResult,
                 onOpenProfile = { navController.navigate(Routes.PROFILE) { launchSingleTop = true } },
+                onSwitchSpace = switchSpace,
                 onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
                 onSignOut = { scope.launch { repository.logout() } }
             ) { shellModifier ->
@@ -405,6 +414,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 syncFailedCount = syncFailedCount,
                 onSearchPerson = openSearchResult,
                 onOpenProfile = { navController.navigate(Routes.PROFILE) { launchSingleTop = true } },
+                onSwitchSpace = switchSpace,
                 onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
                 onSignOut = { scope.launch { repository.logout() } }
             ) { shellModifier ->
@@ -457,6 +467,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 syncFailedCount = syncFailedCount,
                 onSearchPerson = openSearchResult,
                 onOpenProfile = { navController.navigate(Routes.PROFILE) { launchSingleTop = true } },
+                onSwitchSpace = switchSpace,
                 onOpenSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
                 onSignOut = { scope.launch { repository.logout() } }
             ) { shellModifier ->

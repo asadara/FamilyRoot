@@ -4,9 +4,12 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -350,6 +353,7 @@ fun GraphScreen(
     relationshipPath: RelationshipPathResponse? = null,
     showRelationshipPathInGraph: Boolean = false,
     resetViewRequest: Int = 0,
+    showMinimapRequest: Int = 0,
     revealPersonId: String? = null,
     revealPersonRequest: Int = 0,
     preferredUnconnectedPositions: Map<String, GraphPreferredPosition> = emptyMap(),
@@ -367,6 +371,7 @@ fun GraphScreen(
     onShowRelationshipPath: () -> Unit = {},
     onHideExplorationBreadcrumb: () -> Unit = {},
     onExportSnapshotChanged: (GraphExportSnapshot) -> Unit = {},
+    onMinimapNavigation: () -> Unit = {},
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -406,6 +411,10 @@ fun GraphScreen(
     var parentsCollapsed by rememberSaveable(centerPersonId) { mutableStateOf(false) }
     var generationFilter by rememberSaveable(centerPersonId) {
         mutableStateOf(GraphGenerationFilter.ALL)
+    }
+    var minimapDismissed by rememberSaveable(centerPersonId) { mutableStateOf(false) }
+    LaunchedEffect(showMinimapRequest, centerPersonId) {
+        if (showMinimapRequest > 0) minimapDismissed = false
     }
     var expandedParentPersonIds by rememberSaveable(
         centerPersonId,
@@ -1210,7 +1219,7 @@ fun GraphScreen(
                         }
                     )
                 }
-                .pointerInput(Unit) {
+                .pointerInput(centerPersonId) {
                     detectTransformGestures { centroid, pan, zoom, _ ->
                         val previousTransform = transformState.value
                         val previousScale = previousTransform.scale
@@ -2104,6 +2113,7 @@ fun GraphScreen(
             }
 
                 if (
+                    !minimapDismissed &&
                     minimapOverview.nodeRects.isNotEmpty() &&
                     shouldShowGraphMinimap(
                         graphWidth = graphWidthPx,
@@ -2116,7 +2126,9 @@ fun GraphScreen(
                         graphWidth = graphWidthPx,
                         graphHeight = graphHeightPx,
                         viewportWorld = exactViewport,
+                        onClose = { minimapDismissed = true },
                         onNavigate = { worldX, worldY ->
+                            onMinimapNavigation()
                             val transform = transformState.value
                             val offsets = graphViewportOffsetsForCenter(
                                 worldX = worldX,
@@ -2167,18 +2179,28 @@ fun GraphScreen(
                         .align(Alignment.BottomStart)
                         .padding(12.dp)
                 ) {
-                    OutlinedButton(onClick = {
-                        val transform = transformState.value
-                        transformState.value = transform.copy(
-                            scale = (transform.scale - 0.15f).coerceIn(minScale, maxScale)
-                        )
-                    }) { Text("−") }
-                    OutlinedButton(onClick = {
-                        val transform = transformState.value
-                        transformState.value = transform.copy(
-                            scale = (transform.scale + 0.15f).coerceIn(minScale, maxScale)
-                        )
-                    }) { Text("+") }
+                    OutlinedButton(
+                        onClick = {
+                            val transform = transformState.value
+                            transformState.value = transform.copy(
+                                scale = (transform.scale - 0.15f).coerceIn(minScale, maxScale)
+                            )
+                        },
+                        modifier = Modifier
+                            .testTag("graph-zoom-out")
+                            .semantics { contentDescription = "Perkecil pohon" }
+                    ) { Text("−") }
+                    OutlinedButton(
+                        onClick = {
+                            val transform = transformState.value
+                            transformState.value = transform.copy(
+                                scale = (transform.scale + 0.15f).coerceIn(minScale, maxScale)
+                            )
+                        },
+                        modifier = Modifier
+                            .testTag("graph-zoom-in")
+                            .semantics { contentDescription = "Perbesar pohon" }
+                    ) { Text("+") }
                 }
             }
 
@@ -2262,6 +2284,7 @@ private fun IdentityFreeGraphMinimap(
     graphWidth: Float,
     graphHeight: Float,
     viewportWorld: GraphRenderRect,
+    onClose: () -> Unit,
     onNavigate: (Float, Float) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -2273,34 +2296,40 @@ private fun IdentityFreeGraphMinimap(
         modifier = modifier
             .size(width = 168.dp, height = 112.dp)
             .testTag("graph-minimap")
+            .pointerInput(overview, graphWidth, graphHeight) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    down.consume()
+                    val up = waitForUpOrCancellation() ?: return@awaitEachGesture
+                    up.consume()
+                    val tap = up.position
+                    val projection = graphMinimapProjection(
+                        graphWidth = graphWidth,
+                        graphHeight = graphHeight,
+                        minimapWidth = size.width.toFloat(),
+                        minimapHeight = size.height.toFloat(),
+                        padding = 6.dp.toPx()
+                    )
+                    val world = minimapWorldPoint(
+                        minimapX = tap.x,
+                        minimapY = tap.y,
+                        projection = projection,
+                        graphWidth = graphWidth,
+                        graphHeight = graphHeight
+                    )
+                    onNavigate(world.first, world.second)
+                }
+            }
             .semantics {
                 contentDescription =
                     "Ikhtisar posisi pohon. Ketuk untuk memindahkan tampilan."
             }
     ) {
-        Canvas(
-            modifier = Modifier
-                .fillMaxSize()
-                .pointerInput(overview, graphWidth, graphHeight) {
-                    detectTapGestures { tap ->
-                        val projection = graphMinimapProjection(
-                            graphWidth = graphWidth,
-                            graphHeight = graphHeight,
-                            minimapWidth = size.width.toFloat(),
-                            minimapHeight = size.height.toFloat(),
-                            padding = 6.dp.toPx()
-                        )
-                        val world = minimapWorldPoint(
-                            minimapX = tap.x,
-                            minimapY = tap.y,
-                            projection = projection,
-                            graphWidth = graphWidth,
-                            graphHeight = graphHeight
-                        )
-                        onNavigate(world.first, world.second)
-                    }
-                }
-        ) {
+        Box {
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+            ) {
             val projection = graphMinimapProjection(
                 graphWidth = graphWidth,
                 graphHeight = graphHeight,
@@ -2355,6 +2384,26 @@ private fun IdentityFreeGraphMinimap(
                 ),
                 style = Stroke(width = 1.5.dp.toPx())
             )
+            }
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(4.dp)
+                    .size(28.dp)
+                    .testTag("graph-minimap-close")
+                    .semantics { contentDescription = "Tutup minimap" }
+                    .clickable(onClick = onClose)
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        "\u00d7",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+            }
         }
     }
 }

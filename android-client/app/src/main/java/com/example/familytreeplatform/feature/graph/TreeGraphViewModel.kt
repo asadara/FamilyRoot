@@ -513,7 +513,7 @@ internal fun focusGraphPerson(state: TreeGraphUiState, personId: String): TreeGr
     if (state.persons.none { it.personId == personId }) return state
     return state.copy(
         centerPersonId = personId,
-        selectedPersonId = personId,
+        selectedPersonId = null,
         inspectedPersonId = null,
         relations = state.relationships.toRelationsResponse(personId),
         explorationHistory = if (state.explorationHistory.lastOrNull() == personId) {

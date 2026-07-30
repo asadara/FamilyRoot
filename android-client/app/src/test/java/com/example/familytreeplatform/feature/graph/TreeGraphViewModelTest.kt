@@ -105,6 +105,7 @@ class TreeGraphViewModelTest {
         assertEquals("anisa", focused.centerPersonId)
         assertEquals("anisa", focused.relations?.personId)
         assertEquals(listOf("spouse"), focused.relations?.spouses?.map { it.relationshipId })
+        assertEquals(null, focused.selectedPersonId)
         assertEquals(null, focused.inspectedPersonId)
         assertEquals(listOf("aji", "anisa"), focused.explorationHistory)
         assertEquals(

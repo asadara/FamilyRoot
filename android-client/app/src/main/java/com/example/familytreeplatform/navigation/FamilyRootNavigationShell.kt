@@ -78,7 +78,7 @@ internal data class TopLevelDestination(
 
 internal enum class ShellIcon { TREE, HOME, FAMILY, ACTIVITY }
 
-enum class GraphShellAction { EXPORT_PDF, EXPORT_PNG, RESET_VIEW }
+enum class GraphShellAction { EXPORT_PDF, EXPORT_PNG, RESET_VIEW, SHOW_MINIMAP }
 
 internal val topLevelDestinations = listOf(
     TopLevelDestination(Routes.GRAPH, "Pohon", ShellIcon.TREE),
@@ -100,6 +100,7 @@ internal fun FamilyRootNavigationShell(
     syncFailedCount: Int = 0,
     onSearchPerson: (String) -> Unit,
     onOpenProfile: () -> Unit = {},
+    onSwitchSpace: () -> Unit = {},
     onOpenSettings: () -> Unit,
     onSignOut: () -> Unit,
     onGraphAction: ((GraphShellAction) -> Unit)? = null,
@@ -121,6 +122,7 @@ internal fun FamilyRootNavigationShell(
                 onSearchPerson = onSearchPerson,
                 onOpenSyncDetails = { onNavigate(Routes.ACTIVITY) },
                 onOpenProfile = onOpenProfile,
+                onSwitchSpace = onSwitchSpace,
                 onOpenSettings = onOpenSettings,
                 onSignOut = onSignOut
             )
@@ -220,6 +222,7 @@ private fun FamilyRootGlobalAppBar(
     onSearchPerson: (String) -> Unit,
     onOpenSyncDetails: () -> Unit,
     onOpenProfile: () -> Unit,
+    onSwitchSpace: () -> Unit,
     onOpenSettings: () -> Unit,
     onSignOut: () -> Unit
 ) {
@@ -500,6 +503,22 @@ private fun FamilyRootGlobalAppBar(
                             }
                         )
                         DropdownMenuItem(
+                            text = {
+                                Column {
+                                    Text("Ganti silsilah")
+                                    Text(
+                                        "Pilih Family Space lain tanpa keluar akun",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            },
+                            onClick = {
+                                accountMenuExpanded = false
+                                onSwitchSpace()
+                            }
+                        )
+                        DropdownMenuItem(
                             text = { Text("Pengaturan silsilah") },
                             onClick = {
                                 accountMenuExpanded = false
@@ -595,6 +614,13 @@ private fun ColumnScope.ToolsMenuItems(
             onClick = {
                 close()
                 onGraphAction(GraphShellAction.EXPORT_PNG)
+            }
+        )
+        DropdownMenuItem(
+            text = { Text("Tampilkan minimap") },
+            onClick = {
+                close()
+                onGraphAction(GraphShellAction.SHOW_MINIMAP)
             }
         )
         DropdownMenuItem(

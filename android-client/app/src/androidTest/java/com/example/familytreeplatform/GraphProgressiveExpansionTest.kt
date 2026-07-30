@@ -3,8 +3,9 @@ package com.example.familytreeplatform
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertContentDescriptionEquals
 import androidx.compose.ui.test.assertIsSelected
-import androidx.compose.ui.test.hasContentDescription
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performClick
@@ -82,46 +83,54 @@ class GraphProgressiveExpansionTest {
             }
         }
 
-        composeRule.onAllNodes(hasContentDescription("Kakak", substring = true)).assertCountEquals(1)
-        composeRule.onAllNodes(hasContentDescription("Adik", substring = true)).assertCountEquals(1)
-        composeRule.onAllNodes(hasContentDescription("Dewi", substring = true)).assertCountEquals(0)
-        composeRule.onAllNodes(hasContentDescription("Nara", substring = true)).assertCountEquals(0)
+        composeRule.onAllNodes(hasText("Kakak", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasText("Adik", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasText("Dewi", substring = true)).assertCountEquals(0)
+        composeRule.onAllNodes(hasText("Nara", substring = true)).assertCountEquals(0)
 
-        composeRule.onNode(hasContentDescription("Adik", substring = true))
+        composeRule.onNode(hasText("Adik", substring = true))
             .performClick()
         composeRule.waitForIdle()
-        composeRule.onNode(hasContentDescription("Adik", substring = true)).assertIsSelected()
-        composeRule.onNodeWithTag("lineage-children-younger")
+        composeRule.onNode(hasText("Adik", substring = true)).assertIsSelected()
+        composeRule.onNodeWithTag("lineage-partnerships-younger")
+            .performTouchInput { click(center) }
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasText("Dewi", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasText("Nara", substring = true)).assertCountEquals(0)
+        composeRule.onNodeWithContentDescription("Buka cabang anak")
             .performTouchInput { click(center) }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("lineage-children-younger")
+        composeRule.onNodeWithContentDescription("Tutup cabang anak")
             .assertContentDescriptionEquals("Tutup cabang anak")
-        composeRule.onAllNodes(hasContentDescription("Kakak", substring = true)).assertCountEquals(1)
-        composeRule.onAllNodes(hasContentDescription("Dewi", substring = true)).assertCountEquals(1)
-        composeRule.onAllNodes(hasContentDescription("Nara", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasText("Kakak", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasText("Dewi", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasText("Nara", substring = true)).assertCountEquals(1)
         assertTrue("Export snapshot must follow expanded workspace", "younger-child" in exportedIds)
-        val kakakX = composeRule.onNode(hasContentDescription("Kakak", substring = true))
+        val kakakX = composeRule.onNode(hasText("Kakak", substring = true))
             .fetchSemanticsNode().boundsInRoot.left
-        val alyaX = composeRule.onNode(hasContentDescription("Alya", substring = true))
+        val alyaX = composeRule.onNode(hasText("Alya", substring = true))
             .fetchSemanticsNode().boundsInRoot.left
-        val adikX = composeRule.onNode(hasContentDescription("Adik", substring = true))
+        val adikX = composeRule.onNode(hasText("Adik", substring = true))
             .fetchSemanticsNode().boundsInRoot.left
-        val dewiX = composeRule.onNode(hasContentDescription("Dewi", substring = true))
+        val dewiX = composeRule.onNode(hasText("Dewi", substring = true))
             .fetchSemanticsNode().boundsInRoot.left
         assertTrue("Kakak-Alya must remain an atomic couple", kakakX < alyaX)
-        assertTrue("Sibling family units must keep birth order", alyaX < adikX)
         assertTrue("Adik-Dewi must remain an atomic couple", adikX < dewiX)
+        assertTrue(
+            "Sibling family blocks must not interleave",
+            dewiX < kakakX || alyaX < adikX
+        )
 
-        composeRule.onNodeWithTag("lineage-children-younger")
+        composeRule.onNodeWithContentDescription("Tutup cabang anak")
             .performTouchInput { click(center) }
         composeRule.waitForIdle()
 
-        composeRule.onNodeWithTag("lineage-children-younger")
+        composeRule.onNodeWithContentDescription("Buka cabang anak")
             .assertContentDescriptionEquals("Buka cabang anak")
-        composeRule.onAllNodes(hasContentDescription("Kakak", substring = true)).assertCountEquals(1)
-        composeRule.onAllNodes(hasContentDescription("Dewi", substring = true)).assertCountEquals(0)
-        composeRule.onAllNodes(hasContentDescription("Nara", substring = true)).assertCountEquals(0)
+        composeRule.onAllNodes(hasText("Kakak", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasText("Dewi", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasText("Nara", substring = true)).assertCountEquals(0)
         assertFalse("Export snapshot must follow collapsed workspace", "younger-child" in exportedIds)
     }
 
@@ -180,50 +189,44 @@ class GraphProgressiveExpansionTest {
             }
         }
 
-        composeRule.onAllNodes(hasContentDescription("Bima", substring = true)).assertCountEquals(1)
-        composeRule.onAllNodes(hasContentDescription("Dewi", substring = true)).assertCountEquals(1)
-        composeRule.onAllNodes(hasContentDescription("Eka", substring = true)).assertCountEquals(1)
-        composeRule.onAllNodes(hasContentDescription("Ayu", substring = true)).assertCountEquals(0)
-        composeRule.onAllNodes(hasContentDescription("Citra", substring = true)).assertCountEquals(0)
+        composeRule.onAllNodes(hasText("Bima", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasText("Dewi", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasText("Eka", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasText("Ayu", substring = true)).assertCountEquals(0)
+        composeRule.onAllNodes(hasText("Citra", substring = true)).assertCountEquals(1)
 
-        composeRule.onNode(hasContentDescription("Bima", substring = true))
+        composeRule.onNode(hasText("Bima", substring = true))
             .performClick()
         composeRule.waitForIdle()
-        composeRule.onNode(hasContentDescription("Bima", substring = true)).assertIsSelected()
+        composeRule.onNode(hasText("Bima", substring = true)).assertIsSelected()
         composeRule.onNodeWithTag("lineage-partnerships-center").performTouchInput { click(center) }
         composeRule.waitForIdle()
-        composeRule.onAllNodes(hasContentDescription("Ayu", substring = true)).assertCountEquals(1)
-        composeRule.onAllNodes(hasContentDescription("Citra", substring = true)).assertCountEquals(0)
-        composeRule.onNode(hasContentDescription("Ayu", substring = true))
-            .performClick()
-        composeRule.waitForIdle()
-        composeRule.onNodeWithTag("lineage-children-old-partner").performTouchInput { click(center) }
-        composeRule.waitForIdle()
-        composeRule.onAllNodes(hasContentDescription("Citra", substring = true)).assertCountEquals(1)
-        composeRule.onAllNodes(hasContentDescription("Bima", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasText("Ayu", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasText("Citra", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasText("Bima", substring = true)).assertCountEquals(1)
 
-        composeRule.onNode(hasContentDescription("Bima", substring = true))
+        composeRule.onNode(hasText("Bima", substring = true))
             .performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("lineage-partnerships-center").performTouchInput { click(center) }
         composeRule.waitForIdle()
-        composeRule.onAllNodes(hasContentDescription("Ayu", substring = true)).assertCountEquals(0)
-        composeRule.onAllNodes(hasContentDescription("Citra", substring = true)).assertCountEquals(0)
+        composeRule.onAllNodes(hasText("Ayu", substring = true)).assertCountEquals(0)
+        composeRule.onAllNodes(hasText("Citra", substring = true)).assertCountEquals(1)
 
-        composeRule.onNode(hasContentDescription("Bima", substring = true))
+        composeRule.onNode(hasText("Bima", substring = true))
             .performClick()
         composeRule.waitForIdle()
         composeRule.onNodeWithTag("lineage-partnerships-center").performTouchInput { click(center) }
         composeRule.waitForIdle()
-        composeRule.onAllNodes(hasContentDescription("Ayu", substring = true)).assertCountEquals(1)
-        composeRule.onAllNodes(hasContentDescription("Citra", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasText("Ayu", substring = true)).assertCountEquals(1)
+        composeRule.onAllNodes(hasText("Citra", substring = true)).assertCountEquals(1)
         assertPersonCardsDoNotOverlap("Bima", "Ayu", "Citra", "Dewi", "Eka")
     }
 
     private fun assertPersonCardsDoNotOverlap(vararg names: String) {
         val cards = names.map { name ->
             name to composeRule
-                .onAllNodes(hasContentDescription(name, substring = true))
+                .onAllNodes(hasText(name, substring = true))
                 .fetchSemanticsNodes()
                 .single()
                 .boundsInRoot

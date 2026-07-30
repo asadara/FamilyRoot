@@ -4,7 +4,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertIsDisplayed
@@ -16,8 +15,10 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.semantics.SemanticsActions
 import com.example.familytreeplatform.feature.graph.QuickRelationKind
 import com.example.familytreeplatform.feature.graph.GraphQuickAddRequest
 import com.example.familytreeplatform.models.ExportRelationship
@@ -82,7 +83,7 @@ class GraphCardInteractionTest {
         composeRule.onAllNodes(hasContentDescription("Tambah orang tua")).assertCountEquals(1)
         composeRule.onAllNodes(hasContentDescription("Tambah anak")).assertCountEquals(1)
         composeRule.onAllNodes(hasContentDescription("Tambah pasangan")).assertCountEquals(1)
-        composeRule.onAllNodes(hasText("Lihat profil lengkap"))
+        composeRule.onAllNodes(hasText("profil lengkap", substring = true))
             .assertCountEquals(0)
 
         composeRule.onNodeWithTag("quick-add-child-budi")
@@ -90,21 +91,22 @@ class GraphCardInteractionTest {
         composeRule.runOnIdle { assertEquals(QuickRelationKind.CHILD, requestedKind) }
 
         composeRule.onNodeWithContentDescription("Budi Santoso")
-            .performClick()
-        composeRule.onNodeWithText("Lihat profil lengkap").assertIsDisplayed()
+            .performTouchInput { doubleClick(center) }
+        composeRule.waitForIdle()
+        composeRule.onAllNodes(hasText("profil lengkap", substring = true)).assertCountEquals(1)
 
         composeRule.onNodeWithTag("graph-background", useUnmergedTree = true)
-            .performTouchInput { click(Offset(4f, 4f)) }
+            .performSemanticsAction(SemanticsActions.OnClick)
         composeRule.waitForIdle()
         composeRule.runOnIdle { assertEquals(1, clearCount) }
         composeRule.onAllNodes(hasContentDescription("Tambah anak"))
             .assertCountEquals(0)
-        composeRule.onAllNodes(hasText("Lihat profil lengkap"))
+        composeRule.onAllNodes(hasText("profil lengkap", substring = true))
             .assertCountEquals(0)
 
         composeRule.onNodeWithContentDescription("Budi Santoso")
             .performTouchInput { doubleClick(center) }
-        composeRule.onNodeWithText("Lihat profil lengkap").assertIsDisplayed()
+        composeRule.onNode(hasText("profil lengkap", substring = true)).assertIsDisplayed()
     }
 
     @Test

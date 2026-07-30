@@ -60,6 +60,7 @@ class NavigationShellSearchTest {
     @Test
     fun accountAvatarShowsSignedInIdentityBeforeOpeningSpaceSettings() {
         var profileOpened = false
+        var switchSpaceOpened = false
         var settingsOpened = false
         var signedOut = false
         composeRule.setContent {
@@ -74,6 +75,7 @@ class NavigationShellSearchTest {
                     pendingSyncCount = 0,
                     onSearchPerson = {},
                     onOpenProfile = { profileOpened = true },
+                    onSwitchSpace = { switchSpaceOpened = true },
                     onOpenSettings = { settingsOpened = true },
                     onSignOut = { signedOut = true }
                 ) { contentModifier ->
@@ -89,10 +91,18 @@ class NavigationShellSearchTest {
             assertFalse(settingsOpened)
             assertFalse(signedOut)
             assertFalse(profileOpened)
+            assertFalse(switchSpaceOpened)
         }
 
         composeRule.onNodeWithText("Lihat profil akun").performClick()
         composeRule.runOnIdle { assertTrue(profileOpened) }
+
+        composeRule.onNodeWithContentDescription("Akun Budi Santoso").performClick()
+        composeRule.onNodeWithText("Ganti silsilah").performClick()
+        composeRule.runOnIdle {
+            assertTrue(switchSpaceOpened)
+            assertFalse(signedOut)
+        }
 
         composeRule.onNodeWithContentDescription("Akun Budi Santoso").performClick()
         composeRule.onNodeWithText("Pengaturan silsilah").performClick()
@@ -129,6 +139,10 @@ class NavigationShellSearchTest {
         composeRule.onNodeWithText("Alat").performClick()
         composeRule.onNodeWithText("Ekspor PDF").assertIsDisplayed().performClick()
         composeRule.runOnIdle { assertEquals(GraphShellAction.EXPORT_PDF, graphAction) }
+
+        composeRule.onNodeWithText("Alat").performClick()
+        composeRule.onNodeWithText("Tampilkan minimap").assertIsDisplayed().performClick()
+        composeRule.runOnIdle { assertEquals(GraphShellAction.SHOW_MINIMAP, graphAction) }
 
         composeRule.onNodeWithText("Alat").performClick()
         composeRule.onNodeWithText("Tentang aplikasi").assertIsDisplayed()

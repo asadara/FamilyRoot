@@ -279,6 +279,15 @@ viewport dan navigasi ketuk-ke-tengah tersedia, sedangkan mode fallback lebih da
 800 card sengaja tidak menampilkan minimap. Projection, batas koordinat, pemusatan
 viewport, kondisi tampil, dan larangan field identitas diuji melalui pure unit test.
 
+P1 lanjutan untuk keluarga besar ditutup pada 30 Juli 2026: layout menjalankan
+reservasi interval horizontal berbasis birth-family block dari generasi terdalam ke
+atas, tanpa menambah level Y garis. Blok yang memiliki descendant bersama digabung
+sebelum packing. Minimap kini dapat ditutup dan dipanggil kembali melalui `Alat`.
+Pergantian Family Space juga tersedia dari menu akun tanpa logout atau menghapus
+antrean sinkron workspace lain. P2 incremental reflow, P3 dense partnership stress,
+dan P4 tablet performance gate tetap dilacak di
+`docs/GRAPH_LARGE_FAMILY_LAYOUT_PROPOSAL.md`.
+
 ### P9 — Model data profil yang lebih kaya (`DEFERRED`)
 
 Belum tersedia penuh:

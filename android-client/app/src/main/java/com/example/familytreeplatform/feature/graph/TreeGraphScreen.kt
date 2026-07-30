@@ -78,6 +78,7 @@ fun TreeGraphScreen(
     val centerPersonId = state.centerPersonId
     val context = LocalContext.current
     var resetViewRequest by rememberSaveable { mutableIntStateOf(0) }
+    var showMinimapRequest by rememberSaveable { mutableIntStateOf(0) }
     var revealPersonRequest by rememberSaveable { mutableIntStateOf(0) }
     var revealPersonId by rememberSaveable { mutableStateOf<String?>(null) }
     var quickAddRequest by remember { mutableStateOf<GraphQuickAddRequest?>(null) }
@@ -128,6 +129,7 @@ fun TreeGraphScreen(
             GraphShellAction.EXPORT_PDF -> pdfWriter.launch("familyroot-tree.pdf")
             GraphShellAction.EXPORT_PNG -> pngWriter.launch("familyroot-tree.png")
             GraphShellAction.RESET_VIEW -> resetViewRequest++
+            GraphShellAction.SHOW_MINIMAP -> showMinimapRequest++
             null -> return@LaunchedEffect
         }
         onShellActionConsumed()
@@ -239,6 +241,7 @@ fun TreeGraphScreen(
                     relationshipPath = state.relationshipPath,
                     showRelationshipPathInGraph = state.showRelationshipPathInGraph,
                     resetViewRequest = resetViewRequest,
+                    showMinimapRequest = showMinimapRequest,
                     revealPersonId = revealPersonId,
                     revealPersonRequest = revealPersonRequest,
                     preferredUnconnectedPositions = preferredUnconnectedPositions,

@@ -9,6 +9,72 @@ import org.junit.Test
 
 class ComplexLineageTest {
     @Test
+    fun `expanded families reserve disjoint horizontal lineage blocks`() {
+        val relationships = listOf(
+            spouse("parents-a", "father-a", "mother-a", "MARRIED", "1980-01-01"),
+            spouse("parents-b", "father-b", "mother-b", "MARRIED", "1982-01-01"),
+            spouse("child-a1-couple", "child-a1", "partner-a1", "MARRIED", "2010-01-01"),
+            spouse("child-a2-couple", "child-a2", "partner-a2", "MARRIED", "2012-01-01"),
+            spouse("child-b1-couple", "child-b1", "partner-b1", "MARRIED", "2011-01-01"),
+            spouse("child-b2-couple", "child-b2", "partner-b2", "MARRIED", "2013-01-01"),
+            parentChild("a-father-a1", "father-a", "child-a1", "BIOLOGICAL"),
+            parentChild("a-mother-a1", "mother-a", "child-a1", "BIOLOGICAL"),
+            parentChild("a-father-a2", "father-a", "child-a2", "BIOLOGICAL"),
+            parentChild("a-mother-a2", "mother-a", "child-a2", "BIOLOGICAL"),
+            parentChild("b-father-b1", "father-b", "child-b1", "BIOLOGICAL"),
+            parentChild("b-mother-b1", "mother-b", "child-b1", "BIOLOGICAL"),
+            parentChild("b-father-b2", "father-b", "child-b2", "BIOLOGICAL"),
+            parentChild("b-mother-b2", "mother-b", "child-b2", "BIOLOGICAL")
+        )
+        val visible = relationships
+            .flatMapTo(linkedSetOf()) { listOf(it.fromPersonId, it.toPersonId) }
+        val placements = planProgressivePlacements(
+            basePositions = mapOf(
+                "father-a" to LineagePlacementRect(0f, 0f, 96f, 108f),
+                "mother-a" to LineagePlacementRect(124f, 0f, 96f, 108f),
+                "father-b" to LineagePlacementRect(248f, 0f, 96f, 108f),
+                "mother-b" to LineagePlacementRect(372f, 0f, 96f, 108f)
+            ),
+            visiblePersonIds = visible,
+            visibleRelationships = relationships,
+            allRelationships = relationships,
+            tileWidth = 96f,
+            tileHeight = 108f,
+            siblingGap = 28f,
+            partnershipGap = 28f,
+            rankGap = 44f,
+            fallbackY = 0f
+        )
+
+        fun familyBounds(ids: Set<String>): Pair<Float, Float> =
+            placements.filterKeys(ids::contains).values.let { rects ->
+                rects.minOf { it.left } to rects.maxOf { it.right }
+            }
+
+        val familyA = familyBounds(
+            setOf(
+                "father-a", "mother-a", "child-a1", "partner-a1",
+                "child-a2", "partner-a2"
+            )
+        )
+        val familyB = familyBounds(
+            setOf(
+                "father-b", "mother-b", "child-b1", "partner-b1",
+                "child-b2", "partner-b2"
+            )
+        )
+        assertTrue(
+            familyA.second + 28f <= familyB.first ||
+                familyB.second + 28f <= familyA.first
+        )
+        placements.values.forEachIndexed { index, first ->
+            placements.values.drop(index + 1).forEach { second ->
+                assertFalse(first.overlaps(second, padding = 0f))
+            }
+        }
+    }
+
+    @Test
     fun `horizontal lineage hub sits midway inside the generation gap`() {
         val parentBottom = 108f
         val childTop = 152f

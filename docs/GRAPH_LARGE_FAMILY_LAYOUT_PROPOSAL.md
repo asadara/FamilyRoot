@@ -1,7 +1,6 @@
 # Proposal Layout Graph Keluarga Besar
 
-> **Status:** Proposal teknis untuk dibahas sebelum implementasi algoritme besar
-> berikutnya  
+> **Status:** P1 corridor reservation diimplementasikan; P2–P4 tetap bertahap
 > **Tanggal:** 30 Juli 2026  
 > **Ruang lingkup:** Workspace graph Android; tidak mengubah relationship atau
 > kontrak backend
@@ -156,8 +155,11 @@ partnership dan benturan corridor, bukan hanya jumlah person.
 
 ## 7. Urutan Implementasi yang Direkomendasikan
 
-1. **P1 — Corridor reservation:** model interval koridor dan perpindahan seluruh
-   birth-family block.
+1. **P1 — Corridor reservation (`DONE`, 30 Juli 2026):** pass final mengelompokkan
+   partnership sumber beserta semua descendant terlihat sebagai satu blok. Blok
+   disjoint pada generasi yang sama di-pack dari generasi terdalam ke atas; blok
+   yang bertemu kembali digabung agar satu person tidak ditarik ke dua arah.
+   Perpindahan hanya horizontal dan fokus aktif menjadi anchor.
 2. **P2 — Incremental reflow:** cache ukuran blok dan hitung ulang bagian terdampak.
 3. **P3 — Dense partnership stress:** kasus beberapa pasangan pada kedua pihak dan
    graph yang bertemu kembali.
@@ -168,3 +170,12 @@ Proposal ini mempertahankan keputusan produk untuk tidak memakai garis horizonta
 bertingkat. Konsekuensinya, graph boleh menjadi lebih lebar ketika banyak keluarga
 berada pada generasi yang sama; progressive expansion, minimap, dan viewport menjadi
 alat utama untuk mengelola luas tersebut.
+
+## 8. Perubahan Pendamping P1
+
+- minimap mempunyai tombol tutup dan dapat dipanggil kembali dari menu `Alat`;
+- menu akun menyediakan `Ganti silsilah` tanpa logout; hanya active Family Space
+  yang dilepas, sedangkan sesi akun dan antrean offline per-space tetap tersimpan;
+- unit test mencakup dua keluarga lebar pada generasi yang sama dan memastikan
+  interval blok serta card tetap tidak bertumpuk;
+- UI test tablet mencakup tutup/panggil ulang minimap dan aksi menu ganti silsilah.
