@@ -31,6 +31,7 @@ class ActivityViewModel(
     fun refresh() {
         viewModelScope.launch {
             _uiState.update { it.copy(loading = true, error = null) }
+            repository.resumeOfflineSync()
             repository.listChanges(spaceId)
                 .onSuccess { logs -> _uiState.update { it.copy(loading = false, logs = logs) } }
                 .onFailure { error -> _uiState.update { it.copy(loading = false, error = error.message) } }

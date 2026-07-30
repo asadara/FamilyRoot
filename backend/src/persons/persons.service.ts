@@ -242,6 +242,29 @@ export class PersonsService {
     );
   }
 
+  async resolveCreateMutation(
+    spaceId: string,
+    clientMutationId: string,
+    actorUserId: string,
+  ) {
+    const mutation = await this.personsRepo.manager.findOne(
+      ClientMutationEntity,
+      {
+        where: {
+          clientMutationId,
+          spaceId,
+          actorUserId,
+          operation: 'CREATE_PERSON',
+        },
+      },
+    );
+    if (!mutation) {
+      throw new NotFoundException('Create-person mutation result not found');
+    }
+    const stored = JSON.parse(mutation.responseJson) as PersonEntity;
+    return this.findOneForUser(spaceId, stored.personId, actorUserId);
+  }
+
   async findOneForUser(spaceId: string, personId: string, actorUserId: string) {
     const { person, decision } =
       await this.privacyService.findPersonWithDecision(

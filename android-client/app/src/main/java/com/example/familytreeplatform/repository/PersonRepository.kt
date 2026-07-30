@@ -151,6 +151,13 @@ import com.example.familytreeplatform.feature.auth.GoogleCredentialClient
 
 enum class SyncBatchResult { COMPLETE, RETRY }
 
+private sealed class LocalReferenceRecovery {
+    data object NotNeeded : LocalReferenceRecovery()
+    data class Resolved(val mutation: OfflineMutationEntity) : LocalReferenceRecovery()
+    data object Retry : LocalReferenceRecovery()
+    data object Failed : LocalReferenceRecovery()
+}
+
 class PersonRepository(
     private val personDao: PersonDao? = null,
     private val mutationDao: OfflineMutationDao? = null,
@@ -1197,7 +1204,7 @@ class PersonRepository(
     }
 
     suspend fun resumeOfflineSync() {
-        appContext?.let(OfflineSyncScheduler::enqueue)
+        appContext?.let(OfflineSyncScheduler::enqueueImmediate)
     }
 
     suspend fun listDuplicates(spaceId: String): Result<List<DuplicateGroup>> =
@@ -1936,41 +1943,12 @@ class PersonRepository(
             if (response.isSuccessful) {
                 val serverPerson = response.body()
                     ?: return markMutationForRetry(queueDao, mutation, "Empty sync response")
-                room.withTransaction {
-                    val relationships = relationsDao.listBySpace(mutation.spaceId)
-                    relationships
-                        .filter {
-                            it.fromPersonId == mutation.personId ||
-                                it.toPersonId == mutation.personId
-                        }
-                        .forEach { relationship ->
-                            relationsDao.upsert(
-                                relationship.copy(
-                                    fromPersonId = relationship.fromPersonId
-                                        .replacePersonId(mutation.personId, serverPerson.personId),
-                                    toPersonId = relationship.toPersonId
-                                        .replacePersonId(mutation.personId, serverPerson.personId)
-                                )
-                            )
-                        }
-                    queueDao.listForSpace(mutation.spaceId)
-                        .filterNot { it.mutationId == mutation.mutationId }
-                        .forEach { pending ->
-                            queueDao.upsert(
-                                pending.remapPersonReference(
-                                    mutation.personId,
-                                    serverPerson.personId
-                                )
-                            )
-                        }
-                    sourceDao?.remapPerson(
-                        mutation.personId,
-                        serverPerson.personId
-                    )
-                    peopleDao.deleteById(mutation.personId)
-                    peopleDao.upsert(serverPerson.toEntity())
-                    queueDao.delete(mutation.mutationId)
-                }
+                remapCreatedPerson(
+                    spaceId = mutation.spaceId,
+                    localPersonId = mutation.personId,
+                    serverPerson = serverPerson,
+                    completedCreateMutationId = mutation.mutationId
+                )
                 SyncBatchResult.COMPLETE
             } else if (response.code() >= 500 || response.code() == 401) {
                 markMutationForRetry(
@@ -2031,14 +2009,16 @@ class PersonRepository(
             removeResolvedRelationshipMutation(mutation)
             return SyncBatchResult.COMPLETE
         }
-        if (mutation.hasUnresolvedLocalPersonReference()) {
-            queueDao.markStatus(
-                mutation.mutationId,
-                OfflineMutationStatus.PENDING,
-                "Menunggu person baru selesai disinkronkan.",
-                System.currentTimeMillis()
-            )
-            return SyncBatchResult.RETRY
+        val resolvedMutation = when (
+            val recovery = recoverStaleLocalPersonReferences(mutation)
+        ) {
+            is LocalReferenceRecovery.Resolved -> recovery.mutation
+            LocalReferenceRecovery.NotNeeded -> mutation
+            LocalReferenceRecovery.Failed -> return SyncBatchResult.COMPLETE
+            LocalReferenceRecovery.Retry -> return SyncBatchResult.RETRY
+        }
+        if (resolvedMutation !== mutation) {
+            return syncRelationshipMutation(resolvedMutation)
         }
         return try {
             val synced: CachedRelationshipEntity? = when (mutation.mutationType) {
@@ -2198,6 +2178,135 @@ class PersonRepository(
         room.withTransaction {
             relationsDao.deleteByMutation(mutation.mutationId)
             queueDao.delete(mutation.mutationId)
+        }
+    }
+
+    private suspend fun recoverStaleLocalPersonReferences(
+        mutation: OfflineMutationEntity
+    ): LocalReferenceRecovery {
+        val localReferences = mutation.unresolvedLocalPersonReferences()
+        if (localReferences.isEmpty()) return LocalReferenceRecovery.NotNeeded
+        val queueDao = mutationDao ?: return LocalReferenceRecovery.Failed
+        var current = mutation
+        for (localPersonId in localReferences) {
+            val createMutationId = localPersonId.localPersonMutationId()
+            if (createMutationId.isNullOrBlank()) {
+                queueDao.markStatus(
+                    mutation.mutationId,
+                    OfflineMutationStatus.FAILED,
+                    "Referensi person lokal tidak valid.",
+                    System.currentTimeMillis()
+                )
+                return LocalReferenceRecovery.Failed
+            }
+            val queuedCreate = queueDao.getById(createMutationId)
+            if (
+                queuedCreate != null &&
+                queuedCreate.mutationType == OfflineMutationType.CREATE_PERSON
+            ) {
+                queueDao.markStatus(
+                    mutation.mutationId,
+                    OfflineMutationStatus.PENDING,
+                    "Menunggu person baru selesai disinkronkan.",
+                    System.currentTimeMillis()
+                )
+                return LocalReferenceRecovery.Retry
+            }
+            val response = try {
+                apiService.resolveCreatePersonMutation(
+                    clientMutationId = createMutationId,
+                    spaceId = mutation.spaceId
+                )
+            } catch (error: Exception) {
+                queueDao.markStatus(
+                    mutation.mutationId,
+                    OfflineMutationStatus.PENDING,
+                    error.message ?: "Jaringan belum tersedia.",
+                    System.currentTimeMillis()
+                )
+                return LocalReferenceRecovery.Retry
+            }
+            if (response.isSuccessful) {
+                val serverPerson = response.body()
+                if (serverPerson == null) {
+                    queueDao.markStatus(
+                        mutation.mutationId,
+                        OfflineMutationStatus.PENDING,
+                        "Hasil pemulihan person kosong.",
+                        System.currentTimeMillis()
+                    )
+                    return LocalReferenceRecovery.Retry
+                }
+                remapCreatedPerson(
+                    spaceId = mutation.spaceId,
+                    localPersonId = localPersonId,
+                    serverPerson = serverPerson,
+                    completedCreateMutationId = null
+                )
+                current = queueDao.getById(mutation.mutationId)
+                    ?: return LocalReferenceRecovery.Failed
+            } else if (response.code() >= 500 || response.code() == 401) {
+                queueDao.markStatus(
+                    mutation.mutationId,
+                    OfflineMutationStatus.PENDING,
+                    parseError(response),
+                    System.currentTimeMillis()
+                )
+                return LocalReferenceRecovery.Retry
+            } else {
+                relationshipDao?.deleteByMutation(mutation.mutationId)
+                queueDao.markStatus(
+                    mutation.mutationId,
+                    OfflineMutationStatus.FAILED,
+                    "Person baru tidak dapat dipulihkan (${response.code()}).",
+                    System.currentTimeMillis()
+                )
+                return LocalReferenceRecovery.Failed
+            }
+        }
+        return LocalReferenceRecovery.Resolved(current)
+    }
+
+    private suspend fun remapCreatedPerson(
+        spaceId: String,
+        localPersonId: String,
+        serverPerson: PersonResponse,
+        completedCreateMutationId: String?
+    ) {
+        val room = requireNotNull(database)
+        val peopleDao = requireNotNull(personDao)
+        val relationsDao = requireNotNull(relationshipDao)
+        val queueDao = requireNotNull(mutationDao)
+        room.withTransaction {
+            relationsDao.listBySpace(spaceId)
+                .filter {
+                    it.fromPersonId == localPersonId ||
+                        it.toPersonId == localPersonId
+                }
+                .forEach { relationship ->
+                    relationsDao.upsert(
+                        relationship.copy(
+                            fromPersonId = relationship.fromPersonId
+                                .replacePersonId(localPersonId, serverPerson.personId),
+                            toPersonId = relationship.toPersonId
+                                .replacePersonId(localPersonId, serverPerson.personId)
+                        )
+                    )
+                }
+            queueDao.listForSpace(spaceId)
+                .filterNot { it.mutationId == completedCreateMutationId }
+                .forEach { pending ->
+                    queueDao.upsert(
+                        pending.remapPersonReference(
+                            localPersonId,
+                            serverPerson.personId
+                        )
+                    )
+                }
+            sourceDao?.remapPerson(localPersonId, serverPerson.personId)
+            peopleDao.deleteById(localPersonId)
+            peopleDao.upsert(serverPerson.toEntity())
+            completedCreateMutationId?.let { queueDao.delete(it) }
         }
     }
 

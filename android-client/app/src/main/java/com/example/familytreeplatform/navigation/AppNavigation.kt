@@ -92,6 +92,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 scope.launch {
                     repository.checkAppCompatibility()
                     repository.reconcileActiveSpaceAccess()
+                    repository.resumeOfflineSync()
                 }
             }
         }

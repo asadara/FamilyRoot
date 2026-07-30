@@ -198,6 +198,12 @@ interface ApiService {
     @GET("persons")
     suspend fun listPersons(@Query("spaceId") spaceId: String): Response<List<PersonListItem>>
 
+    @GET("persons/mutation-results/{clientMutationId}")
+    suspend fun resolveCreatePersonMutation(
+        @Path("clientMutationId") clientMutationId: String,
+        @Query("spaceId") spaceId: String
+    ): Response<PersonResponse>
+
     @PATCH("persons/{personId}/visibility")
     suspend fun updatePersonVisibility(
         @Path("personId") personId: String,

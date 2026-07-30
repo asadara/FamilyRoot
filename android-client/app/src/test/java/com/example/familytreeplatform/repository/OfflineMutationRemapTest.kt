@@ -109,6 +109,8 @@ class OfflineMutationRemapTest {
 
         assertTrue(parentChild.hasUnresolvedLocalPersonReference())
         assertTrue(spouse.hasUnresolvedLocalPersonReference())
+        assertEquals(setOf(LOCAL_ID), parentChild.unresolvedLocalPersonReferences())
+        assertEquals(LOCAL_ID.removePrefix("local-person-"), LOCAL_ID.localPersonMutationId())
         assertFalse(
             parentChild.remapPersonReference(LOCAL_ID, SERVER_ID)
                 .hasUnresolvedLocalPersonReference()

@@ -45,22 +45,28 @@ internal fun OfflineMutationEntity.referencesPerson(personId: String): Boolean =
             else -> false
         }
 
-internal fun OfflineMutationEntity.hasUnresolvedLocalPersonReference(): Boolean =
+internal fun OfflineMutationEntity.unresolvedLocalPersonReferences(): Set<String> =
     when (mutationType) {
         OfflineMutationType.ADD_PARENT_CHILD -> runCatching {
             Gson().fromJson(payloadJson, ParentChildMutationPayload::class.java)
         }.getOrNull()?.let { payload ->
-            payload.parentId.isLocalPersonReference() ||
-                payload.childId.isLocalPersonReference()
-        } == true
+            setOf(payload.parentId, payload.childId)
+                .filterTo(linkedSetOf(), String::isLocalPersonReference)
+        }.orEmpty()
         OfflineMutationType.ADD_SPOUSE -> runCatching {
             Gson().fromJson(payloadJson, SpouseMutationPayload::class.java)
         }.getOrNull()?.let { payload ->
-            payload.personAId.isLocalPersonReference() ||
-                payload.personBId.isLocalPersonReference()
-        } == true
-        else -> false
+            setOf(payload.personAId, payload.personBId)
+                .filterTo(linkedSetOf(), String::isLocalPersonReference)
+        }.orEmpty()
+        else -> emptySet()
     }
+
+internal fun OfflineMutationEntity.hasUnresolvedLocalPersonReference(): Boolean =
+    unresolvedLocalPersonReferences().isNotEmpty()
+
+internal fun String.localPersonMutationId(): String? =
+    takeIf(String::isLocalPersonReference)?.removePrefix(LOCAL_PERSON_PREFIX)
 
 internal fun OfflineMutationEntity.isResolvedBy(
     relationships: List<CachedRelationshipEntity>
@@ -96,7 +102,9 @@ internal fun OfflineMutationEntity.isResolvedBy(
     else -> false
 }
 
-private fun String.isLocalPersonReference(): Boolean = startsWith("local-person-")
+private const val LOCAL_PERSON_PREFIX = "local-person-"
+
+private fun String.isLocalPersonReference(): Boolean = startsWith(LOCAL_PERSON_PREFIX)
 
 private fun String?.normalizedContext(): String? = this?.trim()?.ifBlank { null }
 

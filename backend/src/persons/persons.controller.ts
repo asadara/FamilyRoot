@@ -57,6 +57,26 @@ export class PersonsController {
     return this.personsService.findDuplicateCandidates(spaceId, actorUserId);
   }
 
+  @Get('mutation-results/:clientMutationId')
+  @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
+  resolveCreateMutation(
+    @Param('clientMutationId') clientMutationId: string,
+    @ActorUserId() actorUserId: string,
+    @Query('spaceId') spaceId: string,
+  ) {
+    if (!spaceId || !isUUID(spaceId)) {
+      throw new BadRequestException('Invalid spaceId');
+    }
+    if (!isUUID(clientMutationId)) {
+      throw new BadRequestException('Invalid clientMutationId');
+    }
+    return this.personsService.resolveCreateMutation(
+      spaceId,
+      clientMutationId,
+      actorUserId,
+    );
+  }
+
   @Get(':personId')
   @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
   detail(

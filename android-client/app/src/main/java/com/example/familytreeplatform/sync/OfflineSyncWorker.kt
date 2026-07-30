@@ -26,19 +26,37 @@ class OfflineSyncWorker(
 
 object OfflineSyncScheduler {
     private const val UNIQUE_WORK = "family-tree-offline-mutation-sync"
+    private const val IMMEDIATE_WORK = "family-tree-offline-mutation-sync-immediate"
 
     fun enqueue(context: Context) {
-        val request = OneTimeWorkRequestBuilder<OfflineSyncWorker>()
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            UNIQUE_WORK,
+            ExistingWorkPolicy.APPEND_OR_REPLACE,
+            syncRequest()
+        )
+    }
+
+    /**
+     * Wakes a persisted queue without waiting for the backoff of an older worker.
+     *
+     * This uses a separate unique chain so it cannot cancel a normal sync that may
+     * already be committing an idempotent mutation. PersonRepository serializes
+     * both workers before they touch the local queue.
+     */
+    fun enqueueImmediate(context: Context) {
+        WorkManager.getInstance(context).enqueueUniqueWork(
+            IMMEDIATE_WORK,
+            ExistingWorkPolicy.REPLACE,
+            syncRequest()
+        )
+    }
+
+    private fun syncRequest() =
+        OneTimeWorkRequestBuilder<OfflineSyncWorker>()
             .setConstraints(
                 Constraints.Builder()
                     .setRequiredNetworkType(NetworkType.CONNECTED)
                     .build()
             )
             .build()
-        WorkManager.getInstance(context).enqueueUniqueWork(
-            UNIQUE_WORK,
-            ExistingWorkPolicy.APPEND_OR_REPLACE,
-            request
-        )
-    }
 }
