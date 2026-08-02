@@ -56,6 +56,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.flowOf
 import com.example.familytreeplatform.feature.compatibility.CompatibilityGateScreen
 import com.example.familytreeplatform.feature.compatibility.compatibilityRequiresGate
+import com.example.familytreeplatform.ui.accountProfilePhoto
 import com.example.familytreeplatform.models.AppCompatibilityState
 
 object Routes {
@@ -157,15 +158,12 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
         spaceId?.let(repository::observeProfilePhotos) ?: flowOf(emptyMap())
     }
     val shellProfilePhotos by shellProfilePhotosFlow.collectAsState(initial = emptyMap())
-    val userProfilePhoto = myClaim
-        ?.takeIf { it.status == "VERIFIED" }
-        ?.personId
-        ?.let(shellProfilePhotos::get)
+    val userProfilePhoto = accountProfilePhoto(myClaim, shellProfilePhotos)
     LaunchedEffect(token, spaceId, repository) {
         val selectedSpaceId = spaceId ?: return@LaunchedEffect
         if (token.isNullOrBlank()) return@LaunchedEffect
         val claim = repository.refreshMyClaim(selectedSpaceId).getOrNull()
-        if (claim?.status == "VERIFIED") {
+        if (claim != null) {
             repository.refreshMyProfilePhoto(selectedSpaceId)
         }
     }

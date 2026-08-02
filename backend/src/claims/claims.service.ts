@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { In, QueryFailedError, Repository } from 'typeorm';
 import { UserPersonClaimEntity } from './user-person-claim.entity';
 import { ChangeLogEntity } from '../changes/change-log.entity';
 import { PersonEntity } from '../persons/person.entity';
@@ -54,30 +54,41 @@ export class ClaimsService {
     if (!membership)
       throw new NotFoundException('User is not a member of this Family Space');
 
-    const existingVerified = await this.claimsRepo.findOne({
-      where: { spaceId, userId, personId, status: 'VERIFIED' },
-    });
-    if (existingVerified) {
-      throw new ConflictException('Claim already verified for this person');
-    }
+    const existingActive = await this.findActiveClaim(
+      spaceId,
+      userId,
+      personId,
+    );
+    if (existingActive) return existingActive;
 
-    return this.claimsRepo.manager.transaction(async (manager) => {
-      const saved = await manager.save(
-        manager.create(UserPersonClaimEntity, { spaceId, userId, personId }),
+    try {
+      return await this.claimsRepo.manager.transaction(async (manager) => {
+        const saved = await manager.save(
+          manager.create(UserPersonClaimEntity, { spaceId, userId, personId }),
+        );
+        await manager.save(
+          manager.create(ChangeLogEntity, {
+            spaceId,
+            actorUserId: actorUserId ?? 'SYSTEM',
+            entityType: 'CLAIM',
+            entityId: saved.claimId,
+            operation: 'CREATE',
+            note: 'Create claim',
+            afterJson: JSON.stringify(saved),
+          }),
+        );
+        return saved;
+      });
+    } catch (error) {
+      if (!this.isUniqueViolation(error)) throw error;
+      const concurrentlyCreated = await this.findActiveClaim(
+        spaceId,
+        userId,
+        personId,
       );
-      await manager.save(
-        manager.create(ChangeLogEntity, {
-          spaceId,
-          actorUserId: actorUserId ?? 'SYSTEM',
-          entityType: 'CLAIM',
-          entityId: saved.claimId,
-          operation: 'CREATE',
-          note: 'Create claim',
-          afterJson: JSON.stringify(saved),
-        }),
-      );
-      return saved;
-    });
+      if (concurrentlyCreated) return concurrentlyCreated;
+      throw error;
+    }
   }
 
   async list(spaceId: string, actorUserId: string) {
@@ -263,5 +274,30 @@ export class ClaimsService {
         confirmationRecorded: true,
       };
     });
+  }
+
+  private findActiveClaim(spaceId: string, userId: string, personId: string) {
+    return this.claimsRepo.findOne({
+      where: {
+        spaceId,
+        userId,
+        personId,
+        status: In(['PENDING', 'VERIFIED']),
+      },
+      order: { status: 'DESC', requestedAt: 'ASC' },
+    });
+  }
+
+  private isUniqueViolation(error: unknown) {
+    if (!(error instanceof QueryFailedError)) return false;
+    const driverError = error.driverError as {
+      code?: string;
+      errno?: number;
+    };
+    return (
+      driverError.code === '23505' ||
+      driverError.code === 'SQLITE_CONSTRAINT' ||
+      driverError.errno === 19
+    );
   }
 }

@@ -66,8 +66,8 @@ Semua request juga membawa header versi agar backend dapat menolak APK lama sete
 enforcement diaktifkan. Baseline gate pertama adalah `versionCode 2`,
 `versionName 0.1.1-beta`. Source pengembangan saat ini menyiapkan lifecycle lengkap,
 claim kolektif, undangan tertarget, Foster/Guardian, perbaikan akun/aktivitas/avatar,
-serta Photo Picker sebagai `versionCode 4`, `versionName 0.1.3-beta`; backend,
-migration, object contract, dan policy PILOT harus menerima build 4 sebelum APK
+serta Photo Picker sebagai `versionCode 5`, `versionName 0.1.4-beta`; backend,
+migration, object contract, dan policy PILOT harus menerima build 5 sebelum APK
 tersebut dipasang. Backend model care tidak boleh
 di-rollout terpisah karena build lama dapat salah membaca meta baru sebagai lineage.
 Selama enforcement policy masih `false`, mismatch atau pemeriksaan yang tidak

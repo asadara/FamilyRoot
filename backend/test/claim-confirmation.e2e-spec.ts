@@ -94,6 +94,44 @@ describe('Collective claim confirmation (e2e)', () => {
       .send({ spaceId, personId: person.body.personId })
       .expect(201);
     const claimId = claim.body.claimId as string;
+    const onePixelPng = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      'base64',
+    );
+
+    await request(app.getHttpServer())
+      .post(`/persons/${person.body.personId}/media/upload`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .query({ spaceId })
+      .field('label', 'Foto klaim pending')
+      .attach('file', onePixelPng, {
+        filename: 'pending.png',
+        contentType: 'image/png',
+      })
+      .expect(201);
+
+    await request(app.getHttpServer())
+      .get(`/spaces/${spaceId}/profile-photos/me`)
+      .set('Authorization', `Bearer ${claimantToken}`)
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.photo).toEqual(
+          expect.objectContaining({
+            personId: person.body.personId,
+            url: 'https://storage.example.test/claim',
+          }),
+        );
+      });
+
+    await request(app.getHttpServer())
+      .post('/claims')
+      .set('Authorization', `Bearer ${claimantToken}`)
+      .send({ spaceId, personId: person.body.personId })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body.claimId).toBe(claimId);
+        expect(body.status).toBe('PENDING');
+      });
 
     await request(app.getHttpServer())
       .post('/claims/verify')
@@ -180,10 +218,6 @@ describe('Collective claim confirmation (e2e)', () => {
         gender: 'UNKNOWN',
       })
       .expect(201);
-    const onePixelPng = Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
-      'base64',
-    );
     await request(app.getHttpServer())
       .post(`/persons/${otherPerson.body.personId}/media/upload`)
       .set('Authorization', `Bearer ${claimantToken}`)

@@ -215,8 +215,12 @@ export class ArchiveService {
 
   async getMyProfilePhoto(spaceId: string, actorUserId: string) {
     const claim = await this.claimsRepo.findOne({
-      where: { spaceId, userId: actorUserId, status: 'VERIFIED' },
-      order: { requestedAt: 'DESC' },
+      where: {
+        spaceId,
+        userId: actorUserId,
+        status: In(['PENDING', 'VERIFIED']),
+      },
+      order: { status: 'DESC', requestedAt: 'DESC' },
     });
     if (!claim) return { photo: null };
     const media = await this.mediaRepo.find({
