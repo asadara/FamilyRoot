@@ -845,6 +845,9 @@ yang sudah selesai:
 > Perubahan lifecycle membership disiapkan sebagai calon APK `versionCode 3`,
 > `versionName 0.1.2-beta`. Build 2 pada tablet tidak boleh diganti sebelum backend,
 > migration, dan policy PILOT build 3 selesai di-rollout serta diverifikasi.
+> Build 4 (`0.1.3-beta`) menambahkan perbaikan akun, aktivitas, avatar, sinkronisasi
+> foto, dan Android Photo Picker; policy PILOT perlu dinaikkan ketika rollout
+> backend/migration build ini dilakukan.
 > Daftar di bawah tetap berguna sebagai konteks awal, tetapi keputusan terbaru dalam
 > kedua risalah tersebut mengalahkan item agenda yang sudah diselesaikan.
 
@@ -954,3 +957,38 @@ melanjutkan diskusi atau pekerjaan yang diminta pengguna.
 - P2 incremental reflow, P3 dense partnership stress, dan P4 tablet performance
   gate tetap belum ditutup. Detail kanonik ada di
   `docs/GRAPH_LARGE_FAMILY_LAYOUT_PROPOSAL.md`.
+
+## 19. Perbaikan Akses Akun, Profil, Aktivitas, dan Avatar (2 Agustus 2026)
+
+- Build `pilot` dan `release` wajib menerima Google Web Client ID yang valid. Workflow
+  CI dan rilis membaca repository variable `FAMILY_TREE_GOOGLE_WEB_CLIENT_ID`; build
+  tidak lagi boleh berhasil dengan tombol Google yang diam-diam nonaktif. Web Client
+  ID adalah identifier publik yang tertanam di APK, tetapi nilainya tetap tidak
+  di-hardcode pada source.
+- Akun memperoleh endpoint self-claim yang aman. Profil akun menggunakan verified
+  `UserPersonClaim` pada silsilah aktif sebagai hubungan ke Person diri, tanpa
+  menyamakan entitas User dan Person.
+- Halaman akun disederhanakan: detail teknis ID dan kartu informasi berulang tidak
+  lagi ditampilkan; pengaturan silsilah, riwayat terbaru, profil diri, foto, logout,
+  dan lifecycle akun tetap tersedia.
+- Notifikasi pribadi dan aktivitas kolaborasi default dibatasi maksimal 10 item.
+  Riwayat kolaborasi lengkap memerlukan permintaan serta persetujuan OWNER/ADMIN,
+  lalu dimuat dengan cursor maksimal 50 item per halaman.
+- Aktivitas menampilkan display name akun; pengguna aktif ditampilkan sebagai
+  `Anda`. UUID audit tetap disimpan backend tetapi tidak ditampilkan sebagai label UI.
+- Header adaptif menyembunyikan teks brand saat ruang horizontal sangat sempit untuk
+  mencegah teks menjadi satu huruf per baris. Hero akun juga memakai susunan vertikal
+  yang aman pada perangkat kecil.
+- Avatar header seluruh halaman memakai foto verified self Person dan fallback
+  inisial. Endpoint foto diri menghindari pengambilan seluruh foto silsilah hanya
+  untuk header.
+- Upload foto mengembalikan signed URL baru dan langsung memperbarui shared state.
+  Cache memakai `mediaId` stabil, URL diperbarui sebelum kedaluwarsa, dan foto managed
+  lama dibersihkan hanya setelah foto pengganti dapat dibaca. VIEWER dengan klaim diri
+  terverifikasi hanya boleh mengganti foto Person dirinya sendiri, bukan Person lain.
+- Pemilihan foto memakai Android Photo Picker dengan fallback Storage Access
+  Framework dan backport Google Play Services. Aplikasi sengaja tidak meminta akses
+  galeri/storage luas; import/export dokumen juga memakai system picker per-file.
+- Source dan automated test telah diperbarui, tetapi pengaktifan Google pada APK pilot
+  tetap memerlukan nilai Web Client ID aktual pada environment build serta deployment
+  backend/migration sebelum acceptance test perangkat.

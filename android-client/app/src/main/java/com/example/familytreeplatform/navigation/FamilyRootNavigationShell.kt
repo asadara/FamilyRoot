@@ -68,6 +68,8 @@ import androidx.compose.ui.window.PopupProperties
 import com.example.familytreeplatform.BuildConfig
 import com.example.familytreeplatform.feature.support.applicationVersionLabel
 import com.example.familytreeplatform.models.PersonListItem
+import com.example.familytreeplatform.models.ProfilePhotoItem
+import com.example.familytreeplatform.ui.ProfilePhotoAvatar
 import com.example.familytreeplatform.ui.branding.TredhahBrand
 import com.example.familytreeplatform.ui.branding.TredhahLogo
 
@@ -95,6 +97,7 @@ internal fun FamilyRootNavigationShell(
     spaceName: String,
     userDisplayName: String,
     userEmail: String?,
+    userProfilePhoto: ProfilePhotoItem? = null,
     people: List<PersonListItem>,
     pendingSyncCount: Int,
     syncConflictCount: Int = 0,
@@ -110,16 +113,19 @@ internal fun FamilyRootNavigationShell(
 ) {
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val useNavigationRail = maxWidth >= 840.dp
+        val narrowHeader = maxWidth < 520.dp
         val appBar: @Composable () -> Unit = {
             FamilyRootGlobalAppBar(
                 spaceName = spaceName,
                 userDisplayName = userDisplayName,
                 userEmail = userEmail,
+                userProfilePhoto = userProfilePhoto,
                 people = people,
                 pendingSyncCount = pendingSyncCount,
                 syncConflictCount = syncConflictCount,
                 syncFailedCount = syncFailedCount,
                 compact = !useNavigationRail,
+                narrow = narrowHeader,
                 onSearchPerson = onSearchPerson,
                 onOpenSyncDetails = { onNavigate(Routes.ACTIVITY) },
                 onOpenProfile = onOpenProfile,
@@ -215,11 +221,13 @@ private fun FamilyRootGlobalAppBar(
     spaceName: String,
     userDisplayName: String,
     userEmail: String?,
+    userProfilePhoto: ProfilePhotoItem?,
     people: List<PersonListItem>,
     pendingSyncCount: Int,
     syncConflictCount: Int,
     syncFailedCount: Int,
     compact: Boolean,
+    narrow: Boolean,
     onSearchPerson: (String) -> Unit,
     onOpenSyncDetails: () -> Unit,
     onOpenProfile: () -> Unit,
@@ -254,19 +262,25 @@ private fun FamilyRootGlobalAppBar(
         ) {
             if (!compact || !searchExpanded) {
                 TredhahLogo(Modifier.size(40.dp))
-                Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
-                    Text(
-                        TredhahBrand.NAME,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        spaceName,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                if (!narrow) {
+                    Column(modifier = Modifier.weight(1f).padding(start = 8.dp)) {
+                        Text(
+                            TredhahBrand.NAME,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            spaceName,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                } else {
+                    Spacer(Modifier.weight(1f))
                 }
             }
 
@@ -454,20 +468,11 @@ private fun FamilyRootGlobalAppBar(
                             .clickable { accountMenuExpanded = true }
                     ) {
                         Box(modifier = Modifier.padding(3.dp)) {
-                            Surface(
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primaryContainer,
+                            ProfilePhotoAvatar(
+                                photo = userProfilePhoto,
+                                fallbackText = initials(userDisplayName),
                                 modifier = Modifier.fillMaxSize()
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Text(
-                                        initials(userDisplayName),
-                                        style = MaterialTheme.typography.labelLarge,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                }
-                            }
+                            )
                         }
                     }
                     DropdownMenu(

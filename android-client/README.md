@@ -34,6 +34,29 @@ $env:FAMILY_TREE_GOOGLE_WEB_CLIENT_ID='<Web application Client ID>'
 Remove-Item Env:FAMILY_TREE_GOOGLE_WEB_CLIENT_ID
 ```
 
+Build `pilot` dan `release` akan gagal jika Web Client ID kosong atau bukan ID
+`*.apps.googleusercontent.com`. Ini mencegah artefak distribusi berhasil dibuat
+dengan tombol Google yang diam-diam nonaktif. Workflow CI dan rilis memakai GitHub
+Actions repository variable `FAMILY_TREE_GOOGLE_WEB_CLIENT_ID`; Web Client ID adalah
+identifier publik yang juga tertanam di APK, sehingga tidak perlu disimpan sebagai
+secret. Build debug lokal tetap boleh tanpa konfigurasi Google.
+
+## Permission perangkat dan pemilih file
+
+Aplikasi tidak meminta akses luas ke galeri atau storage. Foto dipilih melalui
+Android Photo Picker (`PickVisualMedia`), yang hanya memberi akses ke gambar yang
+dipilih pengguna dan otomatis memakai Storage Access Framework pada perangkat yang
+belum menyediakan Photo Picker. Import/restore dan export memakai system document
+picker (`OpenDocument`, `CreateDocument`) dengan prinsip akses file-per-file yang
+sama. Karena itu manifest sengaja tidak mendeklarasikan `READ_MEDIA_IMAGES`,
+`READ_EXTERNAL_STORAGE`, `WRITE_EXTERNAL_STORAGE`, atau `MANAGE_EXTERNAL_STORAGE`.
+
+`INTERNET` dan `ACCESS_NETWORK_STATE` merupakan normal permissions yang diberikan
+sistem saat instalasi tanpa dialog. Permission teknis WorkManager seperti wake lock,
+boot completed, dan foreground service berasal dari manifest library untuk antrean
+sinkronisasi; semuanya bukan dangerous runtime permissions dan tidak memberi akses
+ke foto, file pribadi, kontak, lokasi, mikrofon, atau kamera.
+
 Setiap build membawa `VERSION_CODE`, `VERSION_NAME`, `API_CONTRACT_VERSION`, dan
 `RELEASE_CHANNEL`. Aplikasi memeriksa endpoint kompatibilitas publik sebelum
 memulihkan sesi. Build pilot memakai channel `PILOT`, debug memakai `DEBUG`, dan
@@ -42,9 +65,10 @@ release memakai `PRODUCTION`. Naikkan `versionCode` untuk setiap APK baru; naikk
 Semua request juga membawa header versi agar backend dapat menolak APK lama setelah
 enforcement diaktifkan. Baseline gate pertama adalah `versionCode 2`,
 `versionName 0.1.1-beta`. Source pengembangan saat ini menyiapkan lifecycle lengkap,
-claim kolektif, undangan tertarget, serta Foster/Guardian sebagai `versionCode 3`,
-`versionName 0.1.2-beta`; backend, migration, object contract, dan policy PILOT
-harus menerima build 3 sebelum APK tersebut dipasang. Backend model care tidak boleh
+claim kolektif, undangan tertarget, Foster/Guardian, perbaikan akun/aktivitas/avatar,
+serta Photo Picker sebagai `versionCode 4`, `versionName 0.1.3-beta`; backend,
+migration, object contract, dan policy PILOT harus menerima build 4 sebelum APK
+tersebut dipasang. Backend model care tidak boleh
 di-rollout terpisah karena build lama dapat salah membaca meta baru sebagai lineage.
 Selama enforcement policy masih `false`, mismatch atau pemeriksaan yang tidak
 tersedia menjadi warning yang dapat dilanjutkan sementara, bukan hard block.

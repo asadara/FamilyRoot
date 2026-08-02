@@ -47,6 +47,10 @@ data class ProfilePhotoItem(
     val expiresIn: Int
 )
 
+data class MyProfilePhotoResponse(
+    val photo: ProfilePhotoItem? = null
+)
+
 data class ProposalItem(
     val proposalId: String,
     val spaceId: String,

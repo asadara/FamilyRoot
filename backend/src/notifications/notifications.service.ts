@@ -41,15 +41,16 @@ export class NotificationsService {
     }
   }
 
-  async list(userId: string, limit = 50) {
+  async list(userId: string, limit = 10) {
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) {
       throw new BadRequestException('limit must be between 1 and 100');
     }
+    const boundedLimit = Math.min(limit, 10);
     const [items, unreadCount] = await Promise.all([
       this.notificationsRepo.find({
         where: { userId },
         order: { createdAt: 'DESC' },
-        take: limit,
+        take: boundedLimit,
       }),
       this.notificationsRepo.countBy({ userId, readAt: IsNull() }),
     ]);

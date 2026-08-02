@@ -636,7 +636,7 @@ describe('Phase 1 security contract (e2e)', () => {
     await request(app.getHttpServer())
       .get('/changes')
       .set('Authorization', `Bearer ${editorToken}`)
-      .query({ spaceId: lifecycleSpaceId, limit: 50 })
+      .query({ spaceId: lifecycleSpaceId, limit: 10 })
       .expect(200)
       .expect(({ body }) => {
         const membershipLogs = (
@@ -928,9 +928,45 @@ describe('Phase 1 security contract (e2e)', () => {
       .expect(200);
     expect(changes.body).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ entityType: 'PERSON', operation: 'CREATE' }),
+        expect.objectContaining({
+          entityType: 'PERSON',
+          operation: 'CREATE',
+          actorDisplayName: expect.any(String),
+        }),
       ]),
     );
+
+    await request(app.getHttpServer())
+      .get('/changes/full')
+      .set('Authorization', `Bearer ${editorToken}`)
+      .query({ spaceId })
+      .expect(403);
+
+    const historyRequest = await request(app.getHttpServer())
+      .post('/changes/history-access-requests')
+      .set('Authorization', `Bearer ${editorToken}`)
+      .send({ spaceId })
+      .expect(201);
+    expect(historyRequest.body.status).toBe('PENDING');
+
+    await request(app.getHttpServer())
+      .post(
+        `/changes/history-access-requests/${historyRequest.body.requestId}/review`,
+      )
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ spaceId, approved: true })
+      .expect(201)
+      .expect(({ body }) => expect(body.status).toBe('APPROVED'));
+
+    await request(app.getHttpServer())
+      .get('/changes/full')
+      .set('Authorization', `Bearer ${editorToken}`)
+      .query({ spaceId, limit: 2 })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.items).toHaveLength(2);
+        expect(body.nextCursor).toEqual(expect.any(String));
+      });
 
     await request(app.getHttpServer())
       .get('/export/space')
@@ -1083,6 +1119,28 @@ describe('Phase 1 security contract (e2e)', () => {
         expect(body.url).toMatch(/^https:\/\/storage\.example\.test\/signed\//);
         expect(body.expiresIn).toBe(60);
       });
+
+    const replacement = await request(app.getHttpServer())
+      .post(`/persons/${personId}/media/upload`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .query({ spaceId })
+      .field('label', 'Replacement profile photo')
+      .attach('file', onePixelPng, {
+        filename: 'replacement.png',
+        contentType: 'image/png',
+      })
+      .expect(201);
+
+    expect(replacement.body.mediaId).not.toBe(uploaded.body.mediaId);
+    expect(replacement.body.url).toMatch(
+      /^https:\/\/storage\.example\.test\/signed\//,
+    );
+    expect(storedObjects.size).toBe(1);
+    await request(app.getHttpServer())
+      .get(`/persons/${personId}/media/${uploaded.body.mediaId}/access`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .query({ spaceId })
+      .expect(404);
   });
 
   it('blocks unsafe person deletion and supports reviewed editor requests', async () => {
@@ -1202,12 +1260,12 @@ describe('Phase 1 security contract (e2e)', () => {
       );
 
     await request(app.getHttpServer())
-      .get('/changes')
+      .get('/changes/full')
       .set('Authorization', `Bearer ${ownerToken}`)
-      .query({ spaceId })
+      .query({ spaceId, limit: 50 })
       .expect(200)
       .expect(({ body }) =>
-        expect(body).toEqual(
+        expect(body.items).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
               entityType: 'PERSON',
@@ -1252,6 +1310,27 @@ describe('Phase 1 security contract (e2e)', () => {
       .set('Authorization', `Bearer ${inviteeToken}`)
       .send({ spaceId, personId: retainedPerson.body.personId })
       .expect(201);
+
+    await request(app.getHttpServer())
+      .get('/claims/me')
+      .set('Authorization', `Bearer ${inviteeToken}`)
+      .query({ spaceId })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.claim).toEqual(
+          expect.objectContaining({
+            personId: retainedPerson.body.personId,
+            personName: 'Profil',
+            status: 'PENDING',
+          }),
+        );
+      });
+
+    await request(app.getHttpServer())
+      .get(`/spaces/${spaceId}/profile-photos/me`)
+      .set('Authorization', `Bearer ${inviteeToken}`)
+      .expect(200)
+      .expect(({ body }) => expect(body).toEqual({ photo: null }));
 
     await request(app.getHttpServer())
       .get('/users/me/deletion-impact')
@@ -1304,12 +1383,12 @@ describe('Phase 1 security contract (e2e)', () => {
       );
 
     await request(app.getHttpServer())
-      .get('/changes')
+      .get('/changes/full')
       .set('Authorization', `Bearer ${ownerToken}`)
-      .query({ spaceId })
+      .query({ spaceId, limit: 50 })
       .expect(200)
       .expect(({ body }) =>
-        expect(body).toEqual(
+        expect(body.items).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
               entityType: 'MEMBERSHIP',

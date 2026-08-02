@@ -15,6 +15,7 @@ import com.example.familytreeplatform.models.PortableDocument
 import com.example.familytreeplatform.models.SpaceMember
 import com.example.familytreeplatform.models.SpaceInvitation
 import com.example.familytreeplatform.models.SpaceLifecycleImpact
+import com.example.familytreeplatform.models.HistoryAccessRequestItem
 import com.example.familytreeplatform.repository.PersonRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -66,6 +67,9 @@ data class SpaceSettingsUiState(
     val showLeaveConfirmation: Boolean = false,
     val leavingSpace: Boolean = false,
     val claims: List<ClaimReviewItem> = emptyList(),
+    val historyAccessRequests: List<HistoryAccessRequestItem> = emptyList(),
+    val loadingHistoryAccessRequests: Boolean = false,
+    val reviewingHistoryAccessRequestId: String? = null,
     val proposals: List<ProposalItem> = emptyList(),
     val proposalComments: Map<String, List<ProposalCommentItem>> = emptyMap(),
     val proposalCommentDrafts: Map<String, String> = emptyMap(),
@@ -138,6 +142,7 @@ class SpaceSettingsViewModel(
                         )
                     }
                     if (role in setOf("OWNER", "ADMIN")) refreshInvitations()
+                    if (role in setOf("OWNER", "ADMIN")) refreshHistoryAccessRequests()
                     if (role == "OWNER") refreshLifecycle()
                 }
                 .onFailure { error ->
@@ -629,6 +634,62 @@ class SpaceSettingsViewModel(
                 .onFailure { error ->
                     _uiState.update {
                         it.copy(loadingClaims = false, error = error.message)
+                    }
+                }
+        }
+    }
+
+    fun refreshHistoryAccessRequests() {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(loadingHistoryAccessRequests = true, error = null)
+            }
+            repository.listHistoryAccessRequests(spaceId)
+                .onSuccess { requests ->
+                    _uiState.update {
+                        it.copy(
+                            loadingHistoryAccessRequests = false,
+                            historyAccessRequests = requests
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(
+                            loadingHistoryAccessRequests = false,
+                            error = error.message
+                        )
+                    }
+                }
+        }
+    }
+
+    fun reviewHistoryAccessRequest(requestId: String, approved: Boolean) {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(reviewingHistoryAccessRequestId = requestId, error = null)
+            }
+            repository.reviewHistoryAccessRequest(spaceId, requestId, approved)
+                .onSuccess { updated ->
+                    _uiState.update {
+                        it.copy(
+                            reviewingHistoryAccessRequestId = null,
+                            historyAccessRequests = it.historyAccessRequests.map { request ->
+                                if (request.requestId == requestId) {
+                                    updated.copy(userDisplayName = request.userDisplayName)
+                                } else {
+                                    request
+                                }
+                            }
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(
+                            reviewingHistoryAccessRequestId = null,
+                            error = error.message
+                        )
                     }
                 }
         }

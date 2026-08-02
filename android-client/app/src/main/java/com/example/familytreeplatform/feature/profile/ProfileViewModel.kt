@@ -1,15 +1,20 @@
 package com.example.familytreeplatform.feature.profile
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.example.familytreeplatform.models.AccountDeletionImpact
+import com.example.familytreeplatform.models.ClaimReviewItem
+import com.example.familytreeplatform.models.ProfilePhotoItem
 import com.example.familytreeplatform.models.UserNotificationItem
 import com.example.familytreeplatform.repository.PersonRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 data class ProfileUiState(
@@ -19,6 +24,11 @@ data class ProfileUiState(
     val showDeleteConfirmation: Boolean = false,
     val deleteConfirmation: String = "",
     val deletingAccount: Boolean = false,
+    val myClaim: ClaimReviewItem? = null,
+    val profilePhoto: ProfilePhotoItem? = null,
+    val loadingProfile: Boolean = false,
+    val uploadingPhoto: Boolean = false,
+    val message: String? = null,
     val notifications: List<UserNotificationItem> = emptyList(),
     val unreadNotificationCount: Int = 0,
     val loadingNotifications: Boolean = false,
@@ -27,19 +37,91 @@ data class ProfileUiState(
 )
 
 class ProfileViewModel(
+    private val spaceId: String,
     private val repository: PersonRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ProfileUiState())
     val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
 
     init {
+        viewModelScope.launch {
+            combine(
+                repository.observeMyClaim(spaceId),
+                repository.observeProfilePhotos(spaceId)
+            ) { claim, photos -> claim to photos }
+                .collectLatest { (claim, photos) ->
+                    _uiState.update { state ->
+                        state.copy(
+                            myClaim = claim,
+                            profilePhoto = claim?.personId?.let(photos::get)
+                        )
+                    }
+                }
+        }
+        refreshProfile()
         refreshNotifications()
+    }
+
+    fun refreshProfile() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(loadingProfile = true, error = null) }
+            repository.refreshMyClaim(spaceId)
+                .onSuccess { claim ->
+                    if (claim?.status == "VERIFIED") {
+                        repository.refreshMyProfilePhoto(spaceId)
+                    }
+                    _uiState.update { state ->
+                        state.copy(
+                            myClaim = claim,
+                            loadingProfile = false
+                        )
+                    }
+                }
+                .onFailure { error ->
+                    _uiState.update {
+                        it.copy(loadingProfile = false, error = error.message)
+                    }
+                }
+        }
+    }
+
+    fun uploadProfilePhoto(uri: Uri) {
+        val claim = _uiState.value.myClaim
+        if (claim?.status != "VERIFIED") {
+            _uiState.update {
+                it.copy(error = "Profil diri harus terverifikasi sebelum foto dapat diganti.")
+            }
+            return
+        }
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(uploadingPhoto = true, error = null, message = null)
+            }
+            repository.uploadProfilePhoto(
+                spaceId = spaceId,
+                personId = claim.personId,
+                imageUri = uri,
+                personName = claim.personName ?: "Akun"
+            ).onSuccess { photo ->
+                _uiState.update {
+                    it.copy(
+                        profilePhoto = photo,
+                        uploadingPhoto = false,
+                        message = "Foto profil berhasil diperbarui"
+                    )
+                }
+            }.onFailure { error ->
+                _uiState.update {
+                    it.copy(uploadingPhoto = false, error = error.message)
+                }
+            }
+        }
     }
 
     fun refreshNotifications() {
         viewModelScope.launch {
             _uiState.update { it.copy(loadingNotifications = true, error = null) }
-            repository.listNotifications()
+            repository.listNotifications(limit = 10)
                 .onSuccess { history ->
                     _uiState.update {
                         it.copy(
@@ -186,11 +268,12 @@ class ProfileViewModel(
     }
 
     class Factory(
+        private val spaceId: String,
         private val repository: PersonRepository
     ) : ViewModelProvider.Factory {
         @Suppress("UNCHECKED_CAST")
         override fun <T : ViewModel> create(modelClass: Class<T>): T {
-            return ProfileViewModel(repository) as T
+            return ProfileViewModel(spaceId, repository) as T
         }
     }
 }

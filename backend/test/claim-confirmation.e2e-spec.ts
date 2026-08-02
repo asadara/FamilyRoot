@@ -153,14 +153,71 @@ describe('Collective claim confirmation (e2e)', () => {
         expect(body.confirmationRecorded).toBe(true);
       });
 
+    const members = await request(app.getHttpServer())
+      .get(`/spaces/${spaceId}/members`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .expect(200);
+    const claimantMember = (
+      members.body as Array<{
+        memberId: string;
+        displayName: string;
+      }>
+    ).find((member) => member.displayName === 'Claim claimant');
+    expect(claimantMember).toBeDefined();
     await request(app.getHttpServer())
-      .get('/changes')
+      .patch(`/spaces/${spaceId}/members/${claimantMember?.memberId}`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ role: 'VIEWER' })
+      .expect(200);
+
+    const otherPerson = await request(app.getHttpServer())
+      .post('/persons')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        spaceId,
+        firstName: 'Profil Lain',
+        nickName: 'Lain',
+        gender: 'UNKNOWN',
+      })
+      .expect(201);
+    const onePixelPng = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+      'base64',
+    );
+    await request(app.getHttpServer())
+      .post(`/persons/${otherPerson.body.personId}/media/upload`)
+      .set('Authorization', `Bearer ${claimantToken}`)
+      .query({ spaceId })
+      .field('label', 'Bukan foto saya')
+      .attach('file', onePixelPng, {
+        filename: 'other.png',
+        contentType: 'image/png',
+      })
+      .expect(403);
+
+    await request(app.getHttpServer())
+      .post(`/persons/${person.body.personId}/media/upload`)
+      .set('Authorization', `Bearer ${claimantToken}`)
+      .query({ spaceId })
+      .field('label', 'Foto profil saya')
+      .attach('file', onePixelPng, {
+        filename: 'self.png',
+        contentType: 'image/png',
+      })
+      .expect(201)
+      .expect(({ body }) => {
+        expect(body.personId).toBe(person.body.personId);
+        expect(body.url).toBe('https://storage.example.test/claim');
+      });
+
+    await request(app.getHttpServer())
+      .get('/changes/full')
       .set('Authorization', `Bearer ${ownerToken}`)
       .query({ spaceId, limit: 20 })
       .expect(200)
       .expect(({ body }) => {
         const confirmations = (
-          body as Array<{
+          body.items as Array<{
             entityType: string;
             operation: string;
             note: string;

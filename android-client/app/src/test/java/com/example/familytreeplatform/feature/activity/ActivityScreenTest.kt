@@ -37,6 +37,20 @@ class ActivityScreenTest {
         )
     }
 
+    @Test
+    fun `activity actor uses display name and never exposes id`() {
+        val named = log("PERSON", "UPDATE", "technical-user-id").copy(
+            actorDisplayName = "Budi Santoso"
+        )
+
+        assertEquals("Oleh Budi Santoso", activityActorLabel(named, false))
+        assertEquals("Oleh Anda", activityActorLabel(named, true))
+        assertEquals(
+            "Oleh Anggota keluarga",
+            activityActorLabel(log("PERSON", "UPDATE", "secret-id"), false)
+        )
+    }
+
     private fun log(type: String, operation: String, actor: String = "user-1") = ChangeLog(
         changeId = "$type-$operation-$actor",
         createdAt = "2026-07-19T14:25:31Z",

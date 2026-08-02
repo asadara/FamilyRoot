@@ -15,6 +15,7 @@ import { SpaceMemberEntity } from '../spaces/space-member.entity';
 import { AccountLifecycleAuditEntity } from './account-lifecycle-audit.entity';
 import { UserEntity } from './user.entity';
 import { UserNotificationEntity } from '../notifications/user-notification.entity';
+import { HistoryAccessRequestEntity } from '../changes/history-access-request.entity';
 
 @Injectable()
 export class UsersService {
@@ -92,6 +93,7 @@ export class UsersService {
       await manager.delete(GoogleIdentityEntity, { userId });
       await manager.delete(RefreshSessionEntity, { userId });
       await manager.delete(UserNotificationEntity, { userId });
+      await manager.delete(HistoryAccessRequestEntity, { userId });
 
       user.email = null;
       user.phone = null;

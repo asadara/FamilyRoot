@@ -6,6 +6,12 @@ import com.example.familytreeplatform.models.PersonListItem
 import com.example.familytreeplatform.models.ClaimRequest
 import com.example.familytreeplatform.models.ClaimResponse
 import com.example.familytreeplatform.models.ClaimReviewItem
+import com.example.familytreeplatform.models.MyClaimResponse
+import com.example.familytreeplatform.models.HistoryAccessRequestItem
+import com.example.familytreeplatform.models.MyHistoryAccessResponse
+import com.example.familytreeplatform.models.PagedChangeLog
+import com.example.familytreeplatform.models.RequestHistoryAccessBody
+import com.example.familytreeplatform.models.ReviewHistoryAccessBody
 import com.example.familytreeplatform.models.VerifyClaimRequest
 import com.example.familytreeplatform.models.ChangeLog
 import com.example.familytreeplatform.models.ParentChildRequest
@@ -21,6 +27,7 @@ import com.example.familytreeplatform.models.DuplicateGroup
 import com.example.familytreeplatform.models.MediaItem
 import com.example.familytreeplatform.models.MediaRequest
 import com.example.familytreeplatform.models.ProfilePhotoItem
+import com.example.familytreeplatform.models.MyProfilePhotoResponse
 import com.example.familytreeplatform.models.MergePersonsRequest
 import com.example.familytreeplatform.models.ProposalItem
 import com.example.familytreeplatform.models.ProposalRequest
@@ -265,12 +272,17 @@ interface ApiService {
         @Query("spaceId") spaceId: String,
         @Part file: MultipartBody.Part,
         @Part("label") label: RequestBody
-    ): Response<MediaItem>
+    ): Response<ProfilePhotoItem>
 
     @GET("spaces/{spaceId}/profile-photos")
     suspend fun listProfilePhotos(
         @Path("spaceId") spaceId: String
     ): Response<List<ProfilePhotoItem>>
+
+    @GET("spaces/{spaceId}/profile-photos/me")
+    suspend fun getMyProfilePhoto(
+        @Path("spaceId") spaceId: String
+    ): Response<MyProfilePhotoResponse>
 
     @GET("proposals")
     suspend fun listProposals(@Query("spaceId") spaceId: String): Response<List<ProposalItem>>
@@ -298,7 +310,7 @@ interface ApiService {
 
     @GET("notifications")
     suspend fun listNotifications(
-        @Query("limit") limit: Int = 50
+        @Query("limit") limit: Int = 10
     ): Response<NotificationHistoryResponse>
 
     @PATCH("notifications/{notificationId}/read")
@@ -315,14 +327,45 @@ interface ApiService {
     @GET("claims")
     suspend fun listClaims(@Query("spaceId") spaceId: String): Response<List<ClaimReviewItem>>
 
+    @GET("claims/me")
+    suspend fun getMyClaim(@Query("spaceId") spaceId: String): Response<MyClaimResponse>
+
     @POST("claims/verify")
     suspend fun verifyClaim(@Body request: VerifyClaimRequest): Response<ClaimResponse>
 
     @GET("changes")
     suspend fun listChanges(
         @Query("spaceId") spaceId: String,
-        @Query("limit") limit: Int = 50
+        @Query("limit") limit: Int = 10
     ): Response<List<ChangeLog>>
+
+    @GET("changes/full")
+    suspend fun listFullHistory(
+        @Query("spaceId") spaceId: String,
+        @Query("limit") limit: Int = 50,
+        @Query("before") before: String? = null
+    ): Response<PagedChangeLog>
+
+    @POST("changes/history-access-requests")
+    suspend fun requestFullHistoryAccess(
+        @Body request: RequestHistoryAccessBody
+    ): Response<HistoryAccessRequestItem>
+
+    @GET("changes/history-access-requests/me")
+    suspend fun myHistoryAccessRequest(
+        @Query("spaceId") spaceId: String
+    ): Response<MyHistoryAccessResponse>
+
+    @GET("changes/history-access-requests")
+    suspend fun listHistoryAccessRequests(
+        @Query("spaceId") spaceId: String
+    ): Response<List<HistoryAccessRequestItem>>
+
+    @POST("changes/history-access-requests/{requestId}/review")
+    suspend fun reviewHistoryAccessRequest(
+        @Path("requestId") requestId: String,
+        @Body request: ReviewHistoryAccessBody
+    ): Response<HistoryAccessRequestItem>
 
     @POST("persons/parent-child")
     suspend fun addParentChild(@Body request: ParentChildRequest): Response<RelationshipResponse>

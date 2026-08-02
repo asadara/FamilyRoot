@@ -1,5 +1,8 @@
 package com.example.familytreeplatform.feature.profile
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -17,14 +20,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -41,25 +42,32 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.example.familytreeplatform.models.UserNotificationItem
+import com.example.familytreeplatform.models.ClaimReviewItem
+import com.example.familytreeplatform.models.ProfilePhotoItem
+import com.example.familytreeplatform.ui.ProfilePhotoAvatar
 
 @Composable
 fun ProfileScreen(
     viewModel: ProfileViewModel,
     displayName: String,
     email: String?,
-    userId: String?,
     spaceName: String,
     pendingSyncCount: Int,
+    onOpenSelfProfile: (String) -> Unit,
     onOpenSpaceSettings: () -> Unit,
     onSignOut: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val profilePhotoPicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        uri?.let(viewModel::uploadProfilePhoto)
+    }
     if (state.showDeleteConfirmation) {
         val impact = state.deletionImpact
         AlertDialog(
@@ -128,40 +136,25 @@ fun ProfileScreen(
                 ProfileHero(
                     displayName = displayName,
                     email = email,
+                    claim = state.myClaim,
+                    photo = state.profilePhoto,
+                    uploadingPhoto = state.uploadingPhoto,
+                    onChangePhoto = {
+                        profilePhotoPicker.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    },
+                    onOpenSelfProfile = onOpenSelfProfile,
                     modifier = Modifier.fillMaxWidth().widthIn(max = 980.dp)
                 )
             }
             item {
-                if (wide) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        modifier = Modifier.fillMaxWidth().widthIn(max = 980.dp)
-                    ) {
-                        IdentityCard(displayName, email, userId, Modifier.weight(1f))
-                        FamilySpaceCard(
-                            spaceName,
-                            pendingSyncCount,
-                            onOpenSpaceSettings,
-                            Modifier.weight(1f)
-                        )
-                    }
-                } else {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(16.dp),
-                        modifier = Modifier.fillMaxWidth().widthIn(max = 980.dp)
-                    ) {
-                        IdentityCard(displayName, email, userId, Modifier.fillMaxWidth())
-                        FamilySpaceCard(
-                            spaceName,
-                            pendingSyncCount,
-                            onOpenSpaceSettings,
-                            Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
-            item {
-                PrivacyCard(Modifier.fillMaxWidth().widthIn(max = 980.dp))
+                FamilySpaceCard(
+                    spaceName,
+                    pendingSyncCount,
+                    onOpenSpaceSettings,
+                    Modifier.fillMaxWidth().widthIn(max = 980.dp)
+                )
             }
             item {
                 NotificationHistoryCard(
@@ -187,6 +180,17 @@ fun ProfileScreen(
                             color = MaterialTheme.colorScheme.onErrorContainer,
                             modifier = Modifier.padding(16.dp)
                         )
+                    }
+                }
+            }
+            state.message?.let { message ->
+                item {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier.fillMaxWidth().widthIn(max = 980.dp)
+                    ) {
+                        Text(message, modifier = Modifier.padding(16.dp))
                     }
                 }
             }
@@ -250,7 +254,7 @@ private fun NotificationHistoryCard(
                     modifier = Modifier.padding(top = 14.dp)
                 )
             }
-            else -> notifications.forEach { notification ->
+            else -> recentProfileNotifications(notifications).forEach { notification ->
                 NotificationHistoryRow(notification, onMarkRead)
             }
         }
@@ -354,14 +358,23 @@ private fun AccountLifecycleCard(
 }
 
 @Composable
-private fun ProfileHero(displayName: String, email: String?, modifier: Modifier = Modifier) {
+private fun ProfileHero(
+    displayName: String,
+    email: String?,
+    claim: ClaimReviewItem?,
+    photo: ProfilePhotoItem?,
+    uploadingPhoto: Boolean,
+    onChangePhoto: () -> Unit,
+    onOpenSelfProfile: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
     val branchColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.16f)
     Surface(
         shape = RoundedCornerShape(28.dp),
         color = MaterialTheme.colorScheme.primaryContainer,
         modifier = modifier
     ) {
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .background(
                     Brush.horizontalGradient(
@@ -373,6 +386,7 @@ private fun ProfileHero(displayName: String, email: String?, modifier: Modifier 
                 )
                 .padding(24.dp)
         ) {
+            val avatarSize = if (maxWidth < 430.dp) 76.dp else 88.dp
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val start = Offset(size.width * 0.72f, size.height * 0.86f)
                 drawLine(branchColor, start, Offset(size.width * 0.86f, size.height * 0.2f), 4f, StrokeCap.Round)
@@ -384,23 +398,13 @@ private fun ProfileHero(displayName: String, email: String?, modifier: Modifier 
                     Offset(size.width * 0.93f, size.height * 0.25f)
                 ).forEach { drawCircle(branchColor, 13f, it, style = Stroke(4f)) }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.primary,
-                    shadowElevation = 4.dp,
-                    modifier = Modifier.size(88.dp)
-                ) {
-                    Box(contentAlignment = Alignment.Center) {
-                        Text(
-                            text = profileInitials(displayName),
-                            style = MaterialTheme.typography.headlineSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onPrimary
-                        )
-                    }
-                }
-                Column(modifier = Modifier.padding(start = 18.dp).weight(1f)) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                ProfilePhotoAvatar(
+                    photo = photo,
+                    fallbackText = profileInitials(displayName),
+                    modifier = Modifier.size(avatarSize)
+                )
+                Column(modifier = Modifier.fillMaxWidth().padding(top = 14.dp)) {
                     Text(
                         "Profil akun",
                         style = MaterialTheme.typography.labelMedium,
@@ -423,6 +427,36 @@ private fun ProfileHero(displayName: String, email: String?, modifier: Modifier 
                             overflow = TextOverflow.Ellipsis
                         )
                     }
+                    Text(
+                        when (claim?.status) {
+                            "VERIFIED" -> "Terhubung ke ${claim.personName ?: "profil diri"}"
+                            "PENDING" -> "Klaim profil diri menunggu verifikasi"
+                            else -> "Belum terhubung ke profil diri pada silsilah ini"
+                        },
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+                    claim?.let { currentClaim ->
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth().padding(top = 10.dp)
+                        ) {
+                            OutlinedButton(
+                                enabled = currentClaim.status == "VERIFIED" && !uploadingPhoto,
+                                onClick = onChangePhoto,
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(if (uploadingPhoto) "Mengunggah..." else "Ganti foto profil")
+                            }
+                            TextButton(
+                                onClick = { onOpenSelfProfile(currentClaim.personId) },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Buka profil keluarga")
+                            }
+                        }
+                    }
                     Surface(
                         shape = RoundedCornerShape(100.dp),
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.76f),
@@ -438,22 +472,6 @@ private fun ProfileHero(displayName: String, email: String?, modifier: Modifier 
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun IdentityCard(
-    displayName: String,
-    email: String?,
-    userId: String?,
-    modifier: Modifier = Modifier
-) {
-    ProfileSectionCard("Identitas akun", "Digunakan saat masuk dan berkolaborasi", modifier) {
-        ProfileValue("Nama tampilan", displayName)
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.28f))
-        ProfileValue("Email", email?.takeIf(String::isNotBlank) ?: "Belum tersedia")
-        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.28f))
-        ProfileValue("ID akun", userId?.takeLast(12)?.let { "•••• $it" } ?: "Belum tersedia")
     }
 }
 
@@ -496,36 +514,6 @@ private fun FamilySpaceCard(
 }
 
 @Composable
-private fun PrivacyCard(modifier: Modifier = Modifier) {
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)),
-        shape = RoundedCornerShape(20.dp),
-        modifier = modifier
-    ) {
-        Row(modifier = Modifier.padding(18.dp), verticalAlignment = Alignment.Top) {
-            Surface(
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text("i", color = MaterialTheme.colorScheme.onSecondary, fontWeight = FontWeight.Bold)
-                }
-            }
-            Column(modifier = Modifier.padding(start = 14.dp)) {
-                Text("Akun bukan profil person", style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "Halaman ini hanya menampilkan identitas akun TRêdhAH. Nama, umur, cerita, dan hubungan keluarga tetap dikelola pada profil anggota di pohon.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun ProfileSectionCard(
     title: String,
     subtitle: String,
@@ -551,14 +539,6 @@ private fun ProfileSectionCard(
     }
 }
 
-@Composable
-private fun ProfileValue(label: String, value: String) {
-    Column(modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(top = 2.dp))
-    }
-}
-
 internal fun profileInitials(displayName: String): String = displayName
     .trim()
     .split(Regex("\\s+"))
@@ -573,6 +553,10 @@ internal fun notificationKindLabel(kind: String): String = when (kind) {
     "ERROR" -> "Gagal"
     else -> "Informasi"
 }
+
+internal fun recentProfileNotifications(
+    notifications: List<UserNotificationItem>
+): List<UserNotificationItem> = notifications.take(10)
 
 internal fun notificationTimeLabel(createdAt: String): String =
     createdAt

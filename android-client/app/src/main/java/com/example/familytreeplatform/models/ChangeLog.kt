@@ -6,5 +6,6 @@ data class ChangeLog(
     val actorUserId: String,
     val entityType: String,
     val operation: String,
-    val note: String?
+    val note: String?,
+    val actorDisplayName: String? = null
 )

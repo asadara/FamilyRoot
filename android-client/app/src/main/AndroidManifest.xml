@@ -15,6 +15,24 @@
         android:theme="@style/Theme.FamilyTreePlatform"
         android:usesCleartextTraffic="false"
         tools:targetApi="31">
+        <!--
+            Requests the Google Play system component that backports Android's
+            permissionless Photo Picker. ActivityResultContracts.PickVisualMedia
+            still falls back to ACTION_OPEN_DOCUMENT when the picker is unavailable.
+        -->
+        <service
+            android:name="com.google.android.gms.metadata.ModuleDependencies"
+            android:enabled="false"
+            android:exported="false"
+            tools:ignore="MissingClass">
+            <intent-filter>
+                <action android:name="com.google.android.gms.metadata.MODULE_DEPENDENCIES" />
+            </intent-filter>
+            <meta-data
+                android:name="photopicker_activity:0:required"
+                android:value="" />
+        </service>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

@@ -379,6 +379,7 @@ fun SpaceSettingsScreen(
     var membersOpen by rememberSaveable { mutableStateOf(true) }
     var invitationOpen by rememberSaveable { mutableStateOf(false) }
     var claimsOpen by rememberSaveable { mutableStateOf(false) }
+    var historyAccessOpen by rememberSaveable { mutableStateOf(false) }
     var proposalsOpen by rememberSaveable { mutableStateOf(false) }
     var duplicatesOpen by rememberSaveable { mutableStateOf(false) }
 
@@ -394,7 +395,8 @@ fun SpaceSettingsScreen(
             item {
                 SettingsHero(
                     pendingReviews = state.claims.count { it.status == "PENDING" } +
-                        state.proposals.count { it.status == "PENDING" },
+                        state.proposals.count { it.status == "PENDING" } +
+                        state.historyAccessRequests.count { it.status == "PENDING" },
                     duplicateGroups = state.duplicates.size,
                     onBack = onBack
                 )
@@ -518,6 +520,78 @@ fun SpaceSettingsScreen(
                         ) {
                             CircularProgressIndicator()
                             Text("Memproses data keluarga…")
+                        }
+                    }
+                }
+            }
+            if (state.memberRole in setOf("OWNER", "ADMIN")) {
+                item {
+                    SettingsSection(
+                        title = "Akses riwayat lengkap",
+                        subtitle = "Setujui permintaan melihat aktivitas lama secara bertahap",
+                        badge = pendingBadge(
+                            state.historyAccessRequests.count { it.status == "PENDING" }
+                        ),
+                        expanded = historyAccessOpen,
+                        onToggle = { historyAccessOpen = !historyAccessOpen }
+                    ) {
+                        ReviewHeader(
+                            loading = state.loadingHistoryAccessRequests,
+                            onRefresh = viewModel::refreshHistoryAccessRequests
+                        )
+                        if (!state.loadingHistoryAccessRequests &&
+                            state.historyAccessRequests.isEmpty()
+                        ) {
+                            EmptyReview("Belum ada permintaan akses riwayat lengkap.")
+                        }
+                        state.historyAccessRequests.forEach { request ->
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(14.dp)) {
+                                    Text(
+                                        request.userDisplayName ?: "Anggota keluarga",
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    Text(
+                                        when (request.status) {
+                                            "APPROVED" -> "Disetujui"
+                                            "REJECTED" -> "Ditolak"
+                                            else -> "Menunggu keputusan"
+                                        },
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(top = 2.dp)
+                                    )
+                                    if (request.status == "PENDING") {
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            modifier = Modifier.padding(top = 10.dp)
+                                        ) {
+                                            Button(
+                                                enabled = state.reviewingHistoryAccessRequestId != request.requestId,
+                                                onClick = {
+                                                    viewModel.reviewHistoryAccessRequest(
+                                                        request.requestId,
+                                                        true
+                                                    )
+                                                }
+                                            ) { Text("Setujui") }
+                                            OutlinedButton(
+                                                enabled = state.reviewingHistoryAccessRequestId != request.requestId,
+                                                onClick = {
+                                                    viewModel.reviewHistoryAccessRequest(
+                                                        request.requestId,
+                                                        false
+                                                    )
+                                                }
+                                            ) { Text("Tolak") }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }

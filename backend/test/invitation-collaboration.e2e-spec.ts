@@ -211,7 +211,7 @@ describe('Invitation and collaboration roles smoke (e2e)', () => {
     const notificationHistory = await request(app.getHttpServer())
       .get('/notifications')
       .set('Authorization', `Bearer ${viewerToken}`)
-      .query({ limit: 20 })
+      .query({ limit: 10 })
       .expect(200);
     expect(notificationHistory.body.unreadCount).toBeGreaterThanOrEqual(2);
     expect(notificationHistory.body.items).toEqual(
@@ -655,12 +655,12 @@ describe('Invitation and collaboration roles smoke (e2e)', () => {
       .expect(403);
 
     await request(app.getHttpServer())
-      .get('/changes')
+      .get('/changes/full')
       .query({ spaceId, limit: 20 })
       .set('Authorization', `Bearer ${ownerToken}`)
       .expect(200)
       .expect(({ body }) =>
-        expect(body).toEqual(
+        expect(body.items).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
               entityType: 'INVITATION',
