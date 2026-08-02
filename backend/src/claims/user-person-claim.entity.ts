@@ -2,10 +2,19 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  Index,
   PrimaryGeneratedColumn,
 } from 'typeorm';
 
 @Entity('user_person_claims')
+@Index(
+  'UQ_claims_active_space_user_person',
+  ['spaceId', 'userId', 'personId'],
+  {
+    unique: true,
+    where: `"status" IN ('PENDING', 'VERIFIED')`,
+  },
+)
 export class UserPersonClaimEntity {
   @PrimaryGeneratedColumn('uuid')
   claimId!: string;

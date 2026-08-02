@@ -1478,6 +1478,9 @@ Pada source pengembangan 28 Juli 2026, baseline berikut melengkapi keputusan di 
   legalitas, atau ACL;
 - claim baru memerlukan dua konfirmasi OWNER/ADMIN berbeda dan tidak dapat
   dikonfirmasi oleh pemilik claim sendiri.
+- hanya satu claim `PENDING` atau `VERIFIED` yang boleh aktif untuk kombinasi
+  Family Space, akun, dan Person; pengajuan ulang mengembalikan claim aktif yang sama
+  agar retry UI tidak membuat antrean validasi ganda.
 
 Claim yang telah berstatus verified sebelum aturan kolektif dipertahankan sebagai
 legacy; migration tidak menurunkan keputusan keluarga secara diam-diam. Enforcement

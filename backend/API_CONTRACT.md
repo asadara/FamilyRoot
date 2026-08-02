@@ -205,6 +205,9 @@ UUID response fields are explicit: `userId`, `spaceId`, `memberId`, `personId`, 
 
 Phase 3 core endpoints:
 
+- `POST /claims` is idempotent for the same active `(spaceId, userId, personId)`
+  claim. Repeated submission returns the existing `PENDING` or `VERIFIED` claim;
+  the database enforces one active claim for that tuple.
 - `POST /claims/verify` records one collective confirmation. A claim owner cannot
   confirm their own claim, the same OWNER/ADMIN cannot be counted twice, and status
   becomes `VERIFIED` only after two different confirmations. Responses expose

@@ -9,6 +9,7 @@ import com.example.familytreeplatform.models.ClaimReviewItem
 import com.example.familytreeplatform.models.ProfilePhotoItem
 import com.example.familytreeplatform.models.UserNotificationItem
 import com.example.familytreeplatform.repository.PersonRepository
+import com.example.familytreeplatform.ui.accountProfilePhoto
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -53,7 +54,7 @@ class ProfileViewModel(
                     _uiState.update { state ->
                         state.copy(
                             myClaim = claim,
-                            profilePhoto = claim?.personId?.let(photos::get)
+                            profilePhoto = accountProfilePhoto(claim, photos)
                         )
                     }
                 }
@@ -67,7 +68,7 @@ class ProfileViewModel(
             _uiState.update { it.copy(loadingProfile = true, error = null) }
             repository.refreshMyClaim(spaceId)
                 .onSuccess { claim ->
-                    if (claim?.status == "VERIFIED") {
+                    if (claim != null) {
                         repository.refreshMyProfilePhoto(spaceId)
                     }
                     _uiState.update { state ->

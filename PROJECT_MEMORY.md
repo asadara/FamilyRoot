@@ -979,9 +979,10 @@ melanjutkan diskusi atau pekerjaan yang diminta pengguna.
 - Header adaptif menyembunyikan teks brand saat ruang horizontal sangat sempit untuk
   mencegah teks menjadi satu huruf per baris. Hero akun juga memakai susunan vertikal
   yang aman pada perangkat kecil.
-- Avatar header seluruh halaman memakai foto verified self Person dan fallback
-  inisial. Endpoint foto diri menghindari pengambilan seluruh foto silsilah hanya
-  untuk header.
+- Avatar header seluruh halaman memakai foto dari self-claim aktif dan fallback
+  inisial. Status `PENDING` boleh memakai foto yang sudah dapat dilihat anggota,
+  tetapi hak mengganti foto dan mengelola privasi tetap memerlukan `VERIFIED`.
+  Endpoint foto diri menghindari pengambilan seluruh foto silsilah hanya untuk header.
 - Upload foto mengembalikan signed URL baru dan langsung memperbarui shared state.
   Cache memakai `mediaId` stabil, URL diperbarui sebelum kedaluwarsa, dan foto managed
   lama dibersihkan hanya setelah foto pengganti dapat dibaca. VIEWER dengan klaim diri
@@ -992,3 +993,6 @@ melanjutkan diskusi atau pekerjaan yang diminta pengguna.
 - Source dan automated test telah diperbarui, tetapi pengaktifan Google pada APK pilot
   tetap memerlukan nilai Web Client ID aktual pada environment build serta deployment
   backend/migration sebelum acceptance test perangkat.
+- Klaim aktif unik untuk tuple silsilah, akun, dan Person. Pengiriman ulang klaim
+  `PENDING` bersifat idempoten; migration mempertahankan satu klaim kanonik dan
+  menandai duplikat aktif lama sebagai `REJECTED` tanpa menghapus jejaknya.

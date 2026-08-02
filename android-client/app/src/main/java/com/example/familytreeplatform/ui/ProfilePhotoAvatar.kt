@@ -15,7 +15,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
+import com.example.familytreeplatform.models.ClaimReviewItem
 import com.example.familytreeplatform.models.ProfilePhotoItem
+
+internal fun accountProfilePhoto(
+    claim: ClaimReviewItem?,
+    photos: Map<String, ProfilePhotoItem>
+): ProfilePhotoItem? = claim?.personId?.let(photos::get)
 
 @Composable
 fun ProfilePhotoAvatar(
