@@ -22,6 +22,8 @@ import { PersonPrivacyService } from '../persons/person-privacy.service';
 import { ProposalCommentEntity } from './proposal-comment.entity';
 import { UserEntity } from '../users/user.entity';
 import { ClientMutationEntity } from '../persons/client-mutation.entity';
+import { UserPersonClaimEntity } from '../claims/user-person-claim.entity';
+import { SpaceMemberEntity } from '../spaces/space-member.entity';
 
 @Injectable()
 export class ArchiveService {
@@ -38,6 +40,10 @@ export class ArchiveService {
     private readonly proposalCommentsRepo: Repository<ProposalCommentEntity>,
     @InjectRepository(UserEntity)
     private readonly usersRepo: Repository<UserEntity>,
+    @InjectRepository(UserPersonClaimEntity)
+    private readonly claimsRepo: Repository<UserPersonClaimEntity>,
+    @InjectRepository(SpaceMemberEntity)
+    private readonly membersRepo: Repository<SpaceMemberEntity>,
     @Inject(OBJECT_STORAGE)
     private readonly objectStorage: ObjectStorage,
     private readonly personDeletionService: PersonDeletionService,
@@ -207,6 +213,33 @@ export class ArchiveService {
     );
   }
 
+  async getMyProfilePhoto(spaceId: string, actorUserId: string) {
+    const claim = await this.claimsRepo.findOne({
+      where: { spaceId, userId: actorUserId, status: 'VERIFIED' },
+      order: { requestedAt: 'DESC' },
+    });
+    if (!claim) return { photo: null };
+    const media = await this.mediaRepo.find({
+      where: { spaceId, personId: claim.personId, kind: 'PHOTO' },
+      order: { createdAt: 'DESC' },
+    });
+    const photo = media.find((item) => item.uri.startsWith('object://'));
+    if (!photo) return { photo: null };
+    await this.assertFullPrivacyAccess(spaceId, claim.personId, actorUserId);
+    const expiresIn = 15 * 60;
+    return {
+      photo: {
+        personId: claim.personId,
+        mediaId: photo.mediaId,
+        url: await this.objectStorage.createSignedReadUrl(
+          photo.uri.slice('object://'.length),
+          expiresIn,
+        ),
+        expiresIn,
+      },
+    };
+  }
+
   async createMedia(
     spaceId: string,
     personId: string,
@@ -261,7 +294,13 @@ export class ArchiveService {
     file: Buffer,
     actorUserId: string,
   ) {
-    await this.assertFullPrivacyAccess(spaceId, personId, actorUserId);
+    await this.assertCanManageProfilePhoto(spaceId, personId, actorUserId);
+    const previousManagedPhotos = (
+      await this.mediaRepo.find({
+        where: { spaceId, personId, kind: 'PHOTO' },
+        order: { createdAt: 'DESC' },
+      })
+    ).filter((item) => item.uri.startsWith('object://'));
     const image = await processUploadedImage(file);
     const objectPath = `${spaceId}/${personId}/${randomUUID()}.${image.extension}`;
 
@@ -271,8 +310,9 @@ export class ArchiveService {
       body: image.body,
     });
 
+    let saved: MediaItemEntity | null = null;
     try {
-      return await this.createMedia(
+      saved = await this.createMedia(
         spaceId,
         personId,
         {
@@ -283,7 +323,39 @@ export class ArchiveService {
         },
         actorUserId,
       );
+      const expiresIn = 15 * 60;
+      const url = await this.objectStorage.createSignedReadUrl(
+        objectPath,
+        expiresIn,
+      );
+      if (previousManagedPhotos.length > 0) {
+        const oldMetadataDeleted = await this.mediaRepo
+          .delete({
+            mediaId: In(previousManagedPhotos.map((item) => item.mediaId)),
+          })
+          .then(() => true)
+          .catch(() => false);
+        if (oldMetadataDeleted) {
+          await Promise.allSettled(
+            previousManagedPhotos.map((item) =>
+              this.objectStorage.deleteObject(
+                item.uri.slice('object://'.length),
+              ),
+            ),
+          );
+        }
+      }
+      return {
+        ...saved,
+        url,
+        expiresIn,
+      };
     } catch (error) {
+      if (saved) {
+        await this.mediaRepo
+          .delete({ mediaId: saved.mediaId })
+          .catch(() => undefined);
+      }
       await this.objectStorage.deleteObject(objectPath).catch(() => undefined);
       throw error;
     }
@@ -340,6 +412,34 @@ export class ArchiveService {
       );
     }
     return person;
+  }
+
+  private async assertCanManageProfilePhoto(
+    spaceId: string,
+    personId: string,
+    actorUserId: string,
+  ) {
+    await this.assertFullPrivacyAccess(spaceId, personId, actorUserId);
+    const member = await this.membersRepo.findOneBy({
+      spaceId,
+      userId: actorUserId,
+    });
+    if (!member) {
+      throw new ForbiddenException('User is not a member of this space');
+    }
+    if (member.role !== 'VIEWER') return;
+
+    const verifiedSelfClaim = await this.claimsRepo.findOneBy({
+      spaceId,
+      userId: actorUserId,
+      personId,
+      status: 'VERIFIED',
+    });
+    if (!verifiedSelfClaim) {
+      throw new ForbiddenException(
+        'Viewers can only manage their verified profile photo',
+      );
+    }
   }
 
   async listProposals(spaceId: string, actorUserId: string) {

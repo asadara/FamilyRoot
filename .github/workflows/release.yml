@@ -29,17 +29,20 @@ jobs:
       - name: Validate release secrets
         env:
           API_URL: ${{ secrets.FAMILY_TREE_RELEASE_API_BASE_URL }}
+          GOOGLE_WEB_CLIENT_ID: ${{ vars.FAMILY_TREE_GOOGLE_WEB_CLIENT_ID }}
           STORE_B64: ${{ secrets.FAMILY_TREE_RELEASE_STORE_B64 }}
           STORE_PASSWORD: ${{ secrets.FAMILY_TREE_RELEASE_STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.FAMILY_TREE_RELEASE_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.FAMILY_TREE_RELEASE_KEY_PASSWORD }}
         run: |
           test -n "$API_URL"
+          test -n "$GOOGLE_WEB_CLIENT_ID"
           test -n "$STORE_B64"
           test -n "$STORE_PASSWORD"
           test -n "$KEY_ALIAS"
           test -n "$KEY_PASSWORD"
           case "$API_URL" in https://*) ;; *) exit 1 ;; esac
+          case "$GOOGLE_WEB_CLIENT_ID" in *.apps.googleusercontent.com) ;; *) exit 1 ;; esac
       - name: Prepare signing keystore
         working-directory: android-client
         env:
@@ -49,6 +52,7 @@ jobs:
         working-directory: android-client
         env:
           FAMILY_TREE_RELEASE_API_BASE_URL: ${{ secrets.FAMILY_TREE_RELEASE_API_BASE_URL }}
+          FAMILY_TREE_GOOGLE_WEB_CLIENT_ID: ${{ vars.FAMILY_TREE_GOOGLE_WEB_CLIENT_ID }}
           FAMILY_TREE_RELEASE_STORE_FILE: release.keystore
           FAMILY_TREE_RELEASE_STORE_PASSWORD: ${{ secrets.FAMILY_TREE_RELEASE_STORE_PASSWORD }}
           FAMILY_TREE_RELEASE_KEY_ALIAS: ${{ secrets.FAMILY_TREE_RELEASE_KEY_ALIAS }}

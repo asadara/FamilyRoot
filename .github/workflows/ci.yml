@@ -45,7 +45,12 @@ jobs:
           cache: gradle
       - uses: android-actions/setup-android@v3
       - run: chmod +x gradlew
-      - run: ./gradlew lintDebug testDebugUnitTest assembleDebug bundleRelease -PfamilyTreeReleaseApiBaseUrl=https://ci.familyroot.invalid/
+      - name: Build Android with configured Google Sign-In
+        env:
+          FAMILY_TREE_GOOGLE_WEB_CLIENT_ID: ${{ vars.FAMILY_TREE_GOOGLE_WEB_CLIENT_ID }}
+        run: >-
+          ./gradlew lintDebug testDebugUnitTest assembleDebug bundleRelease
+          -PfamilyTreeReleaseApiBaseUrl=https://ci.familyroot.invalid/
       - name: Enforce release bundle size budget
         run: test $(stat -c%s app/build/outputs/bundle/release/app-release.aab) -le 26214400
       - uses: actions/upload-artifact@v4

@@ -81,7 +81,8 @@ Personal action notifications:
 - Receipt copy never includes Person names, relationship values, invitation tokens,
   emails, request bodies, or raw error text.
 - `GET /notifications?limit=...` returns only the authenticated account's latest
-  receipts plus `unreadCount`.
+  receipts plus `unreadCount`. Legacy values through 100 are accepted, but output is
+  always clamped to at most 10 items.
 - `PATCH /notifications/:notificationId/read` can mark only the authenticated
   account's own receipt. `POST /notifications/read-all` marks all its unread receipts.
 - Notification-maintenance endpoints and read-only requests never create another
@@ -208,6 +209,19 @@ Phase 3 core endpoints:
   confirm their own claim, the same OWNER/ADMIN cannot be counted twice, and status
   becomes `VERIFIED` only after two different confirmations. Responses expose
   `confirmationCount` and `required`; legacy verified claims remain valid.
+- `GET /claims/me?spaceId=...` returns only the authenticated member's own latest
+  claim (preferring `VERIFIED`) and its Person display name. It does not expose other
+  members' claims and is the canonical account-to-Person link for the active space.
+
+- `GET /changes?spaceId=...&limit=...` returns at most 10 recent collaborative
+  activities and includes privacy-safe `actorDisplayName` in addition to the retained
+  audit actor ID.
+- `POST /changes/history-access-requests` lets a member request full-history access.
+  OWNER/ADMIN review requests through
+  `POST /changes/history-access-requests/:requestId/review`.
+- `GET /changes/full?spaceId=...&limit=...&before=...` is available to OWNER/ADMIN or
+  an approved requester. Results are cursor-paginated, with a maximum page size of
+  50; clients must not render the entire history eagerly.
 
 - `GET /persons/duplicates?spaceId=...` — lists duplicate candidates.
 - `POST /persons/merge` — OWNER/ADMIN merges `sourcePersonId` into `targetPersonId` and audits the merge.
@@ -215,9 +229,16 @@ Phase 3 core endpoints:
 - `GET|POST /persons/:personId/sources` — reads or creates source/citation records for facts.
 - `GET|POST /persons/:personId/media` — reads or creates media metadata/URI records.
 - `POST /persons/:personId/media/upload?spaceId=...` — OWNER/ADMIN/EDITOR uploads one private
-  JPEG, PNG, or WebP image. The backend enforces a 2 MB limit, validates magic bytes,
-  re-encodes the image without EXIF metadata, and stores only an object reference in
-  `media_items`.
+  JPEG, PNG, or WebP image. A VIEWER may use this endpoint only when a verified self
+  claim matches the target Person. The backend enforces a 2 MB limit, validates magic
+  bytes, re-encodes the image without EXIF metadata, and stores only an object
+  reference in `media_items`. The response includes the new `mediaId`, a 15-minute
+  signed URL, and expiry. A successful replacement removes older managed
+  profile-photo metadata and storage objects only after the new photo is readable.
+- `GET /spaces/:spaceId/profile-photos` returns the latest privacy-visible managed
+  photo per Person with `mediaId`, signed URL, and expiry.
+- `GET /spaces/:spaceId/profile-photos/me` returns only the verified self Person's
+  photo (or `null`) so the global account avatar does not fetch every family photo.
 - `GET /persons/:personId/media/:mediaId/access?spaceId=...` — a member with `FULL`
   privacy access to the matching Person receives a private read URL valid for 60
   seconds; restricted access is answered as not found.

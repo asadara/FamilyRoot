@@ -20,6 +20,15 @@ export class ClaimsController {
     );
   }
 
+  @Get('me')
+  @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
+  findMine(
+    @ActorUserId() actorUserId: string,
+    @Query('spaceId') spaceId: string,
+  ) {
+    return this.claimsService.findMine(spaceId, actorUserId);
+  }
+
   @Get()
   @SpaceRoles('OWNER', 'ADMIN')
   list(@ActorUserId() actorUserId: string, @Query('spaceId') spaceId: string) {

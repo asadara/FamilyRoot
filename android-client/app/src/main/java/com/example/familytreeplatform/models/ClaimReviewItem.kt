@@ -13,3 +13,7 @@ data class ClaimReviewItem(
     val required: Int = 2,
     val verificationBasis: String = "COLLECTIVE"
 )
+
+data class MyClaimResponse(
+    val claim: ClaimReviewItem? = null
+)

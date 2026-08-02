@@ -2,6 +2,7 @@ package com.example.familytreeplatform.feature.persondetail
 
 import android.app.DatePickerDialog
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -162,7 +163,7 @@ fun PersonDetailScreen(
     var relationQuery by rememberSaveable(person.personId) { mutableStateOf("") }
     var pendingRelationshipDelete by rememberSaveable(person.personId) { mutableStateOf<String?>(null) }
     val profilePhotoPicker = rememberLauncherForActivityResult(
-        ActivityResultContracts.GetContent()
+        ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         uri?.let(viewModel::uploadProfilePhoto)
     }
@@ -262,7 +263,11 @@ fun PersonDetailScreen(
                     profilePhotoUrl = state.profilePhotoUrl,
                     canEditProfile = canEditVisibleProfile,
                     updating = state.updating,
-                    onPickPhoto = { profilePhotoPicker.launch("image/*") }
+                    onPickPhoto = {
+                        profilePhotoPicker.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    }
                 )
             }
             state.message?.let { message ->

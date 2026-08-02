@@ -16,7 +16,7 @@ export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
   @Get()
-  list(@ActorUserId() actorUserId: string, @Query('limit') limit = '50') {
+  list(@ActorUserId() actorUserId: string, @Query('limit') limit = '10') {
     return this.notificationsService.list(actorUserId, Number(limit));
   }
 

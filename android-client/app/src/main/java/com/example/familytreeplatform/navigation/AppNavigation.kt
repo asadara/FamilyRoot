@@ -126,11 +126,13 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
     val spaceId by SessionStore.activeSpaceId.collectAsState()
     val spaceName by SessionStore.activeSpaceName.collectAsState()
     LaunchedEffect(token, spaceId, lifecycleOwner, repository) {
-        if (token.isNullOrBlank() || spaceId.isNullOrBlank()) return@LaunchedEffect
+        val selectedSpaceId = spaceId
+        if (token.isNullOrBlank() || selectedSpaceId.isNullOrBlank()) return@LaunchedEffect
         while (true) {
             delay(60_000L)
             if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
                 repository.reconcileActiveSpaceAccess()
+                repository.refreshProfilePhotosIfExpiring(selectedSpaceId)
             }
         }
     }
@@ -147,6 +149,26 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
         spaceId?.let(repository::observePersons) ?: flowOf(emptyList())
     }
     val shellPeople by shellPeopleFlow.collectAsState(initial = emptyList())
+    val myClaimFlow = remember(spaceId) {
+        spaceId?.let(repository::observeMyClaim) ?: flowOf(null)
+    }
+    val myClaim by myClaimFlow.collectAsState(initial = null)
+    val shellProfilePhotosFlow = remember(spaceId) {
+        spaceId?.let(repository::observeProfilePhotos) ?: flowOf(emptyMap())
+    }
+    val shellProfilePhotos by shellProfilePhotosFlow.collectAsState(initial = emptyMap())
+    val userProfilePhoto = myClaim
+        ?.takeIf { it.status == "VERIFIED" }
+        ?.personId
+        ?.let(shellProfilePhotos::get)
+    LaunchedEffect(token, spaceId, repository) {
+        val selectedSpaceId = spaceId ?: return@LaunchedEffect
+        if (token.isNullOrBlank()) return@LaunchedEffect
+        val claim = repository.refreshMyClaim(selectedSpaceId).getOrNull()
+        if (claim?.status == "VERIFIED") {
+            repository.refreshMyProfilePhoto(selectedSpaceId)
+        }
+    }
     val syncMutationsFlow = remember(spaceId) {
         spaceId?.let(repository::observeOfflineMutationsForSpace) ?: flowOf(emptyList())
     }
@@ -249,6 +271,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 spaceName = spaceName ?: "Silsilah",
                 userDisplayName = userDisplayName ?: "Akun",
                 userEmail = userEmail,
+                userProfilePhoto = userProfilePhoto,
                 people = shellPeople,
                 pendingSyncCount = pendingSyncCount,
                 syncConflictCount = syncConflictCount,
@@ -282,6 +305,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 spaceName = spaceName ?: "Silsilah",
                 userDisplayName = userDisplayName ?: "Akun",
                 userEmail = userEmail,
+                userProfilePhoto = userProfilePhoto,
                 people = shellPeople,
                 pendingSyncCount = pendingSyncCount,
                 syncConflictCount = syncConflictCount,
@@ -315,6 +339,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 spaceName = spaceName ?: "Silsilah",
                 userDisplayName = userDisplayName ?: "Akun",
                 userEmail = userEmail,
+                userProfilePhoto = userProfilePhoto,
                 people = shellPeople,
                 pendingSyncCount = pendingSyncCount,
                 syncConflictCount = syncConflictCount,
@@ -348,6 +373,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 spaceName = spaceName ?: "Silsilah",
                 userDisplayName = userDisplayName ?: "Akun",
                 userEmail = userEmail,
+                userProfilePhoto = userProfilePhoto,
                 people = shellPeople,
                 pendingSyncCount = pendingSyncCount,
                 syncConflictCount = syncConflictCount,
@@ -366,8 +392,9 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
             }
         }
         composable(Routes.PROFILE) {
+            val selectedSpaceId = spaceId ?: return@composable
             val profileViewModel: ProfileViewModel = viewModel(
-                factory = ProfileViewModel.Factory(repository)
+                factory = ProfileViewModel.Factory(selectedSpaceId, repository)
             )
             FamilyRootNavigationShell(
                 currentRoute = Routes.PROFILE,
@@ -375,6 +402,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 spaceName = spaceName ?: "Silsilah",
                 userDisplayName = userDisplayName ?: "Akun",
                 userEmail = userEmail,
+                userProfilePhoto = userProfilePhoto,
                 people = shellPeople,
                 pendingSyncCount = pendingSyncCount,
                 syncConflictCount = syncConflictCount,
@@ -389,9 +417,11 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                     viewModel = profileViewModel,
                     displayName = userDisplayName ?: "Akun TRêdhAH",
                     email = userEmail,
-                    userId = userId,
                     spaceName = spaceName ?: "Silsilah",
                     pendingSyncCount = pendingSyncCount,
+                    onOpenSelfProfile = {
+                        navController.navigate(Routes.personDetail(it))
+                    },
                     onOpenSpaceSettings = { navController.navigate(Routes.SPACE_SETTINGS) },
                     onSignOut = { scope.launch { repository.logout() } },
                     modifier = shellModifier
@@ -401,7 +431,11 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
         composable(Routes.ACTIVITY) {
             val selectedSpaceId = spaceId ?: return@composable
             val activityViewModel: ActivityViewModel = viewModel(
-                factory = ActivityViewModel.Factory(selectedSpaceId, repository)
+                factory = ActivityViewModel.Factory(
+                    selectedSpaceId,
+                    spaceRole == "OWNER" || spaceRole == "ADMIN",
+                    repository
+                )
             )
             FamilyRootNavigationShell(
                 currentRoute = Routes.ACTIVITY,
@@ -409,6 +443,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 spaceName = spaceName ?: "Silsilah",
                 userDisplayName = userDisplayName ?: "Akun",
                 userEmail = userEmail,
+                userProfilePhoto = userProfilePhoto,
                 people = shellPeople,
                 pendingSyncCount = pendingSyncCount,
                 syncConflictCount = syncConflictCount,
@@ -462,6 +497,7 @@ fun AppNavigation(modifier: Modifier = Modifier, navController: NavHostControlle
                 spaceName = spaceName ?: "Silsilah",
                 userDisplayName = userDisplayName ?: "Akun",
                 userEmail = userEmail,
+                userProfilePhoto = userProfilePhoto,
                 people = shellPeople,
                 pendingSyncCount = pendingSyncCount,
                 syncConflictCount = syncConflictCount,

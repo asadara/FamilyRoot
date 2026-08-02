@@ -40,6 +40,10 @@ import com.example.familytreeplatform.models.DuplicateGroup
 import com.example.familytreeplatform.models.MediaItem
 import com.example.familytreeplatform.models.MediaRequest
 import com.example.familytreeplatform.models.ProfilePhotoItem
+import com.example.familytreeplatform.models.HistoryAccessRequestItem
+import com.example.familytreeplatform.models.PagedChangeLog
+import com.example.familytreeplatform.models.RequestHistoryAccessBody
+import com.example.familytreeplatform.models.ReviewHistoryAccessBody
 import com.example.familytreeplatform.models.MergePersonsRequest
 import com.example.familytreeplatform.models.ProposalItem
 import com.example.familytreeplatform.models.ProposalRequest
@@ -147,6 +151,7 @@ import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import androidx.exifinterface.media.ExifInterface
 import coil.Coil
+import coil.memory.MemoryCache
 import com.example.familytreeplatform.feature.auth.GoogleCredentialClient
 
 enum class SyncBatchResult { COMPLETE, RETRY }
@@ -169,8 +174,11 @@ class PersonRepository(
     private val apiService: ApiService
     private val sessionApiService: ApiService
     private val refreshLock = Any()
-    private val profilePhotoUrlsBySpace =
-        MutableStateFlow<Map<String, Map<String, String>>>(emptyMap())
+    private val profilePhotosBySpace =
+        MutableStateFlow<Map<String, Map<String, ProfilePhotoItem>>>(emptyMap())
+    private val profilePhotoFetchedAtBySpace = mutableMapOf<String, Long>()
+    private val myClaimBySpace =
+        MutableStateFlow<Map<String, ClaimReviewItem?>>(emptyMap())
     private val compatibilityStateFlow = MutableStateFlow(AppCompatibilityState())
     val compatibilityState: Flow<AppCompatibilityState> = compatibilityStateFlow
     private val compatibilityMutex = Mutex()
@@ -404,7 +412,9 @@ class PersonRepository(
             runCatching { relationshipDao?.deleteAll() }
             runCatching { sourceDao?.deleteAll() }
             runCatching { mutationDao?.deleteAll() }
-            profilePhotoUrlsBySpace.value = emptyMap()
+            profilePhotosBySpace.value = emptyMap()
+            profilePhotoFetchedAtBySpace.clear()
+            myClaimBySpace.value = emptyMap()
             clearPrivateImageCaches()
             runCatching {
                 appContext?.let { GoogleCredentialClient(it).clearCredentialState() }
@@ -464,7 +474,9 @@ class PersonRepository(
         relationshipDao?.deleteBySpace(spaceId)
         sourceDao?.deleteBySpace(spaceId)
         personDao?.deleteBySpace(spaceId)
-        profilePhotoUrlsBySpace.update { current -> current - spaceId }
+        profilePhotosBySpace.update { current -> current - spaceId }
+        profilePhotoFetchedAtBySpace.remove(spaceId)
+        myClaimBySpace.update { current -> current - spaceId }
         clearPrivateImageCaches()
     }
 
@@ -622,7 +634,9 @@ class PersonRepository(
         runCatching { sourceDao?.deleteBySpace(spaceId) }
         runCatching { personDao?.deleteBySpace(spaceId) }
         runCatching { mutationDao?.deleteBySpace(spaceId) }
-        profilePhotoUrlsBySpace.update { current -> current - spaceId }
+        profilePhotosBySpace.update { current -> current - spaceId }
+        profilePhotoFetchedAtBySpace.remove(spaceId)
+        myClaimBySpace.update { current -> current - spaceId }
         clearPrivateImageCaches()
         if (SessionStore.activeSpaceId.value == spaceId) {
             SessionStore.clearActiveSpace()
@@ -643,7 +657,7 @@ class PersonRepository(
         spaceId: String,
         personIds: Set<String>
     ) {
-        profilePhotoUrlsBySpace.update { current ->
+        profilePhotosBySpace.update { current ->
             current + (
                 spaceId to current[spaceId]
                     .orEmpty()
@@ -1366,7 +1380,7 @@ class PersonRepository(
         if (result.getOrNull()?.deleted == true) {
             sourceDao?.deleteByPerson(personId)
             personDao?.deleteById(personId)
-            profilePhotoUrlsBySpace.update { current ->
+            profilePhotosBySpace.update { current ->
                 current + (spaceId to (current[spaceId].orEmpty() - personId))
             }
         }
@@ -1385,24 +1399,56 @@ class PersonRepository(
     }
 
     fun observeProfilePhotoUrls(spaceId: String): Flow<Map<String, String>> =
-        profilePhotoUrlsBySpace
+        profilePhotosBySpace
+            .map { photosBySpace ->
+                photosBySpace[spaceId].orEmpty().mapValues { (_, photo) -> photo.url }
+            }
+            .distinctUntilChanged()
+
+    fun observeProfilePhotos(spaceId: String): Flow<Map<String, ProfilePhotoItem>> =
+        profilePhotosBySpace
             .map { photosBySpace -> photosBySpace[spaceId].orEmpty() }
             .distinctUntilChanged()
 
     suspend fun listProfilePhotos(spaceId: String): Result<List<ProfilePhotoItem>> =
         apiResult { apiService.listProfilePhotos(spaceId) }
             .onSuccess { photos ->
-                profilePhotoUrlsBySpace.update { current ->
-                    current + (spaceId to photos.associate { it.personId to it.url })
+                profilePhotosBySpace.update { current ->
+                    current + (spaceId to photos.associateBy(ProfilePhotoItem::personId))
                 }
+                profilePhotoFetchedAtBySpace[spaceId] = System.currentTimeMillis()
             }
+
+    suspend fun refreshMyProfilePhoto(spaceId: String): Result<ProfilePhotoItem?> =
+        apiResult { apiService.getMyProfilePhoto(spaceId) }
+            .map { it.photo }
+            .onSuccess { photo ->
+                profilePhotosBySpace.update { current ->
+                    val photos = current[spaceId].orEmpty()
+                    current + (
+                        spaceId to if (photo == null) {
+                            photos
+                        } else {
+                            photos + (photo.personId to photo)
+                        }
+                        )
+                }
+                profilePhotoFetchedAtBySpace[spaceId] = System.currentTimeMillis()
+            }
+
+    suspend fun refreshProfilePhotosIfExpiring(spaceId: String) {
+        val fetchedAt = profilePhotoFetchedAtBySpace[spaceId] ?: 0L
+        if (System.currentTimeMillis() - fetchedAt >= 10 * 60 * 1000L) {
+            refreshMyProfilePhoto(spaceId)
+        }
+    }
 
     suspend fun uploadProfilePhoto(
         spaceId: String,
         personId: String,
         imageUri: Uri,
         personName: String
-    ): Result<MediaItem> = withContext(Dispatchers.IO) {
+    ): Result<ProfilePhotoItem> = withContext(Dispatchers.IO) {
         runCatching {
             val context = requireNotNull(appContext) { "Application context is unavailable" }
             val jpeg = prepareProfilePhoto(context, imageUri)
@@ -1412,7 +1458,8 @@ class PersonRepository(
                 "profile-$personId.jpg",
                 body
             )
-            apiResult {
+            val previous = profilePhotosBySpace.value[spaceId]?.get(personId)
+            val uploaded = apiResult {
                 apiService.uploadProfilePhoto(
                     personId = personId,
                     spaceId = spaceId,
@@ -1420,6 +1467,24 @@ class PersonRepository(
                     label = "Foto profil $personName".toRequestBody("text/plain".toMediaType())
                 )
             }.getOrThrow()
+            profilePhotosBySpace.update { current ->
+                current + (
+                    spaceId to (current[spaceId].orEmpty() + (personId to uploaded))
+                    )
+            }
+            profilePhotoFetchedAtBySpace[spaceId] = System.currentTimeMillis()
+            previous?.let { evictPrivateImage(it.mediaId) }
+            uploaded
+        }
+    }
+
+    @OptIn(ExperimentalCoilApi::class)
+    private fun evictPrivateImage(mediaId: String) {
+        val context = appContext ?: return
+        runCatching {
+            val imageLoader = Coil.imageLoader(context)
+            imageLoader.memoryCache?.remove(MemoryCache.Key(mediaId))
+            imageLoader.diskCache?.remove(mediaId)
         }
     }
 
@@ -1459,7 +1524,7 @@ class PersonRepository(
             )
         }
 
-    suspend fun listNotifications(limit: Int = 50): Result<NotificationHistoryResponse> =
+    suspend fun listNotifications(limit: Int = 10): Result<NotificationHistoryResponse> =
         apiResult { apiService.listNotifications(limit) }
 
     suspend fun markNotificationRead(
@@ -1503,6 +1568,19 @@ class PersonRepository(
         }
     }
 
+    suspend fun getMyClaim(spaceId: String): Result<ClaimReviewItem?> =
+        apiResult { apiService.getMyClaim(spaceId) }.map { it.claim }
+
+    fun observeMyClaim(spaceId: String): Flow<ClaimReviewItem?> =
+        myClaimBySpace
+            .map { claims -> claims[spaceId] }
+            .distinctUntilChanged()
+
+    suspend fun refreshMyClaim(spaceId: String): Result<ClaimReviewItem?> =
+        getMyClaim(spaceId).onSuccess { claim ->
+            myClaimBySpace.update { current -> current + (spaceId to claim) }
+        }
+
     suspend fun verifyClaim(request: VerifyClaimRequest): Result<ClaimResponse> {
         return try {
             val response = apiService.verifyClaim(request)
@@ -1516,7 +1594,7 @@ class PersonRepository(
         }
     }
 
-    suspend fun listChanges(spaceId: String, limit: Int = 50): Result<List<ChangeLog>> {
+    suspend fun listChanges(spaceId: String, limit: Int = 10): Result<List<ChangeLog>> {
         return try {
             val response = apiService.listChanges(spaceId, limit)
             if (response.isSuccessful) {
@@ -1528,6 +1606,40 @@ class PersonRepository(
             Result.failure(e)
         }
     }
+
+    suspend fun listFullHistory(
+        spaceId: String,
+        before: String? = null,
+        limit: Int = 50
+    ): Result<PagedChangeLog> =
+        apiResult { apiService.listFullHistory(spaceId, limit, before) }
+
+    suspend fun myHistoryAccessRequest(
+        spaceId: String
+    ): Result<HistoryAccessRequestItem?> =
+        apiResult { apiService.myHistoryAccessRequest(spaceId) }.map { it.request }
+
+    suspend fun requestFullHistoryAccess(
+        spaceId: String
+    ): Result<HistoryAccessRequestItem> =
+        apiResult { apiService.requestFullHistoryAccess(RequestHistoryAccessBody(spaceId)) }
+
+    suspend fun listHistoryAccessRequests(
+        spaceId: String
+    ): Result<List<HistoryAccessRequestItem>> =
+        apiResult { apiService.listHistoryAccessRequests(spaceId) }
+
+    suspend fun reviewHistoryAccessRequest(
+        spaceId: String,
+        requestId: String,
+        approved: Boolean
+    ): Result<HistoryAccessRequestItem> =
+        apiResult {
+            apiService.reviewHistoryAccessRequest(
+                requestId,
+                ReviewHistoryAccessBody(spaceId, approved)
+            )
+        }
 
     suspend fun addParentChild(request: ParentChildRequest): Result<RelationshipResponse> {
         return try {

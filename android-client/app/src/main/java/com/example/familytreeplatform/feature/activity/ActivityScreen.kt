@@ -132,6 +132,13 @@ fun ActivityScreen(
                             )
                         }
                     }
+                    HistoryAccessControls(
+                        state = state,
+                        onRequestAccess = viewModel::requestFullHistoryAccess,
+                        onOpenFullHistory = viewModel::openFullHistory,
+                        onShowRecent = viewModel::showRecentHistory,
+                        modifier = Modifier.fillMaxWidth().padding(bottom = 6.dp)
+                    )
                     state.error?.let { error ->
                         Surface(
                             shape = RoundedCornerShape(12.dp),
@@ -166,10 +173,73 @@ fun ActivityScreen(
                                         isCurrentUser = currentUserId != null && currentUserId == log.actorUserId
                                     )
                                 }
+                                if (state.showingFullHistory && state.nextCursor != null) {
+                                    item {
+                                        TextButton(
+                                            enabled = !state.loadingMore,
+                                            onClick = viewModel::loadMoreHistory,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Text(
+                                                if (state.loadingMore) "Memuat..." else "Muat 50 aktivitas berikutnya"
+                                            )
+                                        }
+                                    }
+                                }
                                 item { Spacer(Modifier.height(18.dp)) }
                             }
                         }
                     }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HistoryAccessControls(
+    state: ActivityUiState,
+    onRequestAccess: () -> Unit,
+    onOpenFullHistory: () -> Unit,
+    onShowRecent: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.48f),
+        modifier = modifier
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp)
+        ) {
+            Text(
+                if (state.showingFullHistory) {
+                    "Riwayat lengkap ditampilkan bertahap, 50 aktivitas per halaman."
+                } else {
+                    "Menampilkan maksimal 10 aktivitas terbaru."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            when {
+                state.showingFullHistory -> TextButton(onClick = onShowRecent) {
+                    Text("Kembali ke terbaru")
+                }
+                state.canOpenFullHistory -> TextButton(onClick = onOpenFullHistory) {
+                    Text("Lihat lengkap")
+                }
+                state.historyAccessRequest?.status == "PENDING" -> Text(
+                    "Menunggu admin",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+                else -> TextButton(
+                    enabled = !state.requestingHistoryAccess,
+                    onClick = onRequestAccess
+                ) {
+                    Text(if (state.requestingHistoryAccess) "Mengirim..." else "Minta ke admin")
                 }
             }
         }
@@ -497,7 +567,7 @@ private fun ActivityTimelineItem(log: ChangeLog, isCurrentUser: Boolean) {
                     )
                 }
                 Text(
-                    if (isCurrentUser) "Oleh Anda" else "Kontributor · ••••${log.actorUserId.takeLast(6)}",
+                    activityActorLabel(log, isCurrentUser),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 8.dp)
@@ -563,7 +633,8 @@ internal fun activitySummary(logs: List<ChangeLog>) = ActivitySummary(
 internal fun activityGroup(entityType: String): ActivityGroup = when (entityType.uppercase()) {
     "PERSON", "PROFILE", "LIFE_STATUS" -> ActivityGroup.PERSON
     "RELATIONSHIP", "PARENT_CHILD", "SPOUSE" -> ActivityGroup.RELATIONSHIP
-    "CLAIM", "PROPOSAL", "INVITATION", "MEMBER", "SPACE_MEMBER" -> ActivityGroup.COLLABORATION
+    "CLAIM", "PROPOSAL", "INVITATION", "MEMBER", "SPACE_MEMBER", "HISTORY_ACCESS" ->
+        ActivityGroup.COLLABORATION
     else -> ActivityGroup.OTHER
 }
 
@@ -595,6 +666,13 @@ internal fun activityDateLabel(createdAt: String): String {
     val time = cleaned.drop(11).take(5).takeIf { it.length == 5 }
     return if (time == null) date else "$date · $time"
 }
+
+internal fun activityActorLabel(log: ChangeLog, isCurrentUser: Boolean): String =
+    if (isCurrentUser) {
+        "Oleh Anda"
+    } else {
+        "Oleh ${log.actorDisplayName?.takeIf(String::isNotBlank) ?: "Anggota keluarga"}"
+    }
 
 internal fun activityErrorMessage(error: String): String = when {
     error.contains("127.0.0.1", ignoreCase = true) ||

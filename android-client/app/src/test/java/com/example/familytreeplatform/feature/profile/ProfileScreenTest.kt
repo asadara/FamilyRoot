@@ -1,5 +1,6 @@
 package com.example.familytreeplatform.feature.profile
 
+import com.example.familytreeplatform.models.UserNotificationItem
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -21,5 +22,22 @@ class ProfileScreenTest {
             "2026-07-28 09:46",
             notificationTimeLabel("2026-07-28T09:46:13.000Z")
         )
+    }
+
+    @Test
+    fun `profile only renders ten latest notifications`() {
+        val notifications = (1..25).map { index ->
+            UserNotificationItem(
+                notificationId = "notification-$index",
+                kind = "INFO",
+                code = "TEST",
+                title = "Notification $index",
+                message = "Message $index",
+                createdAt = "2026-07-30T10:00:00Z"
+            )
+        }
+
+        assertEquals(10, recentProfileNotifications(notifications).size)
+        assertEquals("notification-1", recentProfileNotifications(notifications).first().notificationId)
     }
 }

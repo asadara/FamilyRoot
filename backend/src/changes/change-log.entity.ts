@@ -24,7 +24,8 @@ export class ChangeLogEntity {
     | 'CLAIM'
     | 'SOURCE'
     | 'MEDIA'
-    | 'PROPOSAL';
+    | 'PROPOSAL'
+    | 'HISTORY_ACCESS';
 
   @Column({ type: 'uuid' })
   entityId!: string;

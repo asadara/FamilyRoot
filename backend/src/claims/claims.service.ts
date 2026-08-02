@@ -151,6 +151,27 @@ export class ClaimsService {
     });
   }
 
+  async findMine(spaceId: string, userId: string) {
+    const claims = await this.claimsRepo.find({
+      where: { spaceId, userId },
+      order: { requestedAt: 'DESC' },
+    });
+    const claim =
+      claims.find((candidate) => candidate.status === 'VERIFIED') ?? claims[0];
+    if (!claim) return { claim: null };
+
+    const person = await this.personsRepo.findOne({
+      where: { spaceId, personId: claim.personId, isDeleted: false },
+      select: ['personId', 'fullName'],
+    });
+    return {
+      claim: {
+        ...claim,
+        personName: person?.fullName ?? null,
+      },
+    };
+  }
+
   async verify(claimId: string, actorUserId: string) {
     return this.claimsRepo.manager.transaction(async (manager) => {
       let claimQuery = manager

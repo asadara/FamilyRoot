@@ -76,6 +76,17 @@ export class ArchiveController {
     return this.archiveService.listProfilePhotos(spaceId, actorUserId);
   }
 
+  @Get('spaces/:spaceId/profile-photos/me')
+  @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
+  getMyProfilePhoto(
+    @Param('spaceId') spaceId: string,
+    @ActorUserId() actorUserId: string,
+  ) {
+    if (!spaceId || !isUUID(spaceId))
+      throw new BadRequestException('Invalid spaceId');
+    return this.archiveService.getMyProfilePhoto(spaceId, actorUserId);
+  }
+
   @Post('persons/:personId/media')
   @SpaceRoles('OWNER', 'ADMIN', 'EDITOR')
   createMedia(
@@ -93,7 +104,7 @@ export class ArchiveController {
   }
 
   @Post('persons/:personId/media/upload')
-  @SpaceRoles('OWNER', 'ADMIN', 'EDITOR')
+  @SpaceRoles('OWNER', 'ADMIN', 'EDITOR', 'VIEWER')
   @UseInterceptors(
     FileInterceptor('file', {
       limits: { files: 1, fileSize: MAX_IMAGE_UPLOAD_BYTES },
