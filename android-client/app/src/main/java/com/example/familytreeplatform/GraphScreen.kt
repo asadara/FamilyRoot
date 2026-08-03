@@ -1531,7 +1531,14 @@ fun GraphScreen(
                                 ),
                                 start = start,
                                 end = end,
-                                strokeWidth = if (highlighted) 3.dp.toPx() else lineStroke
+                                strokeWidth = if (highlighted) 3.dp.toPx() else lineStroke,
+                                pathEffect = if (!highlighted && edge.meta == "DIVORCED") {
+                                    PathEffect.dashPathEffect(
+                                        floatArrayOf(8.dp.toPx(), 5.dp.toPx())
+                                    )
+                                } else {
+                                    null
+                                }
                             )
                             drawCircle(
                                 color = relationshipColor,
@@ -1545,6 +1552,16 @@ fun GraphScreen(
                                 center = center.copy(x = center.x + separation),
                                 style = Stroke(width = if (highlighted) 3.dp.toPx() else 1.5.dp.toPx())
                             )
+                            if (edge.meta == "WIDOWED" && !highlighted) {
+                                val markCenter = center.copy(x = center.x + separation)
+                                val markOffset = 5.dp.toPx()
+                                drawLine(
+                                    color = relationshipColor,
+                                    start = markCenter + Offset(-markOffset, markOffset),
+                                    end = markCenter + Offset(markOffset, -markOffset),
+                                    strokeWidth = 1.5.dp.toPx()
+                                )
+                            }
                             return@forEach
                         }
                         if (edge.type == "CARE") {
@@ -4350,27 +4367,58 @@ internal fun familyGenerationLevels(
     data class GenerationStep(val personId: String, val delta: Int)
 
     val adjacency = mutableMapOf<String, MutableList<GenerationStep>>()
-    relationships.filterNot { it.isCareRelationship() }.forEach { relationship ->
-        val forwardDelta = if (relationship.isLineageParentChild()) 1 else 0
-        val reverseDelta = if (relationship.isLineageParentChild()) -1 else 0
+    relationships.filter { it.isLineageParentChild() }.forEach { relationship ->
         adjacency.getOrPut(relationship.fromPersonId) { mutableListOf() }
-            .add(GenerationStep(relationship.toPersonId, forwardDelta))
+            .add(GenerationStep(relationship.toPersonId, 1))
         adjacency.getOrPut(relationship.toPersonId) { mutableListOf() }
-            .add(GenerationStep(relationship.fromPersonId, reverseDelta))
+            .add(GenerationStep(relationship.fromPersonId, -1))
     }
 
-    val levels = mutableMapOf(centerPersonId to 0)
-    val queue = ArrayDeque<String>().apply { add(centerPersonId) }
-    while (queue.isNotEmpty()) {
-        val current = queue.removeFirst()
-        val currentLevel = levels.getValue(current)
-        adjacency[current].orEmpty().forEach { step ->
-            if (step.personId !in levels) {
-                levels[step.personId] = currentLevel + step.delta
-                queue.add(step.personId)
+    val levels = mutableMapOf<String, Int>()
+    fun propagateLineage(seedPersonId: String, seedLevel: Int) {
+        if (seedPersonId in levels) return
+        levels[seedPersonId] = seedLevel
+        val queue = ArrayDeque<String>().apply { add(seedPersonId) }
+        while (queue.isNotEmpty()) {
+            val current = queue.removeFirst()
+            val currentLevel = levels.getValue(current)
+            adjacency[current].orEmpty().forEach { step ->
+                if (step.personId !in levels) {
+                    levels[step.personId] = currentLevel + step.delta
+                    queue.add(step.personId)
+                }
             }
         }
     }
+
+    // Biological/adoptive lineage owns generation levels. A partnership may align a
+    // lineage component that is otherwise disconnected from the focused component,
+    // but it must never overwrite levels already proven by parent-child paths.
+    propagateLineage(centerPersonId, 0)
+    val partnerships = relationships
+        .filter { it.type == "SPOUSE" }
+        .sortedWith(
+            compareByDescending<ExportRelationship>(::isCurrentPartnership)
+                .thenBy { it.relationshipId }
+        )
+    var alignedAnotherComponent: Boolean
+    do {
+        alignedAnotherComponent = false
+        partnerships.forEach { relationship ->
+            val fromLevel = levels[relationship.fromPersonId]
+            val toLevel = levels[relationship.toPersonId]
+            when {
+                fromLevel != null && toLevel == null -> {
+                    propagateLineage(relationship.toPersonId, fromLevel)
+                    alignedAnotherComponent = true
+                }
+                toLevel != null && fromLevel == null -> {
+                    propagateLineage(relationship.fromPersonId, toLevel)
+                    alignedAnotherComponent = true
+                }
+            }
+        }
+    } while (alignedAnotherComponent)
     return levels
 }
 

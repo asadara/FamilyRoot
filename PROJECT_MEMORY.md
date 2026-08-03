@@ -1,9 +1,10 @@
 # FamilyRoot — Project Memory dan Session Handoff
 
 > **Status:** Memori operasional aktif untuk melanjutkan pekerjaan lintas sesi chat
-> **Snapshot diperbarui:** 29 Juli 2026, Asia/Jakarta
+> **Snapshot diperbarui:** 3 Agustus 2026, Asia/Jakarta
 > **Repository:** `asadara/FamilyRoot`
 > **Branch:** `main`
+> **Baseline audit terbaru:** `2b6726dfd97158d962751645457270dff548e294` (`Merge PR #2: fix duplicate claims and account avatar sync`)
 > **Baseline sebelum implementasi frontend v2:** `b8679d3ca772cf3786a381e0716fedc4906f24da` (`feat: complete phase 4 data sustainability`)
 > **Baseline implementasi sebelum audit aktif:** `a79bbae04f872fb150a3eeb4cab7a3b1c549c128` (`fix: keep splash logo within safe area`)
 > **Audit/backlog aktif:** `docs/PROJECT_GAP_AUDIT_2026-07-24.md`
@@ -247,8 +248,9 @@ startDate/endDate       = riwayat waktu dasar
 ```
 
 Service backend memvalidasi self-link, duplicate, cycle, orang lintas space, dan batas
-dua orang tua biologis. Target domain Blueprint juga menyebut `FOSTER` dan `GUARDIAN`,
-tetapi tipe tersebut belum tercermin penuh pada entity relationship saat snapshot.
+dua orang tua biologis. `FOSTER` dan `GUARDIAN` sudah tersedia sebagai care overlay
+non-lineage dengan periode/konteks; keduanya tidak mengubah generation, parentage,
+partnership, legalitas, atau ACL secara implisit.
 
 Aturan graph yang sudah dikoreksi dan tidak boleh diregresikan:
 
@@ -319,10 +321,11 @@ activity, dan space settings. Navigation Compose, StateFlow, lifecycle-aware UI,
 Room, WorkManager, dan manual application container/constructor injection dipakai
 sebagai fondasi.
 
-Room database privat bernama `family-tree.db`, schema version 6, dengan tabel:
+Room database privat bernama `family-tree.db`, schema version 8, dengan tabel:
 
 - `persons` — subset person untuk cache daftar/detail;
 - `relationships` — cache edge `PARENT_CHILD` dan `SPOUSE`;
+- `sources` — cache sumber teks yang privacy-aware;
 - `offline_mutations` — antrean mutasi persisten.
 
 Status antrean:
@@ -334,10 +337,14 @@ Status antrean:
 
 Jenis mutasi offline yang sudah ada:
 
-- update life status;
-- update birth place/notes profile;
-- add parent-child;
-- add spouse.
+- `CREATE_PERSON`;
+- `UPDATE_LIFE_STATUS`;
+- `UPDATE_PROFILE`;
+- `ADD_PARENT_CHILD`;
+- `ADD_SPOUSE`;
+- `UPDATE_SPOUSE`;
+- `DELETE_RELATIONSHIP`;
+- `CREATE_SOURCE`.
 
 Mutasi memakai UUID `clientMutationId`; update versioned juga membawa
 `expectedVersion`. Backend menyimpan hasil untuk replay idempoten. `409 CONFLICT`
@@ -535,6 +542,15 @@ client dibuat.
 
 ## 13. Kondisi Git dan Aturan Perubahan
 
+Pada baseline audit ulang 3 Agustus 2026:
+
+- `git pull --ff-only origin main` memperbarui lokal dari `102e105` ke `2b6726d`;
+- branch lokal `main` sama dengan `origin/main` dan tidak mempunyai commit lokal
+  tambahan;
+- worktree bersih sebelum pembaruan dokumentasi audit ini dimulai;
+- empat commit yang ditarik mencakup merge PR #1 dan PR #2 untuk akun, aktivitas,
+  foto/avatar, history access, Google build configuration, dan hardening claim.
+
 Pada awal pembuatan dokumen ini:
 
 - branch lokal `main` sama dengan `origin/main`;
@@ -574,15 +590,13 @@ yang sudah selesai:
   diterapkan, tetapi automated backup/PITR production belum tersedia;
 - binary media upload pilot sudah tersedia melalui private Supabase Storage, tetapi
   lifecycle, retention, portability provider, dan kebijakan data nyata belum ditutup;
-- field-level privacy untuk orang hidup dan model provenance penuh masih target;
+- privacy per Person sudah tersedia pada pilot, tetapi field-level/branch scope,
+  delegasi pengelola, versi alternatif, dispute, dan provenance penuh masih target;
 - beberapa target domain Blueprint lebih kaya dari entity aktual;
 - Blueprint v1 menyatakan empat fase selesai, tetapi kualitas UI/UX produk masih akan
   dirumuskan ulang dalam Blueprint v2;
-- `android-client/ARCHITECTURE.md` masih memiliki kalimat default networking yang
-  dapat terbaca sebagai default emulator, sedangkan keputusan implementasi terbaru
-  adalah debug default `127.0.0.1` untuk USB reverse;
-- beberapa baris Development Log Blueprint masih mengatakan “belum commit/push”
-  walaupun seluruh Phase 4 kemudian sudah di-commit dan dipush pada `b8679d3`;
+- beberapa baris historis Development Log Blueprint tetap merekam keadaan
+  “belum commit/push” pada saat event terjadi; baris itu bukan status Git saat ini;
 - dokumen historis tidak boleh mengalahkan source code dan keputusan terbaru bila
   keduanya sudah berubah; setiap ketidaksesuaian harus dilaporkan lalu diperbaiki
   secara eksplisit setelah disetujui.
@@ -845,9 +859,10 @@ yang sudah selesai:
 > Perubahan lifecycle membership disiapkan sebagai calon APK `versionCode 3`,
 > `versionName 0.1.2-beta`. Build 2 pada tablet tidak boleh diganti sebelum backend,
 > migration, dan policy PILOT build 3 selesai di-rollout serta diverifikasi.
-> Build 4 (`0.1.3-beta`) menambahkan perbaikan akun, aktivitas, avatar, sinkronisasi
-> foto, dan Android Photo Picker; policy PILOT perlu dinaikkan ketika rollout
-> backend/migration build ini dilakukan.
+> Build 4 (`0.1.3-beta`) menambahkan batch awal perbaikan akun, aktivitas, avatar,
+> sinkronisasi foto, dan Android Photo Picker. Hardening claim/avatar berikutnya
+> menaikkan kandidat saat ini menjadi build 5 (`0.1.4-beta`); policy PILOT perlu
+> dinaikkan ketika rollout backend/migration build ini dilakukan.
 > Daftar di bawah tetap berguna sebagai konteks awal, tetapi keputusan terbaru dalam
 > kedua risalah tersebut mengalahkan item agenda yang sudah diselesaikan.
 
@@ -996,3 +1011,65 @@ melanjutkan diskusi atau pekerjaan yang diminta pengguna.
 - Klaim aktif unik untuk tuple silsilah, akun, dan Person. Pengiriman ulang klaim
   `PENDING` bersifat idempoten; migration mempertahankan satu klaim kanonik dan
   menandai duplikat aktif lama sebagai `REJECTED` tanpa menghapus jejaknya.
+
+## 20. Audit Ulang Setelah Sinkronisasi GitHub (3 Agustus 2026)
+
+- `main` lokal disinkronkan secara fast-forward dan sama dengan `origin/main` pada
+  commit `2b6726d`; tidak ada file proyek lokal yang tertimpa konflik.
+- Delta dari baseline lokal sebelumnya terdiri dari empat commit Git: dua commit
+  implementasi dan dua merge commit PR #1–#2.
+- Audit source mengonfirmasi endpoint permintaan/persetujuan riwayat lengkap,
+  pembatasan preview aktivitas/notifikasi, self-claim, sinkronisasi foto avatar,
+  Photo Picker tanpa izin storage luas, Google Web Client ID wajib untuk build
+  pilot/release, dan unique index claim aktif.
+- Quality gate lokal lulus: backend lint/build, 35 unit test, dan 22 E2E; Android
+  `testDebugUnitTest`, `lintDebug`, dan `assembleDebug`.
+- Verifikasi lokal tidak membuktikan migration telah diterapkan ke cloud, backend
+  baru telah dideploy, repository variable Google telah diisi, policy PILOT telah
+  menerima build 5, atau acceptance test perangkat telah dilakukan. Seluruhnya tetap
+  merupakan gate rollout eksternal.
+
+## 21. Status Pasangan Historis dan Kebijakan Versi Beta (3 Agustus 2026)
+
+- Person Detail dapat mengubah hubungan pasangan menjadi `MARRIED`, `DIVORCED`, atau
+  `WIDOWED`, dengan tanggal mulai/berakhir opsional. Perubahan menggunakan queue
+  offline `UPDATE_SPOUSE`, cache optimistis, replay idempoten, dan audit backend.
+- `MARRIED` selalu membersihkan `endDate`; `DIVORCED` dan `WIDOWED` diperlakukan
+  sebagai partnership historis. Export layout hanya mengunci card berdekatan untuk
+  partnership `MARRIED` tanpa tanggal akhir.
+- Cincin aktif tetap saling terkait; cerai memakai cincin lebih renggang dan garis
+  putus-putus; wafat memakai cincin redup dengan tanda diagonal. Riwayat hubungan
+  tidak dihapus dari graph.
+- Koridor lineage berikutnya harus dipesan per pasangan/keluarga biologis dan card
+  pasangan historis tidak boleh dipaksa selalu berdekatan. Status baru menyediakan
+  data yang diperlukan, tetapi reflow koridor besar tetap perubahan layout terpisah.
+- Build beta `DEBUG`/`PILOT` dibekukan pada `versionCode 5`, `versionName
+  0.1.4-beta`. Selama policy channel tidak mengaktifkan enforcement, mismatch atau
+  compatibility endpoint yang tidak tersedia tidak membuka full-screen gate.
+- `PRODUCTION` tidak dilonggarkan: versionCode distribusi store tetap monoton,
+  API contract naik hanya untuk incompatibility nyata, dan enforcement eksplisit
+  tetap memblokir build beta sekalipun.
+
+## 22. Lineage-First dan Perbaikan Data Ummah Bugo (3 Agustus 2026)
+
+- `familyGenerationLevels` kini menghitung level dari parent-child lineage terlebih
+  dahulu. Pasangan hanya menyelaraskan komponen lineage terpisah dan tidak dapat
+  menimpa level biologis yang sudah ditemukan.
+- `DIVORCED`/`WIDOWED` tidak lagi disatukan dalam komponen placement atomik. Posisi
+  historis bersifat lunak, sedangkan cincin tetap menjadi anchor kuat bagi kelompok
+  anak biologis pasangan tersebut.
+- Reflow pasca-placement mengembalikan pasangan lama ke sisi luar, menambatkan child
+  block ke titik cincin, dan melebarkan jarak pasangan ketika koridor keluarga akan
+  bertumpuk. Fixture Nn–Mbah Cangkring–Sikem–Manto menjadi regression utama.
+- Backend menolak spouse edge dengan selisih level pada satu jaringan lineage,
+  termasuk kerabat beda generasi yang bukan pasangan ancestor/descendant langsung.
+- Edge salah `Nn–Solihin` (`efcd3b1c-224b-40d1-9429-6404856de2fc`) telah dihapus
+  melalui aplikasi dan tersinkron ke cloud. Cold refresh profil Nn membuktikan hanya
+  Karto Setiko serta pasangan historis Mbah Cangkring yang tersisa; Solihin tetap anak
+  Harmanto dan Sri Lestari.
+- Quality gate lulus: backend 39 unit, 22 E2E, dan build; Android 144 unit test,
+  lint, debug APK, serta 40/40 connected instrumentation pada Samsung SM-T225.
+  APK pilot build 5 (`0.1.4-beta`) telah dipasang lewat USB dan cold-launch tanpa
+  `AndroidRuntime` crash. Instrumentation mereset data aplikasi lokal sehingga smoke
+  data cloud terakhir menunggu pemilik memilih ulang akun Google pada account picker.
+  Deployment revision backend baru tetap menunggu publish source diotorisasi.

@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.familytreeplatform.models.ClaimRequest
 import com.example.familytreeplatform.models.ClaimResponse
 import com.example.familytreeplatform.models.CreateSpouseRequest
+import com.example.familytreeplatform.models.UpdateSpouseRequest
 import com.example.familytreeplatform.models.MediaItem
 import com.example.familytreeplatform.models.MediaRequest
 import com.example.familytreeplatform.models.ParentChildRequest
@@ -468,6 +469,37 @@ class PersonDetailViewModel(
             ).onSuccess {
                 refreshRelations()
                 _uiState.update { it.copy(updating = false, message = "Spouse saved locally; sync queued") }
+            }.onFailure { error ->
+                _uiState.update { it.copy(updating = false, error = error.message) }
+            }
+        }
+    }
+
+    fun updateSpouseStatus(
+        relationshipId: String,
+        meta: String,
+        startDate: String?,
+        endDate: String?
+    ) {
+        viewModelScope.launch {
+            _uiState.update { it.copy(updating = true, error = null, message = null) }
+            repository.queueSpouseStatusUpdate(
+                relationshipId = relationshipId,
+                request = UpdateSpouseRequest(
+                    spaceId = spaceId,
+                    meta = meta,
+                    startDate = startDate,
+                    endDate = if (meta == "MARRIED") null else endDate
+                ),
+                focusPersonId = personId
+            ).onSuccess {
+                refreshRelations()
+                _uiState.update {
+                    it.copy(
+                        updating = false,
+                        message = "Status pasangan tersimpan di perangkat; sinkronisasi diantrekan"
+                    )
+                }
             }.onFailure { error ->
                 _uiState.update { it.copy(updating = false, error = error.message) }
             }

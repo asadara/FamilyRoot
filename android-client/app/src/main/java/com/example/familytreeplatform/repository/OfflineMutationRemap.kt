@@ -6,6 +6,7 @@ import com.example.familytreeplatform.data.local.OfflineMutationType
 import com.example.familytreeplatform.models.DeleteRelationshipMutationPayload
 import com.example.familytreeplatform.models.ParentChildMutationPayload
 import com.example.familytreeplatform.models.SpouseMutationPayload
+import com.example.familytreeplatform.models.UpdateSpouseMutationPayload
 import com.google.gson.Gson
 
 internal fun String.replacePersonId(oldId: String, newId: String): String =
@@ -33,6 +34,11 @@ internal fun OfflineMutationEntity.referencesPerson(personId: String): Boolean =
                 Gson().fromJson(payloadJson, SpouseMutationPayload::class.java)
             }.getOrNull()?.let {
                 it.personAId == personId || it.personBId == personId
+            } == true
+            OfflineMutationType.UPDATE_SPOUSE -> runCatching {
+                Gson().fromJson(payloadJson, UpdateSpouseMutationPayload::class.java)
+            }.getOrNull()?.relationship?.let {
+                it.fromPersonId == personId || it.toPersonId == personId
             } == true
             OfflineMutationType.DELETE_RELATIONSHIP -> runCatching {
                 Gson().fromJson(
@@ -99,6 +105,17 @@ internal fun OfflineMutationEntity.isResolvedBy(
                 relationship.endDate == payload.endDate
         }
     } == true
+    OfflineMutationType.UPDATE_SPOUSE -> runCatching {
+        Gson().fromJson(payloadJson, UpdateSpouseMutationPayload::class.java)
+    }.getOrNull()?.let { payload ->
+        relationships.any { relationship ->
+            relationship.pendingMutationId == null &&
+                relationship.relationshipId == payload.relationship.relationshipId &&
+                relationship.meta == payload.meta &&
+                relationship.startDate == payload.startDate &&
+                relationship.endDate == payload.endDate
+        }
+    } == true
     else -> false
 }
 
@@ -139,6 +156,21 @@ internal fun remapMutationPayload(
     OfflineMutationType.DELETE_RELATIONSHIP -> Gson().fromJson(
         payloadJson,
         DeleteRelationshipMutationPayload::class.java
+    ).let { payload ->
+        Gson().toJson(
+            payload.copy(
+                relationship = payload.relationship.copy(
+                    fromPersonId = payload.relationship.fromPersonId
+                        .replacePersonId(oldId, newId),
+                    toPersonId = payload.relationship.toPersonId
+                        .replacePersonId(oldId, newId)
+                )
+            )
+        )
+    }
+    OfflineMutationType.UPDATE_SPOUSE -> Gson().fromJson(
+        payloadJson,
+        UpdateSpouseMutationPayload::class.java
     ).let { payload ->
         Gson().toJson(
             payload.copy(

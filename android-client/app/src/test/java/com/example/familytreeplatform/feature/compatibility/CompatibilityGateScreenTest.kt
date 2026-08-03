@@ -28,10 +28,11 @@ class CompatibilityGateScreenTest {
             response = updateResponse
         )
 
-        assertTrue(compatibilityRequiresGate(warning))
+        assertTrue(compatibilityRequiresGate(warning, "PRODUCTION"))
         assertFalse(
             compatibilityRequiresGate(
-                warning.copy(updateWarningAcknowledged = true)
+                warning.copy(updateWarningAcknowledged = true),
+                "PRODUCTION"
             )
         )
         assertEquals("Pembaruan tersedia", compatibilityTitle(warning))
@@ -53,11 +54,12 @@ class CompatibilityGateScreenTest {
             error = "Failed to connect to 127.0.0.1"
         )
 
-        assertTrue(compatibilityRequiresGate(blocked))
-        assertTrue(compatibilityRequiresGate(unavailable))
+        assertTrue(compatibilityRequiresGate(blocked, "PRODUCTION"))
+        assertTrue(compatibilityRequiresGate(unavailable, "PRODUCTION"))
         assertFalse(
             compatibilityRequiresGate(
-                unavailable.copy(updateWarningAcknowledged = true)
+                unavailable.copy(updateWarningAcknowledged = true),
+                "PRODUCTION"
             )
         )
         assertEquals("Aplikasi perlu diperbarui", compatibilityTitle(blocked))
@@ -76,12 +78,47 @@ class CompatibilityGateScreenTest {
             )
         )
 
-        assertTrue(compatibilityRequiresGate(warning))
+        assertTrue(compatibilityRequiresGate(warning, "PRODUCTION"))
         assertFalse(
             compatibilityRequiresGate(
-                warning.copy(updateWarningAcknowledged = true)
+                warning.copy(updateWarningAcknowledged = true),
+                "PRODUCTION"
             )
         )
         assertEquals("Build aplikasi belum terdaftar", compatibilityTitle(warning))
+    }
+
+    @Test
+    fun `pilot beta stays open while compatibility enforcement is disabled`() {
+        val warning = AppCompatibilityState(
+            status = CompatibilityGateStatus.UPDATE_AVAILABLE,
+            response = updateResponse.copy(
+                status = "APP_TOO_NEW",
+                blocking = false,
+                enforcementEnabled = false
+            )
+        )
+        val unavailable = AppCompatibilityState(
+            status = CompatibilityGateStatus.UNAVAILABLE,
+            error = "Network unavailable"
+        )
+
+        assertFalse(compatibilityRequiresGate(warning, "PILOT"))
+        assertFalse(compatibilityRequiresGate(unavailable, "PILOT"))
+        assertFalse(compatibilityRequiresGate(unavailable, "DEBUG"))
+    }
+
+    @Test
+    fun `pilot still blocks when policy explicitly enables enforcement`() {
+        val blocked = AppCompatibilityState(
+            status = CompatibilityGateStatus.BLOCKED,
+            response = updateResponse.copy(
+                status = "APP_TOO_OLD",
+                blocking = true,
+                enforcementEnabled = true
+            )
+        )
+
+        assertTrue(compatibilityRequiresGate(blocked, "PILOT"))
     }
 }

@@ -4,6 +4,7 @@ import {
   Controller,
   Delete,
   Get,
+  Patch,
   Post,
   Param,
   Query,
@@ -11,6 +12,7 @@ import {
 import { isUUID } from 'class-validator';
 import { RelationshipsService } from './relationships.service';
 import { CreateSpouseDto } from './dto/create-spouse.dto';
+import { UpdateSpouseDto } from './dto/update-spouse.dto';
 import { ActorUserId } from '../common/actor-user-id.decorator';
 import { SpaceRoles } from '../common/space-roles.decorator';
 import { randomUUID } from 'crypto';
@@ -82,6 +84,27 @@ export class RelationshipsController {
       dto.meta,
       dto.startDate,
       dto.endDate ?? null,
+      actorUserId,
+      dto.clientMutationId,
+    );
+  }
+
+  @Patch(':relationshipId/spouse')
+  @SpaceRoles('OWNER', 'ADMIN', 'EDITOR')
+  updateSpouse(
+    @ActorUserId() actorUserId: string,
+    @Param('relationshipId') relationshipId: string,
+    @Body() dto: UpdateSpouseDto,
+  ) {
+    if (!relationshipId || !isUUID(relationshipId)) {
+      throw new BadRequestException('Invalid relationshipId');
+    }
+    return this.relationshipsService.updateSpouse(
+      dto.spaceId,
+      relationshipId,
+      dto.meta,
+      dto.startDate,
+      dto.endDate,
       actorUserId,
       dto.clientMutationId,
     );

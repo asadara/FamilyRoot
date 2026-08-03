@@ -284,6 +284,15 @@ Phase 4 concurrency contract (initial slice):
 - Reusing a mutation ID for different input, or sending a stale `expectedVersion`, returns `409 CONFLICT`.
 - A stale-version response includes `details` with the current version and relevant server fields so clients can present an explicit resolution choice.
 - `POST /persons/parent-child` and `POST /relationships/spouse` require UUID `clientMutationId`; replaying an identical relationship creation returns the originally stored relationship without duplicating graph edges or audit entries.
+- `PATCH /relationships/:relationshipId/spouse` changes an existing spouse edge to
+  `MARRIED`, `DIVORCED`, or `WIDOWED`, accepts optional ISO start/end dates, and
+  requires `spaceId` plus UUID `clientMutationId`. `MARRIED` clears `endDate`;
+  historical statuses set it to the supplied date or `null`. Replay is idempotent and each accepted
+  change writes one relationship audit entry.
+- Spouse creation and status update reject endpoints whose parent-child lineage
+  levels differ, even when neither endpoint is a direct ancestor of the other.
+  Historical status is not an escape hatch for a cross-generation data error;
+  clients must remove or correct the edge instead.
 - `POST /persons` accepts optional UUID `clientMutationId`. New Android clients
   always send it so replay returns the same Person without a second audit entry;
   omission remains supported for legacy clients.

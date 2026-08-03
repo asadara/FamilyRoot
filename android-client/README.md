@@ -60,8 +60,11 @@ ke foto, file pribadi, kontak, lokasi, mikrofon, atau kamera.
 Setiap build membawa `VERSION_CODE`, `VERSION_NAME`, `API_CONTRACT_VERSION`, dan
 `RELEASE_CHANNEL`. Aplikasi memeriksa endpoint kompatibilitas publik sebelum
 memulihkan sesi. Build pilot memakai channel `PILOT`, debug memakai `DEBUG`, dan
-release memakai `PRODUCTION`. Naikkan `versionCode` untuk setiap APK baru; naikkan
-`API_CONTRACT_VERSION` hanya ketika kontrak APK–backend memang tidak kompatibel.
+release memakai `PRODUCTION`. Selama beta aktif, build `DEBUG` dan `PILOT` dibekukan
+pada `versionCode 5`, `versionName 0.1.4-beta`; perbaikan source dan pemasangan ulang
+ke perangkat tetap dianggap build beta yang sama. Naikkan `versionCode` hanya ketika
+ada keputusan milestone kompatibilitas baru atau distribusi store/production, dan
+naikkan `API_CONTRACT_VERSION` hanya ketika kontrak APK–backend memang tidak kompatibel.
 Semua request juga membawa header versi agar backend dapat menolak APK lama setelah
 enforcement diaktifkan. Baseline gate pertama adalah `versionCode 2`,
 `versionName 0.1.1-beta`. Source pengembangan saat ini menyiapkan lifecycle lengkap,
@@ -70,8 +73,17 @@ serta Photo Picker sebagai `versionCode 5`, `versionName 0.1.4-beta`; backend,
 migration, object contract, dan policy PILOT harus menerima build 5 sebelum APK
 tersebut dipasang. Backend model care tidak boleh
 di-rollout terpisah karena build lama dapat salah membaca meta baru sebagai lineage.
-Selama enforcement policy masih `false`, mismatch atau pemeriksaan yang tidak
-tersedia menjadi warning yang dapat dilanjutkan sementara, bukan hard block.
+Selama enforcement policy masih `false`, build `DEBUG`/`PILOT` tidak menampilkan
+full-screen gate untuk mismatch atau pemeriksaan yang tidak tersedia. Policy pilot
+yang secara eksplisit mengaktifkan enforcement tetap dapat memblokir build tidak
+kompatibel. Channel `PRODUCTION` mempertahankan gate ketat dan `versionCode` monoton
+untuk distribusi store.
+
+Graph memakai resolver lineage-first: level generasi berasal dari parent-child.
+Pasangan `DIVORCED`/`WIDOWED` tetap ditampilkan dengan cincin masing-masing, tetapi
+tidak mengunci card sebagai satu unit; blok anak bersama ditambatkan ke cincin dan
+memperoleh rentang horizontal terpisah. Edge pasangan yang berlawanan dengan level
+biologis tidak boleh menggeser card lain.
 
 Panduan Google Auth Platform, package/SHA-1 pilot, migration, dan acceptance test
 berada di `../docs/GOOGLE_SIGN_IN_SETUP.md`.

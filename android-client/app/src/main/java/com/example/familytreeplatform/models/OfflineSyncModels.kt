@@ -32,6 +32,13 @@ data class SpouseMutationPayload(
     val endDate: String? = null
 )
 
+data class UpdateSpouseMutationPayload(
+    val relationship: RelationItem,
+    val meta: String,
+    val startDate: String? = null,
+    val endDate: String? = null
+)
+
 data class CreatePersonMutationPayload(
     val request: PersonRequest
 )

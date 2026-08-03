@@ -194,11 +194,16 @@ internal fun compatibilityMessage(state: AppCompatibilityState): String = when {
     else -> "Versi aplikasi ini belum dapat digunakan."
 }
 
-internal fun compatibilityRequiresGate(state: AppCompatibilityState): Boolean = when (
-    state.status
-) {
-    CompatibilityGateStatus.COMPATIBLE -> false
-    CompatibilityGateStatus.UPDATE_AVAILABLE -> !state.updateWarningAcknowledged
-    CompatibilityGateStatus.UNAVAILABLE -> !state.updateWarningAcknowledged
-    else -> true
+internal fun compatibilityRequiresGate(
+    state: AppCompatibilityState,
+    releaseChannel: String = BuildConfig.RELEASE_CHANNEL
+): Boolean {
+    val betaChannel = releaseChannel == "DEBUG" || releaseChannel == "PILOT"
+    if (betaChannel && state.response?.enforcementEnabled != true) return false
+    return when (state.status) {
+        CompatibilityGateStatus.COMPATIBLE -> false
+        CompatibilityGateStatus.UPDATE_AVAILABLE -> !state.updateWarningAcknowledged
+        CompatibilityGateStatus.UNAVAILABLE -> !state.updateWarningAcknowledged
+        else -> true
+    }
 }

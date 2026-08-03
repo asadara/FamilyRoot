@@ -2,7 +2,9 @@
 
 > **Status:** Disepakati sebagai arah konsep frontend
 > **Tanggal keputusan:** 18–19 Juli 2026
-> **Status implementasi:** Tahap 1 vertical slice selesai dan tervalidasi lokal
+> **Pembaruan keputusan terakhir:** 3 Agustus 2026
+> **Status implementasi:** Tahap 1–6 ditutup; enhancement post-Fase 4 sampai
+> commit `2b6726d` terimplementasi dan terverifikasi lokal
 > **Ruang lingkup:** Layout utama, graph workspace, person card, couple/lineage,
 > expand/collapse, inspector, exploration, pencarian, navigation shell, visual
 > language, media, privasi, kolaborasi, undangan, dan siklus hidup data
@@ -1108,11 +1110,10 @@ Validasi Tahap 5:
 - seluruh 18 connected instrumentation tests lulus pada Samsung SM-T225 Android 14;
 - tidak ada perubahan endpoint, kontrak API, tabel, migration, atau backend NestJS.
 
-Belum dikerjakan setelah Tahap 5: expand/collapse rekursif bebas pada setiap node di
-luar konteks relationship path, multiple historical partnership lengkap, foto profil
-binary, privacy role × scope, approval, collective confirmation, lifecycle purge,
-dan perubahan kontrak backend. Blueprint v1, database, backend NestJS, serta
-deployment tidak diubah.
+Catatan historis setelah Tahap 5 saat itu masih memuat expand/collapse rekursif,
+multiple partnership, foto profil, privacy, approval, collective confirmation, dan
+lifecycle. Status aktual seluruh item tersebut harus dibaca dari bagian 31 dan gap
+audit aktif; catatan tahap lama tidak boleh mengalahkan implementasi yang lebih baru.
 
 ## 31. Keputusan Tahap 6 — Kompleksitas Lineage
 
@@ -1505,3 +1506,95 @@ dengan copy generik; tidak ada nama Person, nilai fakta, email, token undangan, 
 request, atau error mentah pada preview. Riwayat berada di Profil akun, dapat ditandai
 dibaca, tidak terlihat oleh anggota lain, dan dihapus saat akun dihapus. Read request
 serta pemeliharaan status baca tidak menghasilkan receipt baru.
+
+### 31.15 Akses riwayat kolaborasi dan identitas aktivitas
+
+Pada 2 Agustus 2026, Aktivitas dipisahkan antara ringkasan aman dan riwayat lengkap:
+
+- preview aktivitas kolaborasi dan notifikasi pribadi masing-masing dibatasi maksimal
+  10 item agar halaman akun/aktivitas tidak memuat histori tanpa batas;
+- riwayat lengkap memerlukan permintaan eksplisit dari anggota dan keputusan
+  `OWNER`/`ADMIN`;
+- setelah disetujui, histori dimuat dengan cursor dan batas maksimal 50 item per
+  halaman; persetujuan tidak mengubah role atau hak mutasi anggota;
+- actor ditampilkan memakai display name akun, sedangkan actor aktif berlabel `Anda`;
+  UUID tetap disimpan untuk audit backend dan tidak ditampilkan sebagai identitas UI;
+- halaman pengaturan menyediakan antrean review permintaan akses riwayat tanpa
+  membuka data keluarga yang tidak relevan.
+
+Model ini menjaga Aktivitas sebagai alat akuntabilitas, bukan feed sosial atau jalur
+untuk memperluas akses Person yang dibatasi privacy.
+
+### 31.16 Profil diri, avatar, pemilihan foto, dan claim aktif
+
+Profil akun memperoleh hubungan ke Person diri melalui self-claim pada Family Space
+aktif. `User` tetap berbeda dari `Person`; tidak ada profile row baru yang dibuat
+hanya karena akun membuka halaman profil.
+
+- avatar header memakai foto self-claim aktif dan fallback inisial;
+- claim `PENDING` boleh memakai foto yang memang sudah dapat dibaca anggota, tetapi
+  perubahan foto dan privacy tetap memerlukan claim `VERIFIED`;
+- `VIEWER` dengan claim diri terverifikasi hanya dapat mengganti foto Person dirinya;
+- upload berhasil memperbarui shared photo state dan signed URL tanpa menunggu reload
+  seluruh daftar; object lama dibersihkan hanya setelah pengganti dapat dibaca;
+- pemilihan gambar memakai Android Photo Picker, fallback Storage Access Framework,
+  dan backport Google Play Services tanpa izin galeri/storage luas;
+- hanya satu claim `PENDING` atau `VERIFIED` boleh aktif untuk kombinasi space, akun,
+  dan Person. Retry bersifat idempoten, race dijaga unique index, dan duplikat lama
+  ditandai `REJECTED` tanpa menghapus audit trail.
+
+Build `pilot` dan `release` wajib mempunyai Google Web Client ID valid agar tombol
+Google tidak diam-diam nonaktif. Ketentuan build ini tidak membuktikan rollout:
+deployment backend/migration, policy PILOT, APK, dan acceptance perangkat tetap gate
+terpisah.
+
+### 31.17 Status pasangan historis, koridor lineage, dan versi beta
+
+Pada 3 Agustus 2026 status partnership menjadi input yang dapat dikelola dari Person
+Detail, bukan sekadar metadata hasil import:
+
+- `MARRIED` berarti hubungan aktif dan menghapus tanggal akhir;
+- `DIVORCED` dan `WIDOWED` berarti hubungan historis dengan tanggal akhir opsional;
+- update tersimpan optimistis melalui queue offline, idempoten di backend, dan masuk
+  activity audit;
+- cincin aktif tetap terkait, cerai memakai cincin renggang serta connector
+  putus-putus, dan wafat memakai cincin muted dengan tanda diagonal;
+- hanya partnership `MARRIED` tanpa `endDate` yang boleh menjadi unit card berdekatan
+  secara keras. Partnership historis tetap terlihat tetapi adjacency-nya bersifat
+  lunak agar blok keturunannya dapat memperoleh rentang horizontal sendiri;
+- pass layout lanjutan harus mengukur descendant tiap pasangan biologis dahulu lalu
+  memesan interval X yang tidak saling bertumpuk. Status hubungan adalah input untuk
+  pemisahan interval, bukan alasan menghapus pasangan atau anak dari graph.
+
+Selama pengembangan beta, identitas build `DEBUG`/`PILOT` dibekukan pada
+`versionCode 5`, `versionName 0.1.4-beta`. Gate startup pada kedua channel bersifat
+fail-open ketika policy `enforcementEnabled=false`, termasuk saat endpoint tidak
+tersedia. Enforcement eksplisit tetap menang. Channel `PRODUCTION` dan publikasi
+store mempertahankan versionCode monoton, pemeriksaan ketat, serta urutan rollout
+backend → APK → minimum supported version.
+
+### 31.18 Resolver lineage-first dan koridor pasangan historis lunak
+
+Keputusan implementasi 3 Agustus 2026 memperjelas bahwa status pasangan tidak pernah
+menjadi sumber utama tingkat generasi:
+
+- level diselesaikan dari edge parent-child lineage terlebih dahulu;
+- edge pasangan boleh menyelaraskan komponen biologis yang benar-benar terpisah,
+  misalnya keluarga asal pasangan, tetapi tidak boleh menimpa level yang sudah
+  terbukti oleh jalur parent-child;
+- bila dua endpoint pasangan sudah mempunyai level berbeda, layout mempertahankan
+  keduanya dan backend menolak pembuatan/perubahan status edge tersebut sebagai
+  anomali lintas-generasi;
+- hanya `MARRIED` tanpa `endDate` yang boleh menjadi komponen placement atomik;
+  `DIVORCED` dan `WIDOWED` memperoleh posisi preferensi yang dapat digeser ke luar;
+- setiap pasangan tetap memiliki cincin sendiri. Anak bersama dikelompokkan dari dua
+  edge parent-child eksplisit dan blok turunannya ditambatkan ke cincin itu;
+- keluarga di sisi kiri tumbuh ke luar kiri, keluarga di sisi kanan tumbuh ke luar
+  kanan, dan jarak kartu pasangan historis dapat diperbesar dua kali pergeseran blok
+  anak agar titik tengah cincin tetap stabil.
+
+Acceptance nyata memakai rangkaian Nn–Mbah Cangkring–Sikem–Manto. Karto Setiko
+berasal dari cincin Nn–Mbah Cangkring; Kalinem, Kasinem, dan Lasiyem berasal dari
+cincin Mbah Cangkring–Sikem; cincin Sikem–Manto tetap terlihat tanpa trunk anak.
+Edge Nn–Solihin adalah data salah lintas empat generasi dan harus dihapus, bukan
+sekadar diubah menjadi status historis atau memakai ulang placeholder Nn.

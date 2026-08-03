@@ -6,6 +6,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performScrollTo
 import com.example.familytreeplatform.ui.theme.FamilyTreePlatformTheme
 import org.junit.Rule
 import org.junit.Test
@@ -15,7 +16,7 @@ class GraphQuickAddDialogTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun partnerDateClearlyMeansRelationshipStartAndUsesPicker() {
+    fun partnerDateClearlyMeansMarriageDateAndUsesPicker() {
         composeRule.setContent {
             FamilyTreePlatformTheme(dynamicColor = false) {
                 GraphQuickAddDialog(
@@ -33,10 +34,10 @@ class GraphQuickAddDialogTest {
             }
         }
 
-        composeRule.onNodeWithTag("relationship-start-date").assertIsDisplayed()
-        composeRule.onNodeWithText("Tanggal mulai hubungan").assertIsDisplayed()
+        composeRule.onNodeWithTag("relationship-start-date").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Tanggal pernikahan (opsional)").assertIsDisplayed()
         composeRule.onNodeWithText(
-            "Bukan tanggal lahir. Tanggal lahir dapat dilengkapi di profil."
+            "Biarkan kosong jika keluarga belum mengetahui tanggalnya."
         ).assertIsDisplayed()
         composeRule.onNodeWithText("Pilih").assertIsDisplayed()
     }

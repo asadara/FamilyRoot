@@ -1,5 +1,6 @@
 import { validate } from 'class-validator';
 import { AddParentChildDto } from './dto/add-parent-child.dto';
+import { UpdateSpouseDto } from './dto/update-spouse.dto';
 import {
   isCareRelationshipMeta,
   isLineageParentChildMeta,
@@ -43,6 +44,30 @@ describe('relationship domain', () => {
       parentId: '22222222-2222-4222-8222-222222222222',
       childId: '33333333-3333-4333-8333-333333333333',
       meta: 'DONOR',
+      clientMutationId: '44444444-4444-4444-8444-444444444444',
+    });
+
+    expect(await validate(dto)).not.toHaveLength(0);
+  });
+
+  it.each(['MARRIED', 'DIVORCED', 'WIDOWED'] as const)(
+    'accepts spouse status %s',
+    async (meta) => {
+      const dto = Object.assign(new UpdateSpouseDto(), {
+        spaceId: '11111111-1111-4111-8111-111111111111',
+        meta,
+        endDate: meta === 'MARRIED' ? null : '2026-08-03',
+        clientMutationId: '44444444-4444-4444-8444-444444444444',
+      });
+
+      await expect(validate(dto)).resolves.toHaveLength(0);
+    },
+  );
+
+  it('rejects an unsupported spouse status', async () => {
+    const dto = Object.assign(new UpdateSpouseDto(), {
+      spaceId: '11111111-1111-4111-8111-111111111111',
+      meta: 'SEPARATED',
       clientMutationId: '44444444-4444-4444-8444-444444444444',
     });
 

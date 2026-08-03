@@ -20,6 +20,7 @@ import com.example.familytreeplatform.models.RelationsResponse
 import com.example.familytreeplatform.models.RelationItem
 import com.example.familytreeplatform.models.CreateSpouseRequest
 import com.example.familytreeplatform.models.SpouseResponse
+import com.example.familytreeplatform.models.UpdateSpouseRequest
 import com.example.familytreeplatform.models.UpdateLifeStatusRequest
 import com.example.familytreeplatform.models.UpdateProfileRequest
 import com.example.familytreeplatform.models.ExportSpaceResponse
@@ -390,6 +391,12 @@ interface ApiService {
 
     @POST("relationships/spouse")
     suspend fun createSpouse(@Body request: CreateSpouseRequest): Response<SpouseResponse>
+
+    @PATCH("relationships/{relationshipId}/spouse")
+    suspend fun updateSpouse(
+        @Path("relationshipId") relationshipId: String,
+        @Body request: UpdateSpouseRequest
+    ): Response<SpouseResponse>
 
     @DELETE("relationships/{relationshipId}")
     suspend fun deleteRelationship(

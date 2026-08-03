@@ -36,7 +36,7 @@ export class RelationshipsService {
   ): Promise<boolean> {
     const parentage = await this.relationsRepo.find({
       where: { spaceId, type: 'PARENT_CHILD' },
-      select: ['fromPersonId', 'toPersonId'],
+      select: ['fromPersonId', 'toPersonId', 'meta'],
     });
     const childrenByParent = new Map<string, string[]>();
     parentage.forEach((relationship) => {
@@ -59,6 +59,46 @@ export class RelationshipsService {
       }
     }
     return false;
+  }
+
+  private lineageGenerationDelta(
+    relationships: Pick<
+      RelationshipEntity,
+      'type' | 'fromPersonId' | 'toPersonId' | 'meta'
+    >[],
+    firstPersonId: string,
+    secondPersonId: string,
+  ): number | null {
+    const adjacency = new Map<string, { personId: string; delta: number }[]>();
+    relationships.forEach((relationship) => {
+      if (
+        relationship.type !== 'PARENT_CHILD' ||
+        !isLineageParentChildMeta(relationship.meta)
+      ) {
+        return;
+      }
+      const forward = adjacency.get(relationship.fromPersonId) ?? [];
+      forward.push({ personId: relationship.toPersonId, delta: 1 });
+      adjacency.set(relationship.fromPersonId, forward);
+      const reverse = adjacency.get(relationship.toPersonId) ?? [];
+      reverse.push({ personId: relationship.fromPersonId, delta: -1 });
+      adjacency.set(relationship.toPersonId, reverse);
+    });
+    const levels = new Map<string, number>([[firstPersonId, 0]]);
+    const pending = [firstPersonId];
+    while (pending.length > 0) {
+      const current = pending.shift();
+      if (!current) continue;
+      const currentLevel = levels.get(current) ?? 0;
+      for (const step of adjacency.get(current) ?? []) {
+        if (levels.has(step.personId)) continue;
+        const level = currentLevel + step.delta;
+        if (step.personId === secondPersonId) return level;
+        levels.set(step.personId, level);
+        pending.push(step.personId);
+      }
+    }
+    return null;
   }
 
   async findByPerson(spaceId: string, personId: string, actorUserId: string) {
@@ -465,6 +505,20 @@ export class RelationshipsService {
         'Spouse relationship cannot be created between ancestor and descendant',
       );
     }
+    const parentage = await this.relationsRepo.find({
+      where: { spaceId, type: 'PARENT_CHILD' },
+      select: ['type', 'fromPersonId', 'toPersonId', 'meta'],
+    });
+    const generationDelta = this.lineageGenerationDelta(
+      parentage,
+      personAId,
+      personBId,
+    );
+    if (generationDelta !== null && generationDelta !== 0) {
+      throw new BadRequestException(
+        'Spouse relationship must connect people in the same lineage generation',
+      );
+    }
     const aGender = personA.gender;
     const bGender = personB.gender;
     if (aGender === 'MALE' && bGender !== 'FEMALE') {
@@ -527,6 +581,118 @@ export class RelationshipsService {
     }
 
     return saved;
+  }
+
+  async updateSpouse(
+    spaceId: string,
+    relationshipId: string,
+    meta: 'MARRIED' | 'DIVORCED' | 'WIDOWED',
+    startDate: string | null | undefined,
+    endDate: string | null | undefined,
+    actorUserId: string,
+    clientMutationId: string,
+  ) {
+    const requestFingerprint = JSON.stringify({
+      spaceId,
+      relationshipId,
+      meta,
+      startDate: startDate ?? null,
+      endDate: endDate ?? null,
+    });
+    return this.relationsRepo.manager.transaction(async (manager) => {
+      const priorMutation = await manager.findOne(ClientMutationEntity, {
+        where: { clientMutationId },
+      });
+      if (priorMutation) {
+        if (
+          priorMutation.actorUserId !== actorUserId ||
+          priorMutation.requestFingerprint !== requestFingerprint
+        ) {
+          throw new ConflictException(
+            'clientMutationId was already used for another mutation',
+          );
+        }
+        return JSON.parse(priorMutation.responseJson) as RelationshipEntity;
+      }
+
+      const relationship = await manager.findOneBy(RelationshipEntity, {
+        spaceId,
+        relationshipId,
+        type: 'SPOUSE',
+      });
+      if (!relationship) {
+        throw new NotFoundException('Spouse relationship not found');
+      }
+      const people = await manager.findBy(PersonEntity, {
+        spaceId,
+        personId: In([relationship.fromPersonId, relationship.toPersonId]),
+        isDeleted: false,
+      });
+      if (people.length < 2) {
+        throw new BadRequestException(
+          'Spouses must be active persons in this Family Space',
+        );
+      }
+      const parentage = await manager.find(RelationshipEntity, {
+        where: { spaceId, type: 'PARENT_CHILD' },
+        select: ['type', 'fromPersonId', 'toPersonId', 'meta'],
+      });
+      const generationDelta = this.lineageGenerationDelta(
+        parentage,
+        relationship.fromPersonId,
+        relationship.toPersonId,
+      );
+      if (generationDelta !== null && generationDelta !== 0) {
+        throw new BadRequestException(
+          'Spouse relationship must connect people in the same lineage generation',
+        );
+      }
+      await this.privacyService.requireFullAccessForPeople(
+        spaceId,
+        people,
+        actorUserId,
+        manager,
+      );
+
+      const resolvedStartDate = startDate ?? null;
+      const resolvedEndDate = meta === 'MARRIED' ? null : (endDate ?? null);
+      if (
+        resolvedEndDate &&
+        resolvedStartDate &&
+        resolvedEndDate < resolvedStartDate
+      ) {
+        throw new BadRequestException('endDate must be >= startDate');
+      }
+
+      const before = { ...relationship };
+      relationship.meta = meta;
+      relationship.startDate = resolvedStartDate;
+      relationship.endDate = resolvedEndDate;
+      const saved = await manager.save(relationship);
+      await manager.save(
+        manager.create(ChangeLogEntity, {
+          spaceId,
+          actorUserId,
+          entityType: 'RELATIONSHIP',
+          entityId: relationshipId,
+          operation: 'UPDATE',
+          note: `Update spouse relationship status to ${meta.toLowerCase()}`,
+          beforeJson: JSON.stringify(before),
+          afterJson: JSON.stringify(saved),
+        }),
+      );
+      await manager.save(
+        manager.create(ClientMutationEntity, {
+          clientMutationId,
+          actorUserId,
+          spaceId,
+          operation: 'UPDATE_SPOUSE',
+          requestFingerprint,
+          responseJson: JSON.stringify(saved),
+        }),
+      );
+      return saved;
+    });
   }
 
   private async redactRelationshipDetails(

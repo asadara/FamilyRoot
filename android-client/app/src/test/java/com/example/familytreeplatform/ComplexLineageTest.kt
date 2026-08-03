@@ -368,7 +368,7 @@ class ComplexLineageTest {
             positions.getValue("shared").centerX +
                 positions.getValue("partner-b").centerX
             ) / 2f
-        assertEquals(firstJunctionX, firstFamily.maxOf { it.centerX }, 0.01f)
+        assertEquals("positions=$positions", firstJunctionX, firstFamily.maxOf { it.centerX }, 0.01f)
         assertEquals(secondJunctionX, positions.getValue("b1").centerX, 0.01f)
         assertTrue(firstFamilyRight < positions.getValue("b1").left)
         positions.values.forEachIndexed { index, firstRect ->
@@ -534,7 +534,7 @@ class ComplexLineageTest {
             positions.getValue("sikem").centerX +
                 positions.getValue("cangkring").centerX
             ) / 2f
-        assertTrue(nnJunction < sikemJunction)
+        assertTrue("positions=$positions", nnJunction < sikemJunction)
         val nnChild = positions.getValue("karto-setiko")
         val sikemChildren = listOf("kalinem", "kasinem", "lasiyem")
             .map(positions::getValue)
@@ -546,6 +546,44 @@ class ComplexLineageTest {
                 assertFalse(firstRect.overlaps(secondRect, padding = 0f))
             }
         }
+    }
+
+    @Test
+    fun `historical partnerships remain separate placement components`() {
+        val relationships = listOf(
+            spouse("nn-cangkring", "nn", "cangkring", "WIDOWED", "1925-01-01"),
+            spouse("sikem-cangkring", "sikem", "cangkring", "WIDOWED", "1938-01-01"),
+            spouse("sikem-manto", "sikem", "manto", "WIDOWED", "1952-01-01"),
+            parentChild("nn-karto", "nn", "karto-setiko", "BIOLOGICAL"),
+            parentChild("cangkring-karto", "cangkring", "karto-setiko", "BIOLOGICAL"),
+            parentChild("sikem-kalinem", "sikem", "kalinem", "BIOLOGICAL"),
+            parentChild("cangkring-kalinem", "cangkring", "kalinem", "BIOLOGICAL")
+        )
+        val people = relationships
+            .flatMapTo(linkedSetOf()) { listOf(it.fromPersonId, it.toPersonId) }
+
+        val positions = planProgressivePlacements(
+            basePositions = mapOf(
+                "cangkring" to LineagePlacementRect(0f, 0f, 96f, 108f),
+                "nn" to LineagePlacementRect(-248f, 0f, 96f, 108f),
+                "sikem" to LineagePlacementRect(248f, 0f, 96f, 108f),
+                "manto" to LineagePlacementRect(496f, 0f, 96f, 108f)
+            ),
+            visiblePersonIds = people,
+            visibleRelationships = relationships,
+            allRelationships = relationships,
+            tileWidth = 96f,
+            tileHeight = 108f,
+            siblingGap = 28f,
+            partnershipGap = 28f,
+            rankGap = 44f,
+            fallbackY = 0f
+        )
+
+        assertTrue(positions.getValue("nn").right < positions.getValue("cangkring").left)
+        assertTrue(positions.getValue("cangkring").right < positions.getValue("sikem").left)
+        assertTrue(positions.getValue("sikem").right < positions.getValue("manto").left)
+        assertFalse(positions.getValue("karto-setiko").overlaps(positions.getValue("kalinem")))
     }
 
     @Test
