@@ -36,7 +36,7 @@ export class RelationshipsService {
   ): Promise<boolean> {
     const parentage = await this.relationsRepo.find({
       where: { spaceId, type: 'PARENT_CHILD' },
-      select: ['fromPersonId', 'toPersonId'],
+      select: ['fromPersonId', 'toPersonId', 'meta'],
     });
     const childrenByParent = new Map<string, string[]>();
     parentage.forEach((relationship) => {
@@ -59,6 +59,46 @@ export class RelationshipsService {
       }
     }
     return false;
+  }
+
+  private lineageGenerationDelta(
+    relationships: Pick<
+      RelationshipEntity,
+      'type' | 'fromPersonId' | 'toPersonId' | 'meta'
+    >[],
+    firstPersonId: string,
+    secondPersonId: string,
+  ): number | null {
+    const adjacency = new Map<string, { personId: string; delta: number }[]>();
+    relationships.forEach((relationship) => {
+      if (
+        relationship.type !== 'PARENT_CHILD' ||
+        !isLineageParentChildMeta(relationship.meta)
+      ) {
+        return;
+      }
+      const forward = adjacency.get(relationship.fromPersonId) ?? [];
+      forward.push({ personId: relationship.toPersonId, delta: 1 });
+      adjacency.set(relationship.fromPersonId, forward);
+      const reverse = adjacency.get(relationship.toPersonId) ?? [];
+      reverse.push({ personId: relationship.fromPersonId, delta: -1 });
+      adjacency.set(relationship.toPersonId, reverse);
+    });
+    const levels = new Map<string, number>([[firstPersonId, 0]]);
+    const pending = [firstPersonId];
+    while (pending.length > 0) {
+      const current = pending.shift();
+      if (!current) continue;
+      const currentLevel = levels.get(current) ?? 0;
+      for (const step of adjacency.get(current) ?? []) {
+        if (levels.has(step.personId)) continue;
+        const level = currentLevel + step.delta;
+        if (step.personId === secondPersonId) return level;
+        levels.set(step.personId, level);
+        pending.push(step.personId);
+      }
+    }
+    return null;
   }
 
   async findByPerson(spaceId: string, personId: string, actorUserId: string) {
@@ -465,6 +505,20 @@ export class RelationshipsService {
         'Spouse relationship cannot be created between ancestor and descendant',
       );
     }
+    const parentage = await this.relationsRepo.find({
+      where: { spaceId, type: 'PARENT_CHILD' },
+      select: ['type', 'fromPersonId', 'toPersonId', 'meta'],
+    });
+    const generationDelta = this.lineageGenerationDelta(
+      parentage,
+      personAId,
+      personBId,
+    );
+    if (generationDelta !== null && generationDelta !== 0) {
+      throw new BadRequestException(
+        'Spouse relationship must connect people in the same lineage generation',
+      );
+    }
     const aGender = personA.gender;
     const bGender = personB.gender;
     if (aGender === 'MALE' && bGender !== 'FEMALE') {
@@ -577,6 +631,20 @@ export class RelationshipsService {
       if (people.length < 2) {
         throw new BadRequestException(
           'Spouses must be active persons in this Family Space',
+        );
+      }
+      const parentage = await manager.find(RelationshipEntity, {
+        where: { spaceId, type: 'PARENT_CHILD' },
+        select: ['type', 'fromPersonId', 'toPersonId', 'meta'],
+      });
+      const generationDelta = this.lineageGenerationDelta(
+        parentage,
+        relationship.fromPersonId,
+        relationship.toPersonId,
+      );
+      if (generationDelta !== null && generationDelta !== 0) {
+        throw new BadRequestException(
+          'Spouse relationship must connect people in the same lineage generation',
         );
       }
       await this.privacyService.requireFullAccessForPeople(

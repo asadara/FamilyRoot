@@ -222,6 +222,43 @@ class TreeGraphViewModelTest {
     }
 
     @Test
+    fun `partnership never overrides generation proven by biological lineage`() {
+        val relationships = listOf(
+            relationship("ancestor-parent", "PARENT_CHILD", "ancestor", "parent")
+                .copy(meta = "BIOLOGICAL"),
+            relationship("parent-center", "PARENT_CHILD", "parent", "center")
+                .copy(meta = "BIOLOGICAL"),
+            relationship("center-child", "PARENT_CHILD", "center", "child")
+                .copy(meta = "BIOLOGICAL"),
+            relationship("invalid-spouse", "SPOUSE", "ancestor", "child")
+                .copy(meta = "WIDOWED")
+        )
+
+        val levels = familyGenerationLevels("center", relationships)
+
+        assertEquals(-2, levels["ancestor"])
+        assertEquals(-1, levels["parent"])
+        assertEquals(0, levels["center"])
+        assertEquals(1, levels["child"])
+    }
+
+    @Test
+    fun `partnership aligns a disconnected partner lineage without changing the focus lineage`() {
+        val relationships = listOf(
+            relationship("center-partner", "SPOUSE", "center", "partner")
+                .copy(meta = "MARRIED"),
+            relationship("partner-parent", "PARENT_CHILD", "partner-parent", "partner")
+                .copy(meta = "BIOLOGICAL")
+        )
+
+        val levels = familyGenerationLevels("center", relationships)
+
+        assertEquals(0, levels["center"])
+        assertEquals(0, levels["partner"])
+        assertEquals(-1, levels["partner-parent"])
+    }
+
+    @Test
     fun `search result advances exploration focus without showing graph path automatically`() {
         val state = TreeGraphUiState(
             centerPersonId = "parent",
@@ -312,6 +349,46 @@ class TreeGraphViewModelTest {
                 relationships
             )?.contains("lingkaran") == true
         )
+
+        val crossGeneration = listOf(
+            relationship("root-a", "PARENT_CHILD", "root", "a")
+                .copy(meta = "BIOLOGICAL"),
+            relationship("root-b", "PARENT_CHILD", "root", "b")
+                .copy(meta = "BIOLOGICAL"),
+            relationship("b-next", "PARENT_CHILD", "b", "next")
+                .copy(meta = "BIOLOGICAL")
+        )
+        assertTrue(
+            validateProposedRelationship(
+                "a",
+                "next",
+                ExistingRelationKind.PARTNER,
+                "MARRIED",
+                crossGeneration
+            )?.contains("berbeda tingkat generasi") == true
+        )
+    }
+
+    @Test
+    fun `integrity audit flags an existing cross generation spouse edge`() {
+        val people = listOf(
+            person("ancestor", "Nn", "2026-01-01"),
+            person("parent", "Harmanto", "2026-01-01"),
+            person("child", "Solihin", "2026-01-01")
+        )
+        val relationships = listOf(
+            relationship("ancestor-parent", "PARENT_CHILD", "ancestor", "parent")
+                .copy(meta = "BIOLOGICAL"),
+            relationship("parent-child", "PARENT_CHILD", "parent", "child")
+                .copy(meta = "BIOLOGICAL"),
+            relationship("invalid-spouse", "SPOUSE", "ancestor", "child")
+                .copy(meta = "WIDOWED")
+        )
+
+        val conflict = detectRelationshipIntegrityConflicts(people, relationships).single()
+
+        assertEquals("invalid-spouse", conflict.recommendedRelationshipId)
+        assertTrue(conflict.title.contains("berbeda tingkat generasi"))
     }
 
     @Test

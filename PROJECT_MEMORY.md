@@ -1049,3 +1049,27 @@ melanjutkan diskusi atau pekerjaan yang diminta pengguna.
 - `PRODUCTION` tidak dilonggarkan: versionCode distribusi store tetap monoton,
   API contract naik hanya untuk incompatibility nyata, dan enforcement eksplisit
   tetap memblokir build beta sekalipun.
+
+## 22. Lineage-First dan Perbaikan Data Ummah Bugo (3 Agustus 2026)
+
+- `familyGenerationLevels` kini menghitung level dari parent-child lineage terlebih
+  dahulu. Pasangan hanya menyelaraskan komponen lineage terpisah dan tidak dapat
+  menimpa level biologis yang sudah ditemukan.
+- `DIVORCED`/`WIDOWED` tidak lagi disatukan dalam komponen placement atomik. Posisi
+  historis bersifat lunak, sedangkan cincin tetap menjadi anchor kuat bagi kelompok
+  anak biologis pasangan tersebut.
+- Reflow pasca-placement mengembalikan pasangan lama ke sisi luar, menambatkan child
+  block ke titik cincin, dan melebarkan jarak pasangan ketika koridor keluarga akan
+  bertumpuk. Fixture Nn–Mbah Cangkring–Sikem–Manto menjadi regression utama.
+- Backend menolak spouse edge dengan selisih level pada satu jaringan lineage,
+  termasuk kerabat beda generasi yang bukan pasangan ancestor/descendant langsung.
+- Edge salah `Nn–Solihin` (`efcd3b1c-224b-40d1-9429-6404856de2fc`) telah dihapus
+  melalui aplikasi dan tersinkron ke cloud. Cold refresh profil Nn membuktikan hanya
+  Karto Setiko serta pasangan historis Mbah Cangkring yang tersisa; Solihin tetap anak
+  Harmanto dan Sri Lestari.
+- Quality gate lulus: backend 39 unit, 22 E2E, dan build; Android 144 unit test,
+  lint, debug APK, serta 40/40 connected instrumentation pada Samsung SM-T225.
+  APK pilot build 5 (`0.1.4-beta`) telah dipasang lewat USB dan cold-launch tanpa
+  `AndroidRuntime` crash. Instrumentation mereset data aplikasi lokal sehingga smoke
+  data cloud terakhir menunggu pemilik memilih ulang akun Google pada account picker.
+  Deployment revision backend baru tetap menunggu publish source diotorisasi.

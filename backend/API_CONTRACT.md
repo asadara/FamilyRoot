@@ -289,6 +289,10 @@ Phase 4 concurrency contract (initial slice):
   requires `spaceId` plus UUID `clientMutationId`. `MARRIED` clears `endDate`;
   historical statuses set it to the supplied date or `null`. Replay is idempotent and each accepted
   change writes one relationship audit entry.
+- Spouse creation and status update reject endpoints whose parent-child lineage
+  levels differ, even when neither endpoint is a direct ancestor of the other.
+  Historical status is not an escape hatch for a cross-generation data error;
+  clients must remove or correct the edge instead.
 - `POST /persons` accepts optional UUID `clientMutationId`. New Android clients
   always send it so replay returns the same Person without a second audit entry;
   omission remains supported for legacy clients.

@@ -3,7 +3,9 @@ package com.example.familytreeplatform.feature.support
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import com.example.familytreeplatform.BuildConfig
 import com.example.familytreeplatform.ui.theme.FamilyTreePlatformTheme
 import org.junit.Rule
@@ -38,9 +40,12 @@ class SupportScreensInstrumentedTest {
 
         composeRule.onNodeWithText("Petunjuk penggunaan").assertIsDisplayed()
         composeRule.onNodeWithText("Menjelajahi pohon").assertIsDisplayed()
-        composeRule.onNodeWithText("Mengisi data").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("Undangan dan peran").performScrollTo().assertIsDisplayed()
-        composeRule.onNodeWithText("Export pohon").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Menambah person").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("Menambah hubungan").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("support-page-list").performScrollToIndex(12)
+        composeRule.onNodeWithText("Undangan dan peran").assertIsDisplayed()
+        composeRule.onNodeWithTag("support-page-list").performScrollToIndex(14)
+        composeRule.onNodeWithText("Export pohon").assertIsDisplayed()
         composeRule.onNodeWithText("© sadar@studio 2026").assertIsDisplayed()
     }
 }

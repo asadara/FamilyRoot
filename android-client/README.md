@@ -79,6 +79,12 @@ yang secara eksplisit mengaktifkan enforcement tetap dapat memblokir build tidak
 kompatibel. Channel `PRODUCTION` mempertahankan gate ketat dan `versionCode` monoton
 untuk distribusi store.
 
+Graph memakai resolver lineage-first: level generasi berasal dari parent-child.
+Pasangan `DIVORCED`/`WIDOWED` tetap ditampilkan dengan cincin masing-masing, tetapi
+tidak mengunci card sebagai satu unit; blok anak bersama ditambatkan ke cincin dan
+memperoleh rentang horizontal terpisah. Edge pasangan yang berlawanan dengan level
+biologis tidak boleh menggeser card lain.
+
 Panduan Google Auth Platform, package/SHA-1 pilot, migration, dan acceptance test
 berada di `../docs/GOOGLE_SIGN_IN_SETUP.md`.
 

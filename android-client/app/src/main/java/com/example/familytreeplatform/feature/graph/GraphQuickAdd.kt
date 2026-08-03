@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
@@ -49,7 +51,7 @@ fun GraphAddPersonDialog(
         onDismissRequest = { if (!saving) onDismiss() },
         title = { Text("Tambah person baru") },
         text = {
-            Column {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 Text(
                     "Card akan langsung muncul di workspace pada bagian Belum terhubung. " +
                         "Hubungan keluarga dapat ditentukan setelahnya."
@@ -131,7 +133,7 @@ fun GraphQuickAddDialog(
         onDismissRequest = { if (!saving) onDismiss() },
         title = { Text("Tambah $relationLabel") },
         text = {
-            Column {
+            Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
                 Text(
                     request.coParentName?.let {
                         "Person baru akan dihubungkan sebagai anak ${request.anchorName} dan $it."

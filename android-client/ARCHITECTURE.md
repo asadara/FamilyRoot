@@ -211,6 +211,12 @@ Slice offline-write yang sudah aktif:
 - perubahan status pasangan `MARRIED`/`DIVORCED`/`WIDOWED` memakai mutation queue
   `UPDATE_SPOUSE`; cache graph berubah optimistis, replay backend idempoten, dan
   penolakan permanen mengembalikan edge sebelum perubahan;
+- resolver graph bersifat lineage-first: parent-child menentukan level, sedangkan
+  spouse hanya menyelaraskan komponen yang belum memiliki level dan tidak dapat
+  menarik card yang sudah mempunyai level biologis;
+- hanya spouse aktif yang membentuk unit placement atomik. Pasangan historis tetap
+  mempunyai cincin interaktif, tetapi kartunya bergerak lunak; child block diukur dan
+  ditambatkan per pasangan biologis agar koridor horizontal tidak berbagi rentang;
 - validasi lokal mencegah self-link, duplicate, cycle, pasangan tidak valid, dan lebih dari dua orang tua biologis sebelum queue; backend tetap memvalidasi ulang sebagai source of truth;
 - jika backend menolak relasi karena graph server sudah berubah, edge optimistis di-rollback dan item ditandai `FAILED` agar garis lineage yang tidak sah tidak tertinggal.
 - Room v8 menyimpan cache catatan sumber; `CREATE_SOURCE` tampil optimistis, bertahan

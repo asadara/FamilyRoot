@@ -70,6 +70,33 @@ internal fun detectRelationshipIntegrityConflicts(
             )
         }
 
+    relationships
+        .filter { it.type == "SPOUSE" }
+        .forEach { partnership ->
+            val pair = canonicalPair(partnership.fromPersonId, partnership.toPersonId)
+            if (relationshipsByPair[pair].orEmpty().any { it.isLineageParentChild() }) {
+                return@forEach
+            }
+            val generationDelta = lineageGenerationDelta(
+                partnership.fromPersonId,
+                partnership.toPersonId,
+                relationships
+            )
+            if (generationDelta == null || generationDelta == 0) return@forEach
+            val firstName = names[partnership.fromPersonId] ?: "Person pertama"
+            val secondName = names[partnership.toPersonId] ?: "Person kedua"
+            conflicts += RelationshipIntegrityConflict(
+                id = "cross-generation-spouse:${partnership.relationshipId}",
+                title = "$firstName dan $secondName berbeda tingkat generasi",
+                detail = "Hubungan pasangan melompati ${kotlin.math.abs(generationDelta)} " +
+                    "tingkat lineage dan dapat mengaburkan posisi keturunan.",
+                recommendation = "Rekomendasi: hapus hubungan pasangan $firstName dan " +
+                    "$secondName, lalu hubungkan record person yang benar bila diperlukan.",
+                relationshipIds = setOf(partnership.relationshipId),
+                recommendedRelationshipId = partnership.relationshipId
+            )
+        }
+
     return conflicts.sortedBy { it.title }
 }
 
@@ -105,6 +132,14 @@ internal fun validateProposedRelationship(
         ) {
             return "Hubungan pasangan tidak dapat dibuat karena salah satu person berada pada jalur leluhur yang lain."
         }
+        val generationDelta = lineageGenerationDelta(
+            sourcePersonId,
+            targetPersonId,
+            relationships
+        )
+        if (generationDelta != null && generationDelta != 0) {
+            return "Hubungan pasangan tidak dapat dibuat karena kedua person berbeda tingkat generasi lineage."
+        }
         return null
     }
 
@@ -136,6 +171,36 @@ internal fun validateProposedRelationship(
         }
         if (biologicalParentCount >= 2) {
             return "Person ini sudah memiliki dua orang tua biologis. Gunakan hubungan adopsi atau tiri bila sesuai."
+        }
+    }
+    return null
+}
+
+private fun lineageGenerationDelta(
+    firstPersonId: String,
+    secondPersonId: String,
+    relationships: List<ExportRelationship>
+): Int? {
+    data class Step(val personId: String, val delta: Int)
+
+    val adjacency = mutableMapOf<String, MutableList<Step>>()
+    relationships.filter { it.isLineageParentChild() }.forEach { relationship ->
+        adjacency.getOrPut(relationship.fromPersonId) { mutableListOf() }
+            .add(Step(relationship.toPersonId, 1))
+        adjacency.getOrPut(relationship.toPersonId) { mutableListOf() }
+            .add(Step(relationship.fromPersonId, -1))
+    }
+    val levels = mutableMapOf(firstPersonId to 0)
+    val queue = ArrayDeque<String>().apply { add(firstPersonId) }
+    while (queue.isNotEmpty()) {
+        val personId = queue.removeFirst()
+        val level = levels.getValue(personId)
+        adjacency[personId].orEmpty().forEach { step ->
+            if (step.personId in levels) return@forEach
+            val nextLevel = level + step.delta
+            if (step.personId == secondPersonId) return nextLevel
+            levels[step.personId] = nextLevel
+            queue.addLast(step.personId)
         }
     }
     return null

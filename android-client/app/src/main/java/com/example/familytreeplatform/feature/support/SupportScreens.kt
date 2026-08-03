@@ -18,6 +18,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.familytreeplatform.BuildConfig
@@ -220,7 +221,10 @@ private fun SupportPage(
         }
         LazyColumn(
             verticalArrangement = Arrangement.spacedBy(14.dp),
-            modifier = Modifier.weight(1f).fillMaxWidth(),
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .testTag("support-page-list"),
             contentPadding = androidx.compose.foundation.layout.PaddingValues(20.dp)
         ) {
             content()

@@ -201,12 +201,22 @@ internal fun planProgressivePlacements(
     val visiblePartnerships = visibleRelationships.filter {
         it.type == "SPOUSE" && it.fromPersonId in visible && it.toPersonId in visible
     }
-    val components = PartnershipComponents(visible, visiblePartnerships)
+    val preferredPositions = preferredSoftPartnershipPositions(
+        basePositions = basePositions,
+        partnerships = visiblePartnerships,
+        relationshipIndex = relationshipIndex,
+        partnershipStep = partnershipStep,
+        swappedPartnershipKeys = swappedPartnershipKeys
+    )
+    val components = PartnershipComponents(
+        visible,
+        visiblePartnerships.filter(::isCurrentPartnership)
+    )
     val units = components.personIdsByComponent.mapValues { (componentId, personIds) ->
         buildAtomicPlacementUnit(
             componentId = componentId,
             personIds = personIds,
-            basePositions = basePositions,
+            basePositions = preferredPositions,
             partnerships = visiblePartnerships,
             relationshipIndex = relationshipIndex,
             tileWidth = tileWidth,
@@ -369,13 +379,363 @@ internal fun planProgressivePlacements(
         primaryUnitId = primaryUnitId,
         siblingGap = siblingGap
     )
-    return reserveLineageFamilyBlocks(
+    val reservedPlacements = reserveLineageFamilyBlocks(
         placements = compactedPlacements,
         components = components,
         componentRelationships = componentRelationships,
         primaryUnitId = primaryUnitId,
         siblingGap = siblingGap
     )
+    return softenHistoricalPartnershipLayout(
+        placements = reservedPlacements,
+        components = components,
+        componentRelationships = componentRelationships,
+        primaryUnitId = primaryUnitId,
+        visiblePartnerships = visiblePartnerships,
+        relationshipIndex = relationshipIndex,
+        partnershipStep = partnershipStep,
+        siblingGap = siblingGap,
+        swappedPartnershipKeys = swappedPartnershipKeys
+    )
+}
+
+private fun softenHistoricalPartnershipLayout(
+    placements: Map<String, LineagePlacementRect>,
+    components: PartnershipComponents,
+    componentRelationships: List<ComponentRelationship>,
+    primaryUnitId: String?,
+    visiblePartnerships: List<ExportRelationship>,
+    relationshipIndex: LineageRelationshipIndex,
+    partnershipStep: Float,
+    siblingGap: Float,
+    swappedPartnershipKeys: Set<String>
+): Map<String, LineagePlacementRect> {
+    if (primaryUnitId == null || visiblePartnerships.none { !isCurrentPartnership(it) }) {
+        return placements
+    }
+    val result = placements.toMutableMap()
+
+    fun componentBounds(componentId: String): LineagePlacementRect {
+        val rects = components.personIdsByComponent.getValue(componentId).map(result::getValue)
+        return LineagePlacementRect(
+            x = rects.minOf { it.left },
+            y = rects.minOf { it.top },
+            width = rects.maxOf { it.right } - rects.minOf { it.left },
+            height = rects.maxOf { it.bottom } - rects.minOf { it.top }
+        )
+    }
+
+    fun shiftComponents(componentIds: Set<String>, dx: Float) {
+        componentIds
+            .flatMap { components.personIdsByComponent.getValue(it) }
+            .distinct()
+            .forEach { personId -> result[personId] = result.getValue(personId).shifted(dx) }
+    }
+
+    // Lay historical partners out from the focused/current component. Only the
+    // target component moves; the relationship remains free to widen later.
+    val positionedComponents = linkedSetOf(primaryUnitId)
+    val historical = visiblePartnerships
+        .filterNot(::isCurrentPartnership)
+        .sortedWith(partnershipChronologyComparator)
+    var positionedAnotherComponent: Boolean
+    do {
+        positionedAnotherComponent = false
+        historical.forEach { relationship ->
+            val fromComponent = components.componentByPersonId.getValue(relationship.fromPersonId)
+            val toComponent = components.componentByPersonId.getValue(relationship.toPersonId)
+            if (fromComponent == toComponent) return@forEach
+            val knownPersonId: String
+            val targetPersonId: String
+            val targetComponent: String
+            when {
+                fromComponent in positionedComponents && toComponent !in positionedComponents -> {
+                    knownPersonId = relationship.fromPersonId
+                    targetPersonId = relationship.toPersonId
+                    targetComponent = toComponent
+                }
+                toComponent in positionedComponents && fromComponent !in positionedComponents -> {
+                    knownPersonId = relationship.toPersonId
+                    targetPersonId = relationship.fromPersonId
+                    targetComponent = fromComponent
+                }
+                else -> return@forEach
+            }
+            var slot = partnershipHorizontalSlot(
+                personId = knownPersonId,
+                relationshipId = relationship.relationshipId,
+                index = relationshipIndex
+            )
+            val currentPartnerRect = relationshipIndex
+                .partnerships(knownPersonId)
+                .filter(::isCurrentPartnership)
+                .lastOrNull()
+                ?.otherPersonId(knownPersonId)
+                ?.let(result::get)
+            if (currentPartnerRect != null) {
+                val knownRect = result.getValue(knownPersonId)
+                val outwardDirection = knownRect.centerX
+                    .compareTo(currentPartnerRect.centerX)
+                    .takeIf { it != 0 }
+                if (outwardDirection != null) {
+                    slot = kotlin.math.abs(slot) * outwardDirection
+                }
+            }
+            if (
+                partnershipPairKey(
+                    relationship.fromPersonId,
+                    relationship.toPersonId
+                ) in swappedPartnershipKeys
+            ) {
+                slot = -slot
+            }
+            val knownRect = result.getValue(knownPersonId)
+            val targetRect = result.getValue(targetPersonId)
+            var dx = knownRect.x + slot * partnershipStep - targetRect.x
+            var shiftedBounds = componentBounds(targetComponent).shifted(dx)
+            val direction = slot.compareTo(0).takeIf { it != 0 } ?: 1
+            while (
+                positionedComponents.any { fixedId ->
+                    componentBounds(fixedId).overlaps(shiftedBounds, padding = 0f)
+                }
+            ) {
+                dx += direction * partnershipStep
+                shiftedBounds = componentBounds(targetComponent).shifted(dx)
+            }
+            shiftComponents(setOf(targetComponent), dx)
+            positionedComponents += targetComponent
+            positionedAnotherComponent = true
+        }
+    } while (positionedAnotherComponent)
+
+    val parentsByChild = componentRelationships
+        .groupBy { it.relationship.toPersonId }
+        .mapValues { (_, links) -> links.mapTo(linkedSetOf()) { it.relationship.fromPersonId } }
+    val childComponentsByParentComponent = componentRelationships
+        .groupBy { it.fromComponentId }
+        .mapValues { (_, links) -> links.mapTo(linkedSetOf()) { it.toComponentId } }
+
+    fun descendantComponents(startComponentId: String): Set<String> {
+        val descendants = linkedSetOf<String>()
+        val queue = ArrayDeque<String>().apply { add(startComponentId) }
+        while (queue.isNotEmpty()) {
+            val componentId = queue.removeFirst()
+            if (!descendants.add(componentId)) continue
+            childComponentsByParentComponent[componentId].orEmpty().forEach(queue::addLast)
+        }
+        return descendants
+    }
+
+    data class HistoricalFamily(
+        val parentIds: Set<String>,
+        val childIds: List<String>,
+        val ringX: Float
+    )
+
+    val partnershipPairs = visiblePartnerships.associateBy {
+        partnershipPairKey(it.fromPersonId, it.toPersonId)
+    }
+    val families = parentsByChild.entries
+        .groupBy { (_, parentIds) -> parentIds }
+        .mapNotNull { (parentIds, entries) ->
+            if (parentIds.size != 2 || partnershipPairKey(parentIds.first(), parentIds.last()) !in partnershipPairs) {
+                return@mapNotNull null
+            }
+            val orderedParents = parentIds.sorted()
+            HistoricalFamily(
+                parentIds = parentIds,
+                childIds = entries.map { it.key }.sorted(),
+                ringX = orderedParents.map { result.getValue(it).centerX }.average().toFloat()
+            )
+        }
+    val remainingFamilies = families.toMutableSet()
+    while (remainingFamilies.isNotEmpty()) {
+        val network = linkedSetOf(remainingFamilies.first())
+        var expanded: Boolean
+        do {
+            expanded = false
+            remainingFamilies.filter { candidate ->
+                candidate !in network && network.any { it.parentIds.intersect(candidate.parentIds).isNotEmpty() }
+            }.forEach {
+                network += it
+                expanded = true
+            }
+        } while (expanded)
+        remainingFamilies.removeAll(network)
+        val orderedFamilies = network.sortedBy { it.ringX }
+        orderedFamilies.forEachIndexed { familyIndex, family ->
+            val direction = when {
+                orderedFamilies.size == 1 -> 0
+                familyIndex == 0 -> -1
+                familyIndex == orderedFamilies.lastIndex -> 1
+                else -> 0
+            }
+            val childBlocks = family.childIds.map { childId ->
+                val componentId = components.componentByPersonId.getValue(childId)
+                childId to descendantComponents(componentId)
+            }
+            val overlappingBlocks = childBlocks
+                .flatMap { it.second }
+                .groupingBy { it }
+                .eachCount()
+                .any { it.value > 1 }
+            if (overlappingBlocks) return@forEachIndexed
+
+            val orderedChildren = childBlocks.sortedBy { (childId, _) ->
+                result.getValue(childId).centerX
+            }
+            val traversal = if (direction < 0) orderedChildren.asReversed() else orderedChildren
+            var occupiedEdge: Float? = null
+            traversal.forEachIndexed { index, (childId, blockIds) ->
+                val childRect = result.getValue(childId)
+                var dx = if (index == 0) family.ringX - childRect.centerX else 0f
+                if (index > 0) {
+                    val blockRects = blockIds
+                        .flatMap { components.personIdsByComponent.getValue(it) }
+                        .map(result::getValue)
+                    val left = blockRects.minOf { it.left }
+                    val right = blockRects.maxOf { it.right }
+                    dx = if (direction < 0) {
+                        requireNotNull(occupiedEdge) - siblingGap - right
+                    } else {
+                        requireNotNull(occupiedEdge) + siblingGap - left
+                    }
+                }
+                shiftComponents(blockIds, dx)
+                val shiftedRects = blockIds
+                    .flatMap { components.personIdsByComponent.getValue(it) }
+                    .map(result::getValue)
+                occupiedEdge = if (direction < 0) {
+                    shiftedRects.minOf { it.left }
+                } else {
+                    shiftedRects.maxOf { it.right }
+                }
+            }
+        }
+
+        fun familyComponentIds(family: HistoricalFamily): Set<String> = family.childIds
+            .flatMapTo(linkedSetOf()) { childId ->
+                descendantComponents(components.componentByPersonId.getValue(childId))
+            }
+
+        fun familyBounds(family: HistoricalFamily): LineagePlacementRect {
+            val rects = familyComponentIds(family)
+                .flatMap { components.personIdsByComponent.getValue(it) }
+                .map(result::getValue)
+            return LineagePlacementRect(
+                x = rects.minOf { it.left },
+                y = rects.minOf { it.top },
+                width = rects.maxOf { it.right } - rects.minOf { it.left },
+                height = rects.maxOf { it.bottom } - rects.minOf { it.top }
+            )
+        }
+
+        fun widenHistoricalGap(
+            movingFamily: HistoricalFamily,
+            fixedFamily: HistoricalFamily,
+            dx: Float
+        ) {
+            if (dx == 0f) return
+            val sharedParents = movingFamily.parentIds.intersect(fixedFamily.parentIds)
+            if (sharedParents.size != 1) return
+            val outerParentId = movingFamily.parentIds.minus(sharedParents).single()
+            shiftComponents(familyComponentIds(movingFamily), dx)
+            shiftComponents(
+                setOf(components.componentByPersonId.getValue(outerParentId)),
+                dx * 2f
+            )
+        }
+
+        if (orderedFamilies.size > 1) {
+            val currentFamilyIndex = orderedFamilies.indexOfFirst { family ->
+                partnershipPairs.getValue(
+                    partnershipPairKey(family.parentIds.first(), family.parentIds.last())
+                ).let(::isCurrentPartnership)
+            }.takeIf { it >= 0 }
+                ?: orderedFamilies.indices.maxBy { orderedFamilies[it].childIds.size }
+
+            for (index in currentFamilyIndex - 1 downTo 0) {
+                val moving = orderedFamilies[index]
+                val fixed = orderedFamilies[index + 1]
+                val movingBounds = familyBounds(moving)
+                val fixedBounds = familyBounds(fixed)
+                val dx = (fixedBounds.left - siblingGap - movingBounds.right).coerceAtMost(0f)
+                widenHistoricalGap(moving, fixed, dx)
+            }
+            for (index in currentFamilyIndex + 1..orderedFamilies.lastIndex) {
+                val moving = orderedFamilies[index]
+                val fixed = orderedFamilies[index - 1]
+                val movingBounds = familyBounds(moving)
+                val fixedBounds = familyBounds(fixed)
+                val dx = (fixedBounds.right + siblingGap - movingBounds.left).coerceAtLeast(0f)
+                widenHistoricalGap(moving, fixed, dx)
+            }
+        }
+    }
+    return result
+}
+
+/**
+ * Gives historical partners preferred same-row positions without merging them into
+ * one atomic component. The later family-block passes remain free to widen the gap
+ * when either partnership needs more room for descendants.
+ */
+private fun preferredSoftPartnershipPositions(
+    basePositions: Map<String, LineagePlacementRect>,
+    partnerships: List<ExportRelationship>,
+    relationshipIndex: LineageRelationshipIndex,
+    partnershipStep: Float,
+    swappedPartnershipKeys: Set<String>
+): Map<String, LineagePlacementRect> {
+    val preferred = basePositions.toMutableMap()
+    val historical = partnerships
+        .filterNot(::isCurrentPartnership)
+        .sortedWith(partnershipChronologyComparator)
+    var addedPosition: Boolean
+    do {
+        addedPosition = false
+        historical.forEach { relationship ->
+            val fromRect = preferred[relationship.fromPersonId]
+            val toRect = preferred[relationship.toPersonId]
+            val knownPersonId: String
+            val targetPersonId: String
+            val knownRect: LineagePlacementRect
+            when {
+                fromRect != null && toRect == null -> {
+                    knownPersonId = relationship.fromPersonId
+                    targetPersonId = relationship.toPersonId
+                    knownRect = fromRect
+                }
+                toRect != null && fromRect == null -> {
+                    knownPersonId = relationship.toPersonId
+                    targetPersonId = relationship.fromPersonId
+                    knownRect = toRect
+                }
+                else -> return@forEach
+            }
+            var slot = partnershipHorizontalSlot(
+                personId = knownPersonId,
+                relationshipId = relationship.relationshipId,
+                index = relationshipIndex
+            )
+            if (
+                partnershipPairKey(
+                    relationship.fromPersonId,
+                    relationship.toPersonId
+                ) in swappedPartnershipKeys
+            ) {
+                slot = -slot
+            }
+            preferred[targetPersonId] = LineagePlacementRect(
+                x = knownRect.x + slot * partnershipStep,
+                y = knownRect.y,
+                width = knownRect.width,
+                height = knownRect.height
+            )
+            addedPosition = true
+        }
+    } while (addedPosition)
+    return preferred
 }
 
 /**

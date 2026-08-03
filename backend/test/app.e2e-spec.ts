@@ -919,6 +919,43 @@ describe('Phase 1 security contract (e2e)', () => {
       .expect(({ body }) =>
         expect(body.message).toContain('between ancestor and descendant'),
       );
+
+    const nextGenerationRelative = await request(app.getHttpServer())
+      .post('/persons')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        spaceId,
+        firstName: 'Granddaughter',
+        nickName: 'Granddaughter',
+        gender: 'FEMALE',
+      })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/persons/parent-child')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        spaceId,
+        parentId: femaleDescendant.body.personId,
+        childId: nextGenerationRelative.body.personId,
+        meta: 'BIOLOGICAL',
+        clientMutationId: randomUUID(),
+      })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/relationships/spouse')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        spaceId,
+        personAId: child.body.personId,
+        personBId: nextGenerationRelative.body.personId,
+        meta: 'MARRIED',
+        startDate: '2024-01-01',
+        clientMutationId: randomUUID(),
+      })
+      .expect(400)
+      .expect(({ body }) =>
+        expect(body.message).toContain('same lineage generation'),
+      );
     await request(app.getHttpServer())
       .get('/relationships')
       .set('Authorization', `Bearer ${ownerToken}`)

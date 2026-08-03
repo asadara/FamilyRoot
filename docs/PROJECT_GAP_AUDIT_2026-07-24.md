@@ -295,12 +295,22 @@ aktif beralih ke daftar tekstual virtualized dengan urutan fokus lalu alfabetis.
 Tidak ada animasi baru, sehingga preferensi reduced-motion tidak diabaikan. Layout
 dan semantik care/lineage tidak diubah oleh optimasi render.
 
-Audit keluarga Ummah Bugo membuka kembali bagian layout partnership historis:
-hubungan `DIVORCED`/`WIDOWED` sudah memiliki cincin pembeda dan tidak lagi dianggap
-unit adjacency keras pada export, tetapi pass utama belum sepenuhnya memesan interval
-X keturunan per pasangan biologis. Skenario Sikem–Manto Karto Rejo dan
-Sikem–Mbah Cangkring, termasuk pasangan lama Mbah Cangkring–Nn, menjadi acceptance
-fixture untuk memastikan koridor horizontal antarpasangan tidak bertumpuk.
+Audit keluarga Ummah Bugo menutup gap utama layout partnership historis pada 3
+Agustus 2026. Resolver generasi kini menyelesaikan komponen parent-child lebih dahulu;
+edge pasangan hanya boleh menyelaraskan komponen lineage yang belum mempunyai level
+dan tidak dapat menimpa hasil biologis. `DIVORCED`/`WIDOWED` dikeluarkan dari komponen
+placement keras, tetapi cincin setiap pasangan tetap menjadi anchor bagi anak bersama.
+Reflow mengukur blok turunan, menempatkan pasangan lama ke sisi luar, dan melebarkan
+jarak antarkoridor bila dua keluarga akan bertumpuk.
+
+Fixture Sikem–Manto Karto Rejo, Sikem–Mbah Cangkring, dan Mbah Cangkring–Nn kini
+menguji pasangan historis lunak, cincin tanpa anak, serta koridor terpisah untuk Karto
+Setiko dan kelompok Kalinem/Kasinem/Lasiyem. Hubungan anomali Nn–Solihin dihapus dari
+data Ummah Bugo; Solihin tetap anak biologis Harmanto dan Sri Lestari. P8 tetap
+`PARTIAL` hanya untuk incremental reflow yang lebih lokal, dense-partnership stress
+yang lebih luas, dan bukti performance gate tablet. Gate perubahan ini mencatat 144
+unit test Android, lint, build debug, dan 40/40 connected instrumentation lulus pada
+Samsung SM-T225; APK pilot build 5 juga terpasang dan cold-launch tanpa crash.
 
 Minimap privacy-safe kini hanya memproyeksikan geometri netral dari node dan lineage
 yang memang aktif/terlihat. Ia tidak membawa ID, nama, foto, umur, status, metadata,

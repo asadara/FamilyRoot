@@ -1572,3 +1572,29 @@ fail-open ketika policy `enforcementEnabled=false`, termasuk saat endpoint tidak
 tersedia. Enforcement eksplisit tetap menang. Channel `PRODUCTION` dan publikasi
 store mempertahankan versionCode monoton, pemeriksaan ketat, serta urutan rollout
 backend → APK → minimum supported version.
+
+### 31.18 Resolver lineage-first dan koridor pasangan historis lunak
+
+Keputusan implementasi 3 Agustus 2026 memperjelas bahwa status pasangan tidak pernah
+menjadi sumber utama tingkat generasi:
+
+- level diselesaikan dari edge parent-child lineage terlebih dahulu;
+- edge pasangan boleh menyelaraskan komponen biologis yang benar-benar terpisah,
+  misalnya keluarga asal pasangan, tetapi tidak boleh menimpa level yang sudah
+  terbukti oleh jalur parent-child;
+- bila dua endpoint pasangan sudah mempunyai level berbeda, layout mempertahankan
+  keduanya dan backend menolak pembuatan/perubahan status edge tersebut sebagai
+  anomali lintas-generasi;
+- hanya `MARRIED` tanpa `endDate` yang boleh menjadi komponen placement atomik;
+  `DIVORCED` dan `WIDOWED` memperoleh posisi preferensi yang dapat digeser ke luar;
+- setiap pasangan tetap memiliki cincin sendiri. Anak bersama dikelompokkan dari dua
+  edge parent-child eksplisit dan blok turunannya ditambatkan ke cincin itu;
+- keluarga di sisi kiri tumbuh ke luar kiri, keluarga di sisi kanan tumbuh ke luar
+  kanan, dan jarak kartu pasangan historis dapat diperbesar dua kali pergeseran blok
+  anak agar titik tengah cincin tetap stabil.
+
+Acceptance nyata memakai rangkaian Nn–Mbah Cangkring–Sikem–Manto. Karto Setiko
+berasal dari cincin Nn–Mbah Cangkring; Kalinem, Kasinem, dan Lasiyem berasal dari
+cincin Mbah Cangkring–Sikem; cincin Sikem–Manto tetap terlihat tanpa trunk anak.
+Edge Nn–Solihin adalah data salah lintas empat generasi dan harus dihapus, bukan
+sekadar diubah menjadi status historis atau memakai ulang placeholder Nn.
