@@ -1531,7 +1531,14 @@ fun GraphScreen(
                                 ),
                                 start = start,
                                 end = end,
-                                strokeWidth = if (highlighted) 3.dp.toPx() else lineStroke
+                                strokeWidth = if (highlighted) 3.dp.toPx() else lineStroke,
+                                pathEffect = if (!highlighted && edge.meta == "DIVORCED") {
+                                    PathEffect.dashPathEffect(
+                                        floatArrayOf(8.dp.toPx(), 5.dp.toPx())
+                                    )
+                                } else {
+                                    null
+                                }
                             )
                             drawCircle(
                                 color = relationshipColor,
@@ -1545,6 +1552,16 @@ fun GraphScreen(
                                 center = center.copy(x = center.x + separation),
                                 style = Stroke(width = if (highlighted) 3.dp.toPx() else 1.5.dp.toPx())
                             )
+                            if (edge.meta == "WIDOWED" && !highlighted) {
+                                val markCenter = center.copy(x = center.x + separation)
+                                val markOffset = 5.dp.toPx()
+                                drawLine(
+                                    color = relationshipColor,
+                                    start = markCenter + Offset(-markOffset, markOffset),
+                                    end = markCenter + Offset(markOffset, -markOffset),
+                                    strokeWidth = 1.5.dp.toPx()
+                                )
+                            }
                             return@forEach
                         }
                         if (edge.type == "CARE") {

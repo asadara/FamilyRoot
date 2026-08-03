@@ -208,6 +208,9 @@ Slice offline-write yang sudah aktif:
 - antrean status hidup dan profil dipisah berdasarkan jenis mutasi sehingga perubahan yang belum tersinkron tidak saling menghapus;
 - setelah satu mutasi sukses, mutasi pending lain untuk person yang sama di-rebase ke version server terbaru; Person Detail menampilkan status dan resolusi konflik untuk setiap item antrean;
 - Room v4 menyimpan cache graph parent-child dan spouse; create relation masuk antrean idempoten dan tampil optimistis;
+- perubahan status pasangan `MARRIED`/`DIVORCED`/`WIDOWED` memakai mutation queue
+  `UPDATE_SPOUSE`; cache graph berubah optimistis, replay backend idempoten, dan
+  penolakan permanen mengembalikan edge sebelum perubahan;
 - validasi lokal mencegah self-link, duplicate, cycle, pasangan tidak valid, dan lebih dari dua orang tua biologis sebelum queue; backend tetap memvalidasi ulang sebagai source of truth;
 - jika backend menolak relasi karena graph server sudah berubah, edge optimistis di-rollback dan item ditandai `FAILED` agar garis lineage yang tidak sah tidak tertinggal.
 - Room v8 menyimpan cache catatan sumber; `CREATE_SOURCE` tampil optimistis, bertahan
@@ -233,9 +236,9 @@ Kontrak endpoint tidak disalin secara manual ke dokumen ini agar tidak menjadi u
 Ketentuan client:
 
 - endpoint debug dibaca dari Gradle property `familyTreeApiBaseUrl` atau environment
-  variable `FAMILY_TREE_API_BASE_URL`, dengan default emulator
-  `http://10.0.2.2:3001/`; physical-device test memakai `127.0.0.1` bersama
-  ADB reverse tanpa mengubah source;
+  variable `FAMILY_TREE_API_BASE_URL`, dengan default aman
+  `http://127.0.0.1:3001/` untuk perangkat fisik melalui USB ADB reverse; emulator
+  wajib memilih `http://10.0.2.2:3001/` secara eksplisit tanpa mengubah source;
 - build type `pilot` memakai endpoint Cloud Run pilot yang terpisah dari konfigurasi
   debug lokal; APK tester harus berasal dari task `assemblePilot`;
 - instalasi APK, instrumentation, logcat, dan smoke test pada perangkat fisik wajib

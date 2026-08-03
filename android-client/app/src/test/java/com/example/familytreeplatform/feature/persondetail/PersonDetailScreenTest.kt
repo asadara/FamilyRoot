@@ -3,11 +3,19 @@ package com.example.familytreeplatform.feature.persondetail
 import com.example.familytreeplatform.data.local.OfflineMutationStatus
 import com.example.familytreeplatform.data.local.OfflineMutationType
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PersonDetailScreenTest {
+
+    @Test
+    fun `relationship dates require a real ISO calendar date`() {
+        assertTrue(isValidPersonDate("2026-08-03"))
+        assertFalse(isValidPersonDate("2026-02-30"))
+        assertFalse(isValidPersonDate("03-08-2026"))
+    }
     @Test
     fun `historical date picker includes eighteenth century ancestors`() {
         assertEquals(1600, PERSON_DATE_MIN_YEAR)

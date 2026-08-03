@@ -828,6 +828,46 @@ describe('Phase 1 security contract (e2e)', () => {
       .expect(({ body }) =>
         expect(body.relationshipId).toBe(spouseRelation.body.relationshipId),
       );
+    const spouseStatusMutation = {
+      spaceId,
+      meta: 'DIVORCED',
+      startDate: '2020-01-01',
+      endDate: '2025-06-01',
+      clientMutationId: randomUUID(),
+    };
+    const divorcedRelation = await request(app.getHttpServer())
+      .patch(`/relationships/${spouseRelation.body.relationshipId}/spouse`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(spouseStatusMutation)
+      .expect(200);
+    expect(divorcedRelation.body).toEqual(
+      expect.objectContaining({
+        meta: 'DIVORCED',
+        startDate: '2020-01-01',
+        endDate: '2025-06-01',
+      }),
+    );
+    await request(app.getHttpServer())
+      .patch(`/relationships/${spouseRelation.body.relationshipId}/spouse`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send(spouseStatusMutation)
+      .expect(200)
+      .expect(({ body }) => expect(body.meta).toBe('DIVORCED'));
+    await request(app.getHttpServer())
+      .patch(`/relationships/${spouseRelation.body.relationshipId}/spouse`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({
+        spaceId,
+        meta: 'MARRIED',
+        startDate: '2020-01-01',
+        endDate: '2025-06-01',
+        clientMutationId: randomUUID(),
+      })
+      .expect(200)
+      .expect(({ body }) => {
+        expect(body.meta).toBe('MARRIED');
+        expect(body.endDate).toBeNull();
+      });
     await request(app.getHttpServer())
       .post('/persons/parent-child')
       .set('Authorization', `Bearer ${ownerToken}`)

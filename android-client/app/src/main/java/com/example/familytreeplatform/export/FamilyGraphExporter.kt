@@ -125,9 +125,22 @@ object FamilyGraphExporter {
             val separation = if (line.meta == "DIVORCED") 10f else 5f
             val markerPaint = Paint(spousePaint).apply {
                 if (line.meta == "WIDOWED") alpha = 122
+                if (line.meta == "DIVORCED") {
+                    pathEffect = DashPathEffect(floatArrayOf(8f, 5f), 0f)
+                }
             }
+            canvas.drawLine(line.fromX, line.fromY, line.toX, line.toY, markerPaint)
             canvas.drawCircle(centerX - separation, centerY, 7f, markerPaint)
             canvas.drawCircle(centerX + separation, centerY, 7f, markerPaint)
+            if (line.meta == "WIDOWED") {
+                canvas.drawLine(
+                    centerX + separation - 5f,
+                    centerY + 5f,
+                    centerX + separation + 5f,
+                    centerY - 5f,
+                    markerPaint
+                )
+            }
         }
         snapshot.lineageLines.filterNot { it.type == "SPOUSE" }.forEach { line ->
             if (line.type == "CARE") {
@@ -410,8 +423,25 @@ object FamilyGraphExporter {
                 val second = positions.getValue(relation.toPersonId)
                 val centerX = (first.centerX() + second.centerX()) / 2f
                 val centerY = (first.centerY() + second.centerY()) / 2f
-                canvas.drawCircle(centerX - 7f, centerY, 13f, spousePaint)
-                canvas.drawCircle(centerX + 7f, centerY, 13f, spousePaint)
+                val separation = if (relation.meta == "DIVORCED") 18f else 7f
+                val relationshipPaint = Paint(spousePaint).apply {
+                    if (relation.meta == "WIDOWED") alpha = 122
+                    if (relation.meta == "DIVORCED") {
+                        pathEffect = DashPathEffect(floatArrayOf(14f, 8f), 0f)
+                    }
+                }
+                canvas.drawLine(first.centerX(), centerY, second.centerX(), centerY, relationshipPaint)
+                canvas.drawCircle(centerX - separation, centerY, 13f, relationshipPaint)
+                canvas.drawCircle(centerX + separation, centerY, 13f, relationshipPaint)
+                if (relation.meta == "WIDOWED") {
+                    canvas.drawLine(
+                        centerX + separation - 9f,
+                        centerY + 9f,
+                        centerX + separation + 9f,
+                        centerY - 9f,
+                        relationshipPaint
+                    )
+                }
             }
 
         relationships.filter {
@@ -520,7 +550,7 @@ object FamilyGraphExporter {
         val remaining = members.mapTo(linkedSetOf()) { it.personId }
         val units = mutableListOf<LayoutUnit>()
         relationships.filter {
-            it.type == "SPOUSE" && it.endDate == null && it.meta != "DIVORCED" &&
+            it.type == "SPOUSE" && it.endDate == null && it.meta == "MARRIED" &&
                 it.fromPersonId in remaining && it.toPersonId in remaining
         }.forEach { relation ->
             if (relation.fromPersonId !in remaining || relation.toPersonId !in remaining) return@forEach

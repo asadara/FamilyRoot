@@ -3,6 +3,7 @@
 > **Status dokumen:** Aktif dan kanonik  
 > **Versi:** 1.0  
 > **Ditetapkan:** 13 Juli 2026  
+> **Audit implementasi terakhir:** 3 Agustus 2026 pada commit `2b6726d`
 > **Menggantikan:** Seluruh blueprint, roadmap, atau rumusan produk sebelumnya  
 > **Bahasa produk utama:** Indonesia
 
@@ -201,10 +202,11 @@ Informasi sensitif orang yang masih hidup tidak ditampilkan secara default.
 
 ### Arsip dan kenangan
 
-- Foto profil dan album.
-- Scan dokumen melalui kamera.
-- Rekaman cerita suara.
-- Timeline kehidupan dan memorial mode.
+- Satu foto profil aktif yang disimpan privat dan mengikuti hak akses Person.
+- Sumber teks serta tautan arsip eksternal tanpa menyalin dokumen formal ke aplikasi.
+- Timeline kehidupan dan memorial mode tetap menjadi target jangka lanjut.
+- Album internal, scan dokumen, dan rekaman cerita suara tidak menjadi backlog aktif
+  tanpa keputusan produk baru.
 - Label sumber seperti dokumen resmi, cerita keluarga, atau belum diverifikasi.
 
 ### Pencarian dan insight
@@ -241,6 +243,11 @@ Referensi performa: [Android Baseline Profiles](https://developer.android.com/to
 Status yang digunakan: `NOT STARTED`, `IN PROGRESS`, `BLOCKED`, `DONE`.
 
 Sebuah fase hanya berstatus `DONE` apabila seluruh acceptance criteria dan verifikasi fase terpenuhi. Keberadaan prototipe parsial tidak otomatis menyelesaikan fase.
+
+Status Fase 1–4 di bawah merepresentasikan fondasi Blueprint v1 yang telah ditutup.
+Gap produk, acceptance perangkat, dan kesiapan production yang ditemukan sesudahnya
+dicatat terpisah pada tracker post-Fase 4 dan tidak membuka ulang fase fondasi secara
+diam-diam.
 
 ### Fase 1 — Fondasi Aman
 
@@ -364,6 +371,24 @@ Baseline ini bukan progres penyelesaian Fase 1–4; ia adalah titik awal migrasi
 | Fase 3 — Produk Inti Matang | `DONE` | 100% | Produk inti matang ditutup: onboarding/undangan, create-connect-verify-review, graph, source/media metadata, proposal approval, duplicate detection/merge, relationship path, seed dev, dan Android test surface tersedia |
 | Fase 4 — Keberlanjutan Data | `DONE` | 100% | Slice 8–10 menutup privacy controls, observability tanpa PII, benchmark/gate performa, R8/baseline profile, serta pipeline signed release berbasis CI secrets |
 
+Tracker post-Fase 4 berikut merangkum audit implementasi aktif; rincian acceptance dan
+bukti file tetap berada di `docs/PROJECT_GAP_AUDIT_2026-07-24.md`.
+
+| Backlog | Status | Ringkasan audit 3 Agustus 2026 |
+|---|---|---|
+| P1 / P1b | `DONE` | Hapus Person aman dan gate kompatibilitas APK/backend selesai pada source serta test lokal |
+| P2 | `DONE` | Lifecycle akun, membership, undangan, arsip, dan soft-delete silsilah selesai pada source |
+| P3 | `PARTIAL` | Privacy per Person dan claim kolektif tersedia; scope cabang/field, delegasi, dan dispute belum selesai |
+| P4 | `DONE` | Foster/Guardian tersedia sebagai care overlay non-lineage |
+| P5 | `PARTIAL` | Delapan tipe mutation offline tersedia termasuk perubahan status pasangan; operasi sensitif dan binary tetap online-only |
+| P6 | `PARTIAL` | Undangan tertarget dan revoke tersedia; scope cabang/detail/durasi belum tersedia |
+| P7 | `EXTERNAL VERIFY` | Hardening cloud siap di source; migration dan bukti console/perangkat belum ditutup |
+| P8 | `PARTIAL` | Graph besar inti selesai, tetapi reservasi koridor per pasangan historis, incremental reflow, dense-partnership stress, dan tablet gate masih terbuka |
+| P9 | `DEFERRED` | Histori nama, tanggal tidak pasti, tempat terstruktur, event, dan provenance per-field belum aktif |
+| P10 | `PARTIAL` | Review, komentar, receipt, identitas aktivitas, dan approval riwayat tersedia; undo/dispute belum tersedia |
+| P11–P13 | `PARTIAL` | Accessibility evidence, observability production, serta resilience/operasi masih perlu bukti aktual |
+| P14 | `DEFERRED` | Signing, rollout final, dan enforcement ditahan sampai gap pengembangan serta acceptance eksternal selesai |
+
 ### Development log
 
 > Catatan status terkini Fase 4: `DONE` 100%. Offline update person dan relasi,
@@ -373,6 +398,10 @@ Baseline ini bukan progres penyelesaian Fase 1–4; ia adalah titik awal migrasi
 
 | Tanggal | Fase | Perubahan | Verifikasi | Keputusan/risiko |
 |---|---|---|---|---|
+| 2026-08-03 | Post-Fase 4 / P5, P8, P14 | Menambah editor status pasangan `MARRIED`/`DIVORCED`/`WIDOWED`, endpoint dan queue offline idempoten, pembeda cincin aktif/cerai/wafat, serta melonggarkan gate hanya untuk beta debug/pilot non-enforced | Backend lint/build dan 39 unit test; Android unit/lint/debug APK lulus | Identitas beta dibekukan pada build 5 (`0.1.4-beta`); production/store tetap memakai versionCode monoton dan gate ketat. Reflow koridor keturunan historis yang lebih besar tetap pekerjaan layout lanjutan |
+| 2026-08-03 | Audit post-Fase 4 | Menyinkronkan `main` ke `2b6726d`, mengaudit ulang blueprint, backlog, kontrak, source, migration, dan dokumentasi setelah PR #1–#2 | Backend lint/build, 35 unit test, dan 22 E2E lulus; Android `testDebugUnitTest`, `lintDebug`, dan `assembleDebug` lulus | Verifikasi lokal tidak dianggap sebagai bukti deployment cloud, penerapan migration, Google Sign-In pilot, policy build 5, atau acceptance perangkat |
+| 2026-08-02 | Post-Fase 4 / P3, P10, P11, P14 | Memulihkan self-claim dan profil akun, membatasi preview aktivitas/notifikasi, menambah approval akses riwayat lengkap, display name/`Anda`, avatar/foto tersinkron, Photo Picker tanpa izin galeri luas, kewajiban Google Web Client ID untuk pilot/release, serta unique active claim | Source dan automated test PR #1–#2 tersedia; gate lokal penuh dijalankan ulang pada 3 Agustus 2026 | Kandidat saat ini build 5 (`0.1.4-beta`) masih memerlukan deployment backend/migration, nilai Web Client ID, pembaruan policy PILOT, dan acceptance perangkat sebelum rollout dinyatakan selesai |
+| 2026-07-30 | Post-Fase 4 / P8 | Menutup corridor reservation keluarga besar, kontrol minimap, ganti silsilah tanpa logout, serialisasi dependency offline, picker tanggal historis, dan pembersihan cache optimistis yang sudah selesai | Unit/UI regression yang terkait tersedia pada source; audit 3 Agustus memastikan perubahan sudah berada di baseline `main` | Incremental reflow, dense partnership stress, dan tablet performance gate tetap dilacak terpisah pada proposal layout keluarga besar |
 | 2026-07-29 | Perluasan post-Fase 4 / P5 | Menambahkan vertical slice offline `CREATE_SOURCE`: backend replay idempoten melalui `clientMutationId`; Android Room v8 menyimpan sumber optimistis, status pending, observasi hasil worker, remap Person lokal, rollback penolakan permanen, dan purge privacy/access | Backend lint/build, 32 unit test, dan 22 E2E lulus; Android unit test, lint, schema Room 8, dan kompilasi androidTest lulus; eksekusi instrumentation DAO/migration tetap menjadi gate sebelum pemasangan APK | Sumber teks aman masuk queue karena aditif; foto/media binary, review, claim, lifecycle, serta penghapusan tetap online-only karena membutuhkan otorisasi mutakhir, dampak destruktif, atau transfer file |
 | 2026-07-18 | Koreksi post-Fase 4 | Memperbaiki timeout login setelah APK final tanpa property mengembalikan debug endpoint ke default emulator `10.0.2.2`; default debug kini dikunci ke `127.0.0.1:3001` untuk kebijakan USB-only, sementara emulator/LAN wajib memilih endpoint eksplisit | Backend health 200 dan ADB reverse USB aktif; BuildConfig terverifikasi memakai localhost; APK dipasang ulang; quick-login Father berhasil membuka Keluarga Demo dan keenam profil Budi, Siti, Raka, Hadi, Nur, serta Alya tampil tanpa timeout atau crash | Mencegah build debug berikutnya diam-diam merusak koneksi tablet; backend harus aktif dan `adb reverse tcp:3001 tcp:3001` tetap menjadi prasyarat pengujian fisik; belum ada commit/push |
 | 2026-07-18 | Fase 4 | Batch penutup Slice 8–10: kontrol **Clear offline data** melindungi mutasi belum tersinkron, Android system backup dinonaktifkan, logging jaringan tidak membawa body/header sensitif, backend menambah health/request-ID dan structured timing tanpa PII, benchmark graph serta PNG diberi budget, release memakai HTTPS-configurable endpoint, R8/resource shrinking/baseline profile, CI lint-audit-test-release-size gate, dan workflow AAB bertanda tangan berbasis secrets | Backend lint/build/unit/audit produksi (0 vulnerability) serta e2e 7/7 lulus; Android unit/lint/debug APK dan minified release AAB 2.76 MB lulus; baseline profile terkemas; instrumentation 13/13 lulus via USB pada SM-T225, PNG 60 anggota 403 ms, graph focus 10.000 anggota 260 ms, cold launch sesudah instalasi 3.823–3.854 detik, quick-login Father dan layar privacy terverifikasi tanpa crash | Fase 4 ditutup `DONE` 100%; budget cold launch ditetapkan 5 detik untuk tablet referensi dan bundle maksimal 25 MiB; export tidak dienkripsi otomatis sehingga lokasi file tetap tanggung jawab pengguna; production API URL, JWT secret, dan signing keystore wajib CI/deployment secrets; belum ada commit/push sesuai instruksi pengguna |

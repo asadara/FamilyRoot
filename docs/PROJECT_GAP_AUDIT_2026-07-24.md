@@ -1,16 +1,19 @@
 # FamilyRoot — Audit Gap dan Backlog Aktif
 
 > **Tanggal audit:** 24 Juli 2026, Asia/Jakarta
+> **Pembaruan audit terakhir:** 3 Agustus 2026, Asia/Jakarta
 > **Repository:** `asadara/FamilyRoot`
 > **Branch:** `main`
 > **Baseline implementasi sebelum dokumen audit:** `a79bbae` (`fix: keep splash logo within safe area`)
+> **Baseline audit terbaru:** `2b6726d` (`Merge PR #2: fix duplicate claims and account avatar sync`)
 > **Status dokumen:** backlog aktif dan acuan handoff lintas perangkat
 
 ## 1. Tujuan dan cara menggunakan dokumen
 
 Dokumen ini mencatat perbedaan antara rencana/keputusan produk dengan implementasi
-aktual setelah rangkaian perbaikan frontend, graph, profil, foto, sinkronisasi, dan
-branding pada 21–23 Juli 2026.
+aktual setelah rangkaian perbaikan frontend, graph, profil, foto, sinkronisasi,
+branding, lifecycle, privacy, offline write, akun, dan aktivitas sampai 3 Agustus
+2026.
 
 Dokumen ini tidak menggantikan `PROJECT_BLUEPRINT.md` atau keputusan produk di
 `FRONTEND_GRAPH_WORKSPACE_DECISION.md`. Fungsinya adalah:
@@ -37,19 +40,20 @@ Fondasi teknis Blueprint v1 Fase 1–4 tetap berstatus selesai. Status tersebut 
 berarti seluruh visi produk, lifecycle data, privacy model, atau kesiapan production
 sudah selesai.
 
-Workspace pilot saat ini sudah mendukung graph adaptif, partnership atomik, lineage
+Workspace pilot saat ini sudah mendukung graph adaptif, partnership aktif atomik, lineage
 eksplisit, integrity recommendation, person tanpa hubungan, tambah person dari
 workspace, drag untuk menghubungkan person, filter generasi, foto profil, edit profil
 lengkap, undangan berbasis role, offline queue untuk mutasi inti tertentu, serta
 export/backup.
 
-Gap aktif terbesar setelah penutupan hapus person berada pada:
+Gap aktif terbesar pada audit 3 Agustus 2026 berada pada:
 
-1. lifecycle akun, anggota, undangan, dan silsilah;
-2. privacy per person/field/scope dan claim kolektif;
-3. relasi `FOSTER` dan `GUARDIAN`;
-4. cakupan offline write di luar empat tipe mutation yang tersedia;
-5. penutupan dan bukti operasional cloud pilot.
+1. privacy scope cabang/field, delegasi, versi alternatif, dan dispute;
+2. perluasan offline write di luar delapan tipe mutation yang tersedia;
+3. scope cabang/detail/durasi undangan;
+4. penutupan dan bukti operasional cloud pilot;
+5. model profil/provenance yang lebih kaya, accessibility evidence, observability,
+   resilience, dan rollout final.
 
 ## 3. Backlog aktif terprioritas
 
@@ -157,9 +161,15 @@ claim tidak dapat mengonfirmasi sendiri, retry konfirmator yang sama idempoten, 
 setiap konfirmasi diaudit. Claim lama yang telah terverifikasi dipertahankan sebagai
 hasil legacy agar migration tidak menurunkan keputusan keluarga secara diam-diam.
 
+Endpoint self-claim memastikan halaman akun memperoleh hubungan ke Person diri tanpa
+menyamakan `User` dan `Person`. Hanya satu claim `PENDING` atau `VERIFIED` boleh aktif
+untuk tuple Family Space, akun, dan Person; retry mengembalikan claim yang sama,
+unique index mencegah race, dan migration mempertahankan satu record kanonik sambil
+menandai duplikat aktif lama sebagai `REJECTED` agar audit trail tidak hilang.
+
 P3 tetap `PARTIAL` karena scope per cabang/field kustom, privacy manager yang dapat
-didelegasikan, request akses detail, status `Diperdebatkan`, versi alternatif, dan
-dispute tanpa overwrite belum menjadi bagian pilot. Signed URL yang sudah terbit
+didelegasikan, request akses detail Person, status `Diperdebatkan`, versi alternatif,
+dan dispute tanpa overwrite belum menjadi bagian pilot. Signed URL yang sudah terbit
 berakhir menurut TTL; perangkat lain memperoleh redaksi pada refresh berikutnya.
 
 ### P4 — Relasi Foster dan Guardian (`DONE`, 28 Juli 2026)
@@ -187,6 +197,7 @@ Room mutation queue saat ini hanya memuat:
 - `UPDATE_PROFILE`;
 - `ADD_PARENT_CHILD`;
 - `ADD_SPOUSE`;
+- `UPDATE_SPOUSE`;
 - `DELETE_RELATIONSHIP`;
 - `CREATE_SOURCE`.
 
@@ -223,6 +234,11 @@ duplikasi. Penolakan permanen me-rollback catatan optimistis; penyempitan privac
 pencabutan akses membersihkan cache sumber. Foto/binary, review, lifecycle, claim,
 dan penghapusan tetap online-only karena membutuhkan otorisasi mutakhir, dampak
 destruktif, atau transfer file yang tidak aman untuk queue generik.
+
+Status pasangan kini dapat diubah menjadi `MARRIED`, `DIVORCED`, atau `WIDOWED` dari
+Person Detail. `UPDATE_SPOUSE` menerapkan cache optimistis, retry idempoten, audit,
+dan rollback ke snapshot relationship bila backend menolak permanen. Tanggal akhir
+dibersihkan saat hubungan kembali aktif.
 
 ### P6 — Undangan tertarget dan dapat dicabut (`PARTIAL`)
 
@@ -270,7 +286,7 @@ bukti console/perangkat pada `docs/P7_CLOUD_SECURITY_CLOSURE_CHECKLIST.md`.
 
 ## 4. Backlog lanjutan
 
-### P8 — Graph besar (`DONE`, 28 Juli 2026)
+### P8 — Graph besar (`PARTIAL`)
 
 Progressive expansion, filter generasi, deterministic placement, dan collision
 avoidance telah dilengkapi viewport culling dengan overscan. Detail card memakai
@@ -278,6 +294,13 @@ tiga tingkat zoom; foto tidak dimuat pada mode compact/minimal. Lebih dari 800 c
 aktif beralih ke daftar tekstual virtualized dengan urutan fokus lalu alfabetis.
 Tidak ada animasi baru, sehingga preferensi reduced-motion tidak diabaikan. Layout
 dan semantik care/lineage tidak diubah oleh optimasi render.
+
+Audit keluarga Ummah Bugo membuka kembali bagian layout partnership historis:
+hubungan `DIVORCED`/`WIDOWED` sudah memiliki cincin pembeda dan tidak lagi dianggap
+unit adjacency keras pada export, tetapi pass utama belum sepenuhnya memesan interval
+X keturunan per pasangan biologis. Skenario Sikem–Manto Karto Rejo dan
+Sikem–Mbah Cangkring, termasuk pasangan lama Mbah Cangkring–Nn, menjadi acceptance
+fixture untuk memastikan koridor horizontal antarpasangan tidak bertumpuk.
 
 Minimap privacy-safe kini hanya memproyeksikan geometri netral dari node dan lineage
 yang memang aktif/terlihat. Ia tidak membawa ID, nama, foto, umur, status, metadata,
@@ -329,6 +352,14 @@ dibaca dan ditandai pada Profil akun, hanya oleh pemiliknya, serta dihapus bersa
 akun. Penolakan pada guard tetap tampil langsung di perangkat tetapi tidak dipaksa
 masuk database karena controller tidak pernah dijalankan.
 
+Preview aktivitas kolaborasi dan notifikasi pribadi dibatasi 10 item. Riwayat
+kolaborasi lengkap tidak lagi dibuka otomatis untuk semua anggota: pengguna biasa
+meminta akses, OWNER/ADMIN menyetujui atau menolak, dan hasil yang disetujui dimuat
+dengan cursor maksimal 50 item per halaman. Aktivitas memakai display name akun dan
+label `Anda` untuk actor aktif; UUID audit tetap berada di backend dan tidak menjadi
+label UI. Halaman akun, header, dan avatar memakai self-claim serta shared photo state
+agar foto pengganti langsung konsisten lintas halaman.
+
 Yang belum tersedia:
 
 - undo/restore berbasis audit;
@@ -340,6 +371,9 @@ Masih perlu screenshot regression lintas ukuran/tema serta acceptance TalkBack, 
 besar, contrast, keyboard, reduced motion, dan touch target pada perangkat nyata.
 Matrix/alur/kriteria evidence sudah dibakukan pada
 `docs/ACCESSIBILITY_ACCEPTANCE_CHECKLIST.md`.
+
+Batch 2 Agustus menambah mitigasi sempit untuk header brand dan hero profil akun,
+tetapi perbaikan responsif tersebut belum menggantikan acceptance matrix P11.
 
 ### P12 — Observability yang aman untuk privasi (`PARTIAL`)
 
@@ -363,6 +397,18 @@ Production signing, store publication, reproducible artifact/provenance, rollout
 bertahap backend → APK → minimum version, rollback, serta aktivasi enforcement
 kompatibilitas adalah gerbang terakhir. Sesuai keputusan pengguna, P14 tidak
 diaktifkan selama gap pengembangan sebelumnya belum dinyatakan selesai.
+
+Source saat ini menyiapkan build 5 (`0.1.4-beta`) dan mewajibkan Google Web Client ID
+valid pada build `pilot`/`release`. Rollout belum dapat dinyatakan selesai sebelum
+migration/backend baru dideploy, repository variable build tersedia, policy PILOT
+diperbarui, APK dipasang, dan acceptance Google/foto/aktivitas dilakukan pada
+perangkat melalui USB.
+
+Keputusan beta 3 Agustus 2026 membekukan build debug/pilot pada `versionCode 5`,
+`versionName 0.1.4-beta`. Perbaikan beta tidak wajib menaikkan versionCode dan gate
+startup tidak menutup aplikasi bila enforcement channel masih nonaktif. Ini tidak
+mengubah kewajiban versionCode monoton, signing, rollout, dan enforcement untuk
+production/store.
 
 ## 5. Rencana lama yang tidak lagi menjadi gap aktif
 
@@ -410,22 +456,17 @@ Jangan membuka ulang item berikut tanpa bug atau kebutuhan baru:
 
 ## 7. Urutan kerja yang direkomendasikan
 
-Urutan default bila pengguna tidak menetapkan prioritas lain:
+Urutan default untuk item yang masih terbuka bila pengguna tidak menetapkan prioritas
+lain:
 
-1. lifecycle membership/silsilah/account;
-2. privacy model dan claim kolektif;
-3. Foster/Guardian;
-4. perluasan offline queue;
-5. undangan tertarget/revoke;
-6. penutupan cloud pilot dan Security Advisor evidence;
-7. optimasi graph besar;
-8. minimap privacy-safe;
-9. pembaruan model profil/provenance;
-10. kolaborasi, dispute, dan notifikasi;
-11. visual regression dan accessibility acceptance;
-12. observability production yang aman untuk privasi;
-13. resilience, backup/restore, dan operasi production;
-14. signing, rollout artifact, dan enforcement kompatibilitas final.
+1. tentukan slice berikut P3 untuk scope/field privacy atau dispute;
+2. tutup acceptance perangkat P5 dan pilih perluasan offline yang benar-benar aman;
+3. tentukan scope cabang/detail/durasi P6;
+4. selesaikan checklist eksternal P7 dan migration cloud yang tertunda;
+5. lanjutkan P9 model profil/provenance dan P10 undo/dispute;
+6. tutup evidence P11 accessibility serta visual regression;
+7. tutup P12 observability dan P13 resilience/operasi dengan bukti aktual;
+8. jalankan P14 signing, rollout artifact, dan enforcement kompatibilitas terakhir.
 
 Setiap item tetap memerlukan persetujuan pengguna sebelum perubahan kode. Audit ini
 menjaga arah, bukan memberi izin otomatis untuk implementasi atau tindakan destruktif.
@@ -446,3 +487,21 @@ Pada perangkat pengembangan baru:
 Database runtime, `.env`, token, credential, APK/AAB, dan backup data keluarga tidak
 ikut Git. Konteks keputusan dan backlog harus tetap tersedia melalui file Markdown
 yang tracked di repository.
+
+## 9. Hasil audit ulang 3 Agustus 2026
+
+Audit dilakukan setelah `git pull --ff-only` membawa lokal dari `102e105` ke
+`2b6726d`. Empat commit yang ditarik terdiri dari dua commit implementasi dan dua
+merge commit PR #1–#2. Tidak ada divergensi lokal dan working tree bersih sebelum
+pembaruan dokumentasi dimulai.
+
+Bukti lokal yang dijalankan ulang:
+
+- backend `lint:check` dan build lulus;
+- backend 35 unit test dan 22 E2E lulus;
+- Android `testDebugUnitTest`, `lintDebug`, dan `assembleDebug` lulus.
+
+Status deployment tidak diinferensikan dari hasil tersebut. Migration history access
+dan unique active claim, backend terbaru, Google Web Client ID, policy PILOT build 5,
+serta acceptance perangkat tetap membutuhkan bukti eksternal sebelum ditandai
+selesai.

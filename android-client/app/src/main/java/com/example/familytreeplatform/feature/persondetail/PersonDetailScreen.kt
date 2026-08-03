@@ -162,6 +162,7 @@ fun PersonDetailScreen(
     var proposalReason by rememberSaveable(person.personId) { mutableStateOf("") }
     var relationQuery by rememberSaveable(person.personId) { mutableStateOf("") }
     var pendingRelationshipDelete by rememberSaveable(person.personId) { mutableStateOf<String?>(null) }
+    var pendingSpouseStatusEdit by rememberSaveable(person.personId) { mutableStateOf<String?>(null) }
     val profilePhotoPicker = rememberLauncherForActivityResult(
         ActivityResultContracts.PickVisualMedia()
     ) { uri ->
@@ -216,6 +217,25 @@ fun PersonDetailScreen(
             }
         )
     }
+
+    pendingSpouseStatusEdit
+        ?.let { relationshipId -> relations?.spouses?.firstOrNull { it.relationshipId == relationshipId } }
+        ?.let { relationship ->
+            SpouseStatusDialog(
+                relationship = relationship,
+                updating = state.updating,
+                onDismiss = { pendingSpouseStatusEdit = null },
+                onSave = { meta, startDate, endDate ->
+                    pendingSpouseStatusEdit = null
+                    viewModel.updateSpouseStatus(
+                        relationship.relationshipId,
+                        meta,
+                        startDate,
+                        endDate
+                    )
+                }
+            )
+        }
 
     if (showDeletionReview) {
         PersonDeletionDialog(
@@ -454,6 +474,7 @@ fun PersonDetailScreen(
                             viewModel.addChild(targetId, meta, startDate, endDate, context)
                         },
                         onAddSpouse = viewModel::addSpouse,
+                        onEditSpouseStatus = { pendingSpouseStatusEdit = it },
                         onDeleteRelationship = { pendingRelationshipDelete = it },
                         onFindPath = viewModel::findPathTo,
                         pathLabel = state.path?.let { path ->
@@ -1352,6 +1373,7 @@ private fun RelationsSection(
     onAddParent: (String, String, String?, String?, String?) -> Unit,
     onAddChild: (String, String, String?, String?, String?) -> Unit,
     onAddSpouse: (String) -> Unit,
+    onEditSpouseStatus: (String) -> Unit,
     onDeleteRelationship: (String) -> Unit,
     onFindPath: (String) -> Unit,
     pathLabel: String?
@@ -1392,6 +1414,11 @@ private fun RelationsSection(
                 item = item,
                 personName = peopleById[item.otherPersonId]?.fullName ?: "Person keluarga",
                 enabled = canEdit && !updating,
+                onEditStatus = if (item.relationship.type == "SPOUSE") {
+                    { onEditSpouseStatus(item.relationship.relationshipId) }
+                } else {
+                    null
+                },
                 onDelete = { onDeleteRelationship(item.relationship.relationshipId) }
             )
         }
@@ -1720,6 +1747,7 @@ private fun ExistingRelationshipRow(
     item: ExistingRelation,
     personName: String,
     enabled: Boolean,
+    onEditStatus: (() -> Unit)?,
     onDelete: () -> Unit
 ) {
     Row(
@@ -1734,11 +1762,102 @@ private fun ExistingRelationshipRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        onEditStatus?.let { edit ->
+            TextButton(enabled = enabled, onClick = edit) {
+                Text("Ubah status")
+            }
+        }
         TextButton(enabled = enabled, onClick = onDelete) {
             Text("Hapus", color = MaterialTheme.colorScheme.error)
         }
     }
 }
+
+@Composable
+private fun SpouseStatusDialog(
+    relationship: RelationItem,
+    updating: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (String, String?, String?) -> Unit
+) {
+    var status by rememberSaveable(relationship.relationshipId, relationship.meta) {
+        mutableStateOf(relationship.meta ?: "MARRIED")
+    }
+    var startDate by rememberSaveable(relationship.relationshipId, relationship.startDate) {
+        mutableStateOf(relationship.startDate.orEmpty())
+    }
+    var endDate by rememberSaveable(relationship.relationshipId, relationship.endDate) {
+        mutableStateOf(relationship.endDate.orEmpty())
+    }
+    val validStartDate = startDate.isBlank() || isValidPersonDate(startDate)
+    val validEndDate = status == "MARRIED" || endDate.isBlank() || isValidPersonDate(endDate)
+    val validRange = status == "MARRIED" || startDate.isBlank() || endDate.isBlank() || endDate >= startDate
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Status hubungan pasangan") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "Status ini menentukan apakah cincin dan koridor keturunan diperlakukan sebagai hubungan aktif atau historis.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                listOf(
+                    "MARRIED" to "Masih berlangsung",
+                    "DIVORCED" to "Bercerai",
+                    "WIDOWED" to "Berakhir karena wafat"
+                ).forEach { (value, label) ->
+                    FilterChip(
+                        selected = status == value,
+                        onClick = { status = value },
+                        label = { Text(label) }
+                    )
+                }
+                OutlinedTextField(
+                    value = startDate,
+                    onValueChange = { startDate = it },
+                    label = { Text("Tanggal mulai (opsional)") },
+                    supportingText = { Text("Format YYYY-MM-DD") },
+                    isError = !validStartDate,
+                    singleLine = true
+                )
+                if (status != "MARRIED") {
+                    OutlinedTextField(
+                        value = endDate,
+                        onValueChange = { endDate = it },
+                        label = { Text("Tanggal berakhir (opsional)") },
+                        supportingText = { Text("Format YYYY-MM-DD") },
+                        isError = !validEndDate || !validRange,
+                        singleLine = true
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                enabled = !updating && validStartDate && validEndDate && validRange,
+                onClick = {
+                    onSave(
+                        status,
+                        startDate.trim().ifBlank { null },
+                        endDate.trim().ifBlank { null }
+                    )
+                }
+            ) { Text("Simpan status") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Batal") }
+        }
+    )
+}
+
+internal fun isValidPersonDate(value: String): Boolean =
+    Regex("^\\d{4}-\\d{2}-\\d{2}$").matches(value) &&
+        runCatching {
+            java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.ROOT).apply {
+                isLenient = false
+            }.parse(value)
+        }.getOrNull() != null
 
 @Composable
 private fun EmptySectionMessage(message: String) {
@@ -1787,6 +1906,7 @@ internal fun mutationTypeLabel(type: String): String = when (type) {
     OfflineMutationType.UPDATE_LIFE_STATUS -> "Status kehidupan"
     OfflineMutationType.ADD_PARENT_CHILD -> "Hubungan orang tua–anak"
     OfflineMutationType.ADD_SPOUSE -> "Hubungan pasangan"
+    OfflineMutationType.UPDATE_SPOUSE -> "Status hubungan pasangan"
     OfflineMutationType.CREATE_PERSON -> "Person baru"
     OfflineMutationType.DELETE_RELATIONSHIP -> "Penghapusan hubungan"
     OfflineMutationType.CREATE_SOURCE -> "Catatan sumber"

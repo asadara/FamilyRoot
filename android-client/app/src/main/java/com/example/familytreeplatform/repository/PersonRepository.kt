@@ -30,6 +30,7 @@ import com.example.familytreeplatform.models.RelationsResponse
 import com.example.familytreeplatform.models.RelationItem
 import com.example.familytreeplatform.models.CreateSpouseRequest
 import com.example.familytreeplatform.models.SpouseResponse
+import com.example.familytreeplatform.models.UpdateSpouseRequest
 import com.example.familytreeplatform.models.UpdateLifeStatusRequest
 import com.example.familytreeplatform.models.UpdateProfileRequest
 import com.example.familytreeplatform.models.PersonListItem
@@ -125,6 +126,7 @@ import com.example.familytreeplatform.models.PersonConflictSnapshot
 import com.example.familytreeplatform.models.ProfileMutationPayload
 import com.example.familytreeplatform.models.ParentChildMutationPayload
 import com.example.familytreeplatform.models.SpouseMutationPayload
+import com.example.familytreeplatform.models.UpdateSpouseMutationPayload
 import com.example.familytreeplatform.models.CreatePersonMutationPayload
 import com.example.familytreeplatform.models.DeleteRelationshipMutationPayload
 import com.example.familytreeplatform.models.CreateSourceMutationPayload
@@ -1133,6 +1135,73 @@ class PersonRepository(
         mutation
     }
 
+    suspend fun queueSpouseStatusUpdate(
+        relationshipId: String,
+        request: UpdateSpouseRequest,
+        focusPersonId: String
+    ): Result<OfflineMutationEntity> = runCatching {
+        require(request.meta in setOf("MARRIED", "DIVORCED", "WIDOWED")) {
+            "Unsupported spouse status"
+        }
+        val relationsDao = requireNotNull(relationshipDao) {
+            "Offline relationship cache is unavailable"
+        }
+        val relationship = requireNotNull(relationsDao.getById(relationshipId)) {
+            "Spouse relationship is unavailable offline"
+        }
+        require(!relationshipId.startsWith("local-")) {
+            "Wait until the new spouse relationship has synced before changing its status"
+        }
+        require(relationship.spaceId == request.spaceId && relationship.type == "SPOUSE") {
+            "Relationship is not a spouse relationship in this Family Space"
+        }
+        val resolvedEndDate = if (request.meta == "MARRIED") null else request.endDate
+        require(
+            resolvedEndDate == null ||
+                request.startDate == null ||
+                resolvedEndDate >= request.startDate
+        ) { "endDate must be >= startDate" }
+
+        val queueDao = requireNotNull(mutationDao) {
+            "Offline mutation queue is unavailable"
+        }
+        val now = System.currentTimeMillis()
+        val mutation = OfflineMutationEntity(
+            mutationId = request.clientMutationId,
+            spaceId = request.spaceId,
+            personId = focusPersonId,
+            mutationType = OfflineMutationType.UPDATE_SPOUSE,
+            payloadJson = Gson().toJson(
+                UpdateSpouseMutationPayload(
+                    relationship = relationship.toModel(),
+                    meta = request.meta,
+                    startDate = request.startDate,
+                    endDate = resolvedEndDate
+                )
+            ),
+            baseVersion = 0,
+            status = OfflineMutationStatus.PENDING,
+            attemptCount = 0,
+            lastError = null,
+            conflictVersion = null,
+            conflictPayloadJson = null,
+            createdAt = now,
+            updatedAt = now
+        )
+        queueDao.upsert(mutation)
+        relationsDao.upsert(
+            relationship.copy(
+                meta = request.meta,
+                startDate = request.startDate,
+                endDate = resolvedEndDate,
+                pendingMutationId = mutation.mutationId
+            )
+        )
+        appContext?.let(OfflineSyncScheduler::enqueue)
+        ActionFeedbackStore.waitingForSync()
+        mutation
+    }
+
     suspend fun syncPendingMutations(): SyncBatchResult = offlineSyncMutex.withLock {
         val dao = mutationDao ?: return SyncBatchResult.COMPLETE
         if (SessionStore.accessToken.value.isNullOrBlank() && !ensureAccessToken()) {
@@ -1830,6 +1899,7 @@ class PersonRepository(
         if (
             mutation.mutationType == OfflineMutationType.ADD_PARENT_CHILD ||
             mutation.mutationType == OfflineMutationType.ADD_SPOUSE ||
+            mutation.mutationType == OfflineMutationType.UPDATE_SPOUSE ||
             mutation.mutationType == OfflineMutationType.DELETE_RELATIONSHIP
         ) {
             return syncRelationshipMutation(mutation)
@@ -2203,6 +2273,39 @@ class PersonRepository(
                         )
                     }
                 }
+                OfflineMutationType.UPDATE_SPOUSE -> {
+                    val payload = runCatching {
+                        Gson().fromJson(
+                            mutation.payloadJson,
+                            UpdateSpouseMutationPayload::class.java
+                        )
+                    }.getOrNull() ?: return invalidMutationPayload(queueDao, mutation)
+                    val response = apiService.updateSpouse(
+                        payload.relationship.relationshipId,
+                        UpdateSpouseRequest(
+                            spaceId = mutation.spaceId,
+                            meta = payload.meta,
+                            startDate = payload.startDate,
+                            endDate = payload.endDate,
+                            clientMutationId = mutation.mutationId
+                        )
+                    )
+                    if (!response.isSuccessful) return handleRelationshipSyncError(mutation, response)
+                    response.body()?.let {
+                        CachedRelationshipEntity(
+                            relationshipId = it.relationshipId,
+                            spaceId = mutation.spaceId,
+                            type = it.type,
+                            fromPersonId = it.fromPersonId,
+                            toPersonId = it.toPersonId,
+                            meta = it.meta,
+                            startDate = it.startDate,
+                            endDate = it.endDate,
+                            createdAt = it.createdAt ?: payload.relationship.createdAt,
+                            pendingMutationId = null
+                        )
+                    }
+                }
                 else -> null
             }
             if (synced == null) {
@@ -2246,6 +2349,16 @@ class PersonRepository(
             SyncBatchResult.RETRY
         } else {
             relationshipDao?.deleteByMutation(mutation.mutationId)
+            if (mutation.mutationType == OfflineMutationType.UPDATE_SPOUSE) {
+                runCatching {
+                    Gson().fromJson(
+                        mutation.payloadJson,
+                        UpdateSpouseMutationPayload::class.java
+                    )
+                }.getOrNull()?.relationship?.let { relationship ->
+                    relationshipDao?.upsert(relationship.toEntity(mutation.spaceId))
+                }
+            }
             queueDao.markStatus(
                 mutation.mutationId,
                 OfflineMutationStatus.FAILED,
@@ -2519,6 +2632,23 @@ class PersonRepository(
                             payload.startDate, payload.endDate, isoTime(mutation.createdAt), mutation.mutationId
                         )
                     )
+                }
+                OfflineMutationType.UPDATE_SPOUSE -> runCatching {
+                    Gson().fromJson(
+                        mutation.payloadJson,
+                        UpdateSpouseMutationPayload::class.java
+                    )
+                }.getOrNull()?.let { payload ->
+                    relationshipDao?.getById(payload.relationship.relationshipId)?.let { current ->
+                        relationshipDao.upsert(
+                            current.copy(
+                                meta = payload.meta,
+                                startDate = payload.startDate,
+                                endDate = payload.endDate,
+                                pendingMutationId = mutation.mutationId
+                            )
+                        )
+                    }
                 }
                 OfflineMutationType.CREATE_PERSON -> runCatching {
                     Gson().fromJson(
